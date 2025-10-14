@@ -8,7 +8,7 @@ plugins {
 android {
     namespace = "com.example.helawork"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    ndkVersion =  "27.0.12077973"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -41,4 +41,8 @@ android {
 
 flutter {
     source = "../.."
+}
+dependencies {
+    implementation("com.stripe:stripe-android:20.45.0")
+    implementation("org.jetbrains.kotlin:kotlin-stdlib:2.1.0")
 }
