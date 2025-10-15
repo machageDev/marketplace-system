@@ -120,7 +120,9 @@ class ContractSerializer(serializers.ModelSerializer):
         ]        
         
 from .models import Employer, EmployerProfile
-
+class EmployerLoginSerializer(serializers.Serializer):
+    username = serializers.CharField()
+    password = serializers.CharField()
 class EmployerProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = EmployerProfile

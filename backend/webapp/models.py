@@ -37,7 +37,10 @@ class Employer(models.Model):
 
     def __str__(self):
         return self.username
-
+class EmployerToken(models.Model):
+    employer = models.OneToOneField(Employer, on_delete=models.CASCADE)
+    key = models.UUIDField(default=uuid.uuid4, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 class EmployerProfile(models.Model):
     employer = models.OneToOneField(  
         Employer, 

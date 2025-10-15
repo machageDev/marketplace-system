@@ -18,7 +18,7 @@ from rest_framework.response import Response
 from django.db import IntegrityError, transaction
 from rest_framework import status
 from django.core.mail import send_mail
-from .models import Contract, Employer, EmployerProfile, EmployerRating, FreelancerRating, Proposal, Task, UserProfile
+from .models import Contract, Employer, EmployerProfile, EmployerRating, EmployerToken, FreelancerRating, Proposal, Task, UserProfile
 from django.contrib.auth.hashers import check_password
 from .models import  User
 from rest_framework.permissions import IsAuthenticated
@@ -33,7 +33,7 @@ from rest_framework.decorators import authentication_classes, permission_classes
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from webapp.serializers import ContractSerializer, EmployerProfileSerializer, EmployerRatingSerializer, EmployerSerializer, LoginSerializer, ProposalSerializer, RegisterSerializer, TaskCreateSerializer, TaskSerializer, UserProfileSerializer
+from webapp.serializers import ContractSerializer, EmployerLoginSerializer, EmployerProfileSerializer, EmployerRatingSerializer, EmployerSerializer, LoginSerializer, ProposalSerializer, RegisterSerializer, TaskCreateSerializer, TaskSerializer, UserProfileSerializer
 from .authentication import CustomTokenAuthentication
 from .permissions import IsAuthenticated  
 from .models import UserProfile
@@ -515,18 +515,41 @@ def create_payment_intent(request):
 
 #clients rest api
 
-# Create Employer
 @api_view(['POST'])
-def create_employer(request):
-    """
-    Create a new employer
-    """
-    serializer = EmployerSerializer(data=request.data)
+@permission_classes([AllowAny])
+def employer_login(request):
+    serializer = EmployerLoginSerializer(data=request.data)
     if serializer.is_valid():
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        username = serializer.validated_data['username'].strip()
+        password = serializer.validated_data['password']
 
+        try:
+            employer = Employer.objects.get(username=username)
+
+            if employer.password == password:  
+                
+                token, created = EmployerToken.objects.get_or_create(employer=employer)
+                if not created:
+                    
+                    token.key = uuid.uuid4()
+                    token.save()
+
+                return Response(
+                    {
+                        "message": "Login successful",
+                        "employer_id": employer.employer_id,
+                        "username": employer.username,
+                        "token": str(token.key),
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response({"error": "Invalid login"}, status=status.HTTP_400_BAD_REQUEST)
+
+        except Employer.DoesNotExist:
+            return Response({"error": "Invalid login"}, status=status.HTTP_400_BAD_REQUEST)
+
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 # Get Employer by ID
 @api_view(['GET'])
 def get_employer(request, pk):
