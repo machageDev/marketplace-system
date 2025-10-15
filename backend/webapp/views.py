@@ -33,7 +33,7 @@ from rest_framework.decorators import authentication_classes, permission_classes
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from webapp.serializers import ContractSerializer, EmployerProfileSerializer, EmployerRatingSerializer, EmployerSerializer, LoginSerializer, RegisterSerializer, TaskSerializer, UserProfileSerializer
+from webapp.serializers import ContractSerializer, EmployerProfileSerializer, EmployerRatingSerializer, EmployerSerializer, LoginSerializer, RegisterSerializer, TaskCreateSerializer, TaskSerializer, UserProfileSerializer
 from .authentication import CustomTokenAuthentication
 from .permissions import IsAuthenticated  
 from .models import UserProfile
@@ -592,3 +592,62 @@ def employer_profile(request, employer_id):
             serializer.save(employer=employer)
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+# Create Task
+@api_view(['POST'])
+def create_task(request):
+    """
+    Create a new task
+    """
+    serializer = TaskCreateSerializer(data=request.data)
+    if serializer.is_valid():
+        # Validate employer exists
+        employer_id = request.data.get('employer')
+        try:
+            employer = Employer.objects.get(pk=employer_id)
+        except Employer.DoesNotExist:
+            return Response(
+                {'error': 'Employer not found'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        task = serializer.save()
+        return Response(TaskSerializer(task).data, status=status.HTTP_201_CREATED)
+    
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+# Delete Task
+@api_view(['DELETE'])
+def delete_task(request, task_id):
+    """
+    Delete a task by ID
+    """
+    task = get_object_or_404(Task, pk=task_id)
+    task.delete()
+    return Response(
+        {'message': 'Task deleted successfully'}, 
+        status=status.HTTP_204_NO_CONTENT
+    )
+
+# Bulk Delete Tasks
+@api_view(['DELETE'])
+def bulk_delete_tasks(request):
+    """
+    Delete multiple tasks by IDs
+    """
+    task_ids = request.data.get('task_ids', [])
+    
+    if not task_ids:
+        return Response(
+            {'error': 'task_ids array is required'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    tasks = Task.objects.filter(task_id__in=task_ids)
+    deleted_count = tasks.count()
+    tasks.delete()
+    
+    return Response(
+        {'message': f'{deleted_count} tasks deleted successfully'}, 
+        status=status.HTTP_200_OK
+    )    

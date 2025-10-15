@@ -24,9 +24,9 @@ urlpatterns = [
     path('employers/<int:pk>/', views.get_employer, name='get_employer'),
     path('employers/<int:pk>/', views.update_employer, name='update_employer'),
     path('employers/<int:pk>/', views.delete_employer, name='delete_employer'),
-    
-    # Profile
     path('employers/<int:employer_id>/profile', views.employer_profile, name='employer_profile'),
-
+    path('tasks/create/', views.create_task, name='create-task'),
+    path('tasks/<int:task_id>/delete/', views.delete_task, name='delete-task'),
+    path('tasks/bulk-delete/', views.bulk_delete_tasks, name='bulk-delete-tasks'),
     
 ] 
