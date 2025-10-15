@@ -808,14 +808,21 @@ Future<List<Contract>> fetchContracts() async {
 
 
   Future<Map<String, dynamic>> fetchDashboardData() async {
-    final response = await http.get(Uri.parse(dashboardUrl));
+  final response = await http.get(Uri.parse(dashboardUrl));
 
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
+  if (response.statusCode == 200) {
+    final responseData = json.decode(response.body);
+    
+    // Check if response has success field
+    if (responseData['success'] == true) {
+      return responseData['data']; // Return the nested data
     } else {
-      throw Exception('Failed to load dashboard data');
+      throw Exception('API returned error: ${responseData['error']}');
     }
+  } else {
+    throw Exception('Failed to load dashboard data: ${response.statusCode}');
   }
+}
 
   Future<Map<String, dynamic>> apilogin(String username, String password) async {
   try {
