@@ -117,3 +117,78 @@ class ContractSerializer(serializers.ModelSerializer):
             "end_date",
             "is_active",
         ]        
+        
+from .models import Employer, EmployerProfile
+
+class EmployerProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EmployerProfile
+        fields = [
+            'company_name', 
+            'contact_email', 
+            'phone_number', 
+            'profile_picture'
+        ]
+        extra_kwargs = {
+            'profile_picture': {'required': False, 'allow_null': True}
+        }
+
+class EmployerSerializer(serializers.ModelSerializer):
+    profile = EmployerProfileSerializer(required=False)
+    
+    class Meta:
+        model = Employer
+        fields = [
+            'employer_id',
+            'username', 
+            'password', 
+            'contact_email', 
+            'phone_number',
+            'profile'
+        ]
+        extra_kwargs = {
+            'password': {'write_only': True},
+            'employer_id': {'read_only': True}
+        }
+    
+    def create(self, validated_data):
+        profile_data = validated_data.pop('profile', None)
+        password = validated_data.pop('password', None)
+        
+        employer = Employer.objects.create(**validated_data)
+        
+        if password:
+            employer.password = password  # You might want to hash this
+            employer.save()
+        
+        if profile_data:
+            EmployerProfile.objects.create(employer=employer, **profile_data)
+        
+        return employer
+    
+    def update(self, instance, validated_data):
+        profile_data = validated_data.pop('profile', None)
+        password = validated_data.pop('password', None)
+        
+        # Update employer fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        
+        if password:
+            instance.password = password  # Hash password if needed
+        
+        instance.save()
+        
+        # Update or create profile
+        if profile_data:
+            profile, created = EmployerProfile.objects.get_or_create(
+                employer=instance,
+                defaults=profile_data
+            )
+            if not created:
+                for attr, value in profile_data.items():
+                    setattr(profile, attr, value)
+                profile.save()
+        
+        return instance        
+        

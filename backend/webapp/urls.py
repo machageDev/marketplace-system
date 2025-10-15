@@ -18,4 +18,15 @@ urlpatterns = [
     path('apiproposal', views.apisubmit_proposal, name='submit-proposal'),
     path('apiuserprofile',views.apiuserprofile,name='apiuser_profile'),
     
+
+    # Employer CRUD
+    path('employers/create/', views.create_employer, name='create_employer'),
+    path('employers/<int:pk>/', views.get_employer, name='get_employer'),
+    path('employers/<int:pk>/', views.update_employer, name='update_employer'),
+    path('employers/<int:pk>/', views.delete_employer, name='delete_employer'),
+    
+    # Profile
+    path('employers/<int:employer_id>/profile', views.employer_profile, name='employer_profile'),
+
+    
 ] 

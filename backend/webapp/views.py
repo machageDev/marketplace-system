@@ -33,7 +33,7 @@ from rest_framework.decorators import authentication_classes, permission_classes
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from webapp.serializers import ContractSerializer, EmployerRatingSerializer, LoginSerializer, RegisterSerializer, TaskSerializer, UserProfileSerializer
+from webapp.serializers import ContractSerializer, EmployerProfileSerializer, EmployerRatingSerializer, EmployerSerializer, LoginSerializer, RegisterSerializer, TaskSerializer, UserProfileSerializer
 from .authentication import CustomTokenAuthentication
 from .permissions import IsAuthenticated  
 from .models import UserProfile
@@ -511,3 +511,84 @@ def create_payment_intent(request):
     return JsonResponse({
         "clientSecret": intent.client_secret
     })
+
+
+#clients rest api
+
+# Create Employer
+@api_view(['POST'])
+def create_employer(request):
+    """
+    Create a new employer
+    """
+    serializer = EmployerSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+# Get Employer by ID
+@api_view(['GET'])
+def get_employer(request, pk):
+    """
+    Get employer details by ID
+    """
+    employer = get_object_or_404(Employer, pk=pk)
+    serializer = EmployerSerializer(employer)
+    return Response(serializer.data)
+
+# Update Employer
+@api_view(['PUT'])
+def update_employer(request, pk):
+    """
+    Update employer details
+    """
+    employer = get_object_or_404(Employer, pk=pk)
+    serializer = EmployerSerializer(employer, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+# Delete Employer
+@api_view(['DELETE'])
+def delete_employer(request, pk):
+    """
+    Delete an employer
+    """
+    employer = get_object_or_404(Employer, pk=pk)
+    employer.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+# Get or Update Profile
+@api_view(['GET', 'PUT'])
+def employer_profile(request, employer_id):
+    """
+    Get or update employer profile
+    """
+    employer = get_object_or_404(Employer, pk=employer_id)
+    
+    if request.method == 'GET':
+        try:
+            profile = employer.profile
+            serializer = EmployerProfileSerializer(profile)
+            return Response(serializer.data)
+        except EmployerProfile.DoesNotExist:
+            return Response(
+                {'message': 'Profile not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+    
+    elif request.method == 'PUT':
+        try:
+            profile = employer.profile
+            serializer = EmployerProfileSerializer(profile, data=request.data, partial=True)
+        except EmployerProfile.DoesNotExist:
+            # Create profile if it doesn't exist
+            data = request.data.copy()
+            serializer = EmployerProfileSerializer(data=data)
+        
+        if serializer.is_valid():
+            serializer.save(employer=employer)
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
