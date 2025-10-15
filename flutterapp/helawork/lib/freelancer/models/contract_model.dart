@@ -28,4 +28,5 @@ class Contract {
       isActive: json['is_active'],
     );
   }
+
 }

@@ -1042,6 +1042,145 @@ Future<Map<String, dynamic>> createTask({
     };
   }
 }
+
+ Future<Map<String, dynamic>> getContract(String contractId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/contracts/$contractId/'),
+        
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('Failed to load contract: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Failed to load contract: $e');
+    }
+  }
+
+  // Accept contract
+  Future<Map<String, dynamic>> apiacceptContract(String contractId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/contracts/$contractId/accept/'),
+       
+        body: json.encode({'accepted': true}),
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('Failed to accept contract: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Failed to accept contract: $e');
+    }
+  }
+
+  // Get contracts by employer
+  Future<List<dynamic>> getEmployerContracts(String employerId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/employers/$employerId/contracts/'),
+        
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('Failed to load contracts: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Failed to load contracts: $e');
+    }
+  }
+
+  // Get contracts by freelancer
+  Future<List<dynamic>> getFreelancerContracts(String freelancerId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/freelancers/$freelancerId/contracts/'),
+       
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('Failed to load contracts: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Failed to load contracts: $e');
+    }
+  }
+   final String? token;
+
+  ApiService({this.token});
+
+  Map<String, String> get headers {
+    Map<String, String> headers = {
+      'Content-Type': 'application/json',
+    };
+    if (token != null) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+    return headers;
+  }
+
+  // Get proposals for client
+  Future<List<dynamic>> getClientProposals() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/client/proposals/'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('Failed to load proposals: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Failed to load proposals: $e');
+    }
+  }
+
+  // Accept proposal
+  Future<Map<String, dynamic>> acceptProposal(String proposalId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/proposals/$proposalId/accept/'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('Failed to accept proposal: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Failed to accept proposal: $e');
+    }
+  }
+
+  // Reject proposal
+  Future<Map<String, dynamic>> rejectProposal(String proposalId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/proposals/$proposalId/reject/'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('Failed to reject proposal: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Failed to reject proposal: $e');
+    }
+  }
 }
 
 
