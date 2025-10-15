@@ -21,7 +21,9 @@ class ApiService{
   static const String ProposalUrl = '$baseUrl/apiproposal';
   static const String proposalsUrl = '$baseUrl/apiproposal';
   static const String ratingsUrl = '$baseUrl/ratings';
-
+  static const String apiloginUrl = '$baseUrl/login';
+  static const String apiregisterUrl = '$baseUrl/register';
+  static const String dashboardUrl = '$baseUrl/dashbaord';
 Future<Map<String, dynamic>> register(String name, String email,String phoneNO, String password,  String confirmPassword) async {
   final url = Uri.parse(registerUrl);
   try {
@@ -806,7 +808,7 @@ Future<List<Contract>> fetchContracts() async {
 
 
   Future<Map<String, dynamic>> fetchDashboardData() async {
-    final response = await http.get(Uri.parse('$baseUrl/dashboard/'));
+    final response = await http.get(Uri.parse(dashboardUrl));
 
     if (response.statusCode == 200) {
       return json.decode(response.body);
@@ -815,37 +817,53 @@ Future<List<Contract>> fetchContracts() async {
     }
   }
 
-  
   Future<Map<String, dynamic>> apilogin(String username, String password) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/auth/login/'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'username': username,
-          'password': password,
-        }),
-      );
+  try {
+    print("=== FLUTTER DEBUG ===");
+    print("URL: $apiloginUrl");
+    print("Username: $username");
+    print("Password: $password");
+    
+    final response = await http.post(
+      Uri.parse(apiloginUrl),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'username': username,
+        'password': password,
+      }),
+    );
 
-      if (response.statusCode == 200) {
-        return {
-          'success': true,
-          'data': json.decode(response.body),
-        };
-      } else {
-        return {
-          'success': false,
-          'error': 'Invalid credentials. Please try again.',
-          'statusCode': response.statusCode,
-        };
-      }
-    } catch (e) {
+    print("Response status: ${response.statusCode}");
+    print("Response body: ${response.body}");
+    print("Response headers: ${response.headers}");
+
+    if (response.statusCode == 200) {
+      return {
+        'success': true,
+        'data': json.decode(response.body),
+      };
+    } else {
+      print("=== ERROR DETAILS ===");
+      print("Status code: ${response.statusCode}");
+      print("Error body: ${response.body}");
+      
       return {
         'success': false,
-        'error': 'Network error. Please check your connection.',
+        'error': 'Invalid credentials. Please try again.',
+        'statusCode': response.statusCode,
       };
     }
+  } catch (e) {
+    print("=== EXCEPTION ===");
+    print("Exception type: ${e.runtimeType}");
+    print("Exception message: $e");
+    
+    return {
+      'success': false,
+      'error': 'Network error. Please check your connection.',
+    };
   }
+}
 
   // Add this method to your existing ApiService class
 Future<Map<String, dynamic>> apiforgotpassword({
@@ -889,7 +907,7 @@ Future<Map<String, dynamic>> apiregister({
 }) async {
   try {
     final response = await http.post(
-      Uri.parse('$baseUrl/auth/register/'),
+      Uri.parse(apiregisterUrl),
       headers: {'Content-Type': 'application/json'},
       body: json.encode({
         'username': username,

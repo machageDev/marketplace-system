@@ -35,7 +35,7 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final response = await apiService.login(username, password);
+      final response = await apiService.apilogin(username, password);
 
       if (response['success'] == true) {
         // Store user data, tokens, etc.
@@ -62,7 +62,6 @@ class AuthProvider with ChangeNotifier {
   }
 
   // Forgot password method
- // Add this method to your existing AuthProvider class
 Future<Map<String, dynamic>> apiforgotpassword({
   required String email,
 }) async {

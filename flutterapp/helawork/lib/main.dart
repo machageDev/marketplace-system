@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:helawork/clients/provider/auth_provider.dart' as client_auth;
 import 'package:helawork/clients/provider/dashboard_provider.dart' as client_dashboard;
+import 'package:helawork/clients/provider/task_provider.dart' as client_task;
 import 'package:helawork/freelancer/provider/auth_provider.dart' as freelancer_auth;
 import 'package:helawork/freelancer/provider/contract_provider.dart';
 import 'package:helawork/freelancer/provider/dashbaord_provider.dart' as freelancer_dashboard;
@@ -31,9 +32,11 @@ void main() async {
         ChangeNotifierProvider(create: (_) => ContractProvider()..fetchContracts()),
         ChangeNotifierProvider(create: (_) => RatingProvider()),        
         
-        // Client Providers
+       // Client Providers
+      // Client Providers
         ChangeNotifierProvider(create: (_) => client_dashboard.DashboardProvider(apiService: ApiService())),
-        ChangeNotifierProvider(create: (_) => client_auth.AuthProvider(apiService: ApiService())),
+        ChangeNotifierProvider(create: (_) => client_auth.AuthProvider(apiService: ApiService())), 
+        ChangeNotifierProvider(create: (_) => client_task.TaskProvider(apiService: ApiService())),
       ],
       child: const MyApp(),
     ),
