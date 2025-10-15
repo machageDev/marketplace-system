@@ -195,7 +195,12 @@ class EmployerSerializer(serializers.ModelSerializer):
         
         return instance        
 
-
+class EmployerRegisterSerializer(serializers.Serializer):
+    username = serializers.CharField(max_length=255)
+    password = serializers.CharField(max_length=128)
+    contact_email = serializers.EmailField()
+    phone_number = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    
 class TaskSerializer(serializers.ModelSerializer):
     is_open = serializers.ReadOnlyField()
     has_assigned_freelancer = serializers.ReadOnlyField()

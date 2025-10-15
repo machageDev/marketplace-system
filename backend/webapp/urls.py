@@ -20,7 +20,8 @@ urlpatterns = [
     
 
     # Employer CRUD
-    path('employers/create/', views.create_employer, name='create_employer'),
+    path('login',views.employer_login,name='login'),  
+    path('register', views.employer_register, name='employer_register'),  
     path('employers/<int:pk>/', views.get_employer, name='get_employer'),
     path('employers/<int:pk>/', views.update_employer, name='update_employer'),
     path('employers/<int:pk>/', views.delete_employer, name='delete_employer'),
@@ -29,4 +30,5 @@ urlpatterns = [
     path('tasks/<int:task_id>/delete/', views.delete_task, name='delete-task'),
     path('tasks/bulk-delete/', views.bulk_delete_tasks, name='bulk-delete-tasks'),
     path('freeproposal',views.get_freelancer_proposals,name='freeproposal'),
+    path('dashboard', views.employer_dashboard_api, name='employer_dashboard_api'),
 ] 
