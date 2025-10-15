@@ -17,6 +17,8 @@ class DashboardProvider with ChangeNotifier {
   int ongoingTasks = 0;
   int completedTasks = 0;
 
+  get dashboardData => null;
+
   Future<void> loadData() async {
     isLoading = true;
     notifyListeners();

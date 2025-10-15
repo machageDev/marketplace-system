@@ -1,47 +1,107 @@
 import 'package:flutter/material.dart';
-import 'package:helawork/freelancer/screens/forgot_password_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:helawork/clients/provider/auth_provider.dart';
-import 'package:helawork/clients/screens/client_register_screen.dart';
-import 'package:helawork/clients/home/client_dashboard_screen.dart';
+import 'package:helawork/clients/screens/client_login_screen.dart';
 
-class ClientLoginScreen extends StatefulWidget {
-  const ClientLoginScreen({super.key});
+class ClientRegisterScreen extends StatefulWidget {
+  const ClientRegisterScreen({super.key});
 
   @override
-  State<ClientLoginScreen> createState() => _ClientLoginScreenState();
+  State<ClientRegisterScreen> createState() => _ClientRegisterScreenState();
 }
 
-class _ClientLoginScreenState extends State<ClientLoginScreen> {
+class _ClientRegisterScreenState extends State<ClientRegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
 
   @override
   void dispose() {
     _usernameController.dispose();
+    _emailController.dispose();
+    _phoneController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
-  void _login() async {
+  void _register() async {
     if (_formKey.currentState!.validate()) {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      final success = await authProvider.apilogin(
-        _usernameController.text.trim(),
-        _passwordController.text.trim(),
+      
+      final result = await authProvider.apiregister(
+        username: _usernameController.text.trim(),
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+        phoneNumber: _phoneController.text.trim().isEmpty ? null : _phoneController.text.trim(),
       );
 
-      if (success && mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const ClientDashboardScreen(),
-          ),
-        );
+      if (result['success'] == true && mounted) {
+        _showSuccessDialog(result['message'] ?? 'Registration successful!');
       }
     }
+  }
+
+  void _showSuccessDialog(String message) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Registration Successful'),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const ClientLoginScreen(),
+                  ),
+                );
+              },
+              child: const Text(
+                'OK',
+                style: TextStyle(color: Color(0xFF1976D2)),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  String? _validateUsername(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Please enter a username';
+    }
+    if (value.length < 3) {
+      return 'Username must be at least 3 characters';
+    }
+    return null;
+  }
+
+  String? _validateEmail(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Please enter an email';
+    }
+    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+      return 'Please enter a valid email';
+    }
+    return null;
+  }
+
+  String? _validatePassword(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Please enter a password';
+    }
+    if (value.length < 6) {
+      return 'Password must be at least 6 characters';
+    }
+    return null;
   }
 
   @override
@@ -94,7 +154,7 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
                       const Column(
                         children: [
                           Text(
-                            'Welcome Back, Client!',
+                            'Create Employer Account',
                             style: TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.w600,
@@ -103,7 +163,7 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
                           ),
                           SizedBox(height: 8),
                           Text(
-                            'Please log in to manage your projects',
+                            'Fill in your details below to register',
                             style: TextStyle(
                               fontSize: 16,
                               color: Colors.grey,
@@ -130,7 +190,7 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
                         ),
                       if (authProvider.errorMessage.isNotEmpty) const SizedBox(height: 16),
 
-                      // Login Form
+                      // Registration Form
                       Card(
                         elevation: 2,
                         shape: RoundedRectangleBorder(
@@ -146,7 +206,7 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
                                 TextFormField(
                                   controller: _usernameController,
                                   decoration: InputDecoration(
-                                    labelText: 'Username',
+                                    labelText: 'Username *',
                                     labelStyle: const TextStyle(color: Colors.grey),
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(8),
@@ -157,13 +217,52 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
                                       borderSide: const BorderSide(color: Color(0xFF1976D2)),
                                     ),
                                     contentPadding: const EdgeInsets.all(16),
+                                    hintText: 'Enter your username',
                                   ),
-                                  validator: (value) {
-                                    if (value == null || value.isEmpty) {
-                                      return 'Please enter your username';
-                                    }
-                                    return null;
-                                  },
+                                  validator: _validateUsername,
+                                ),
+                                const SizedBox(height: 16),
+
+                                // Email Field
+                                TextFormField(
+                                  controller: _emailController,
+                                  keyboardType: TextInputType.emailAddress,
+                                  decoration: InputDecoration(
+                                    labelText: 'Email *',
+                                    labelStyle: const TextStyle(color: Colors.grey),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: const BorderSide(color: Colors.grey),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: const BorderSide(color: Color(0xFF1976D2)),
+                                    ),
+                                    contentPadding: const EdgeInsets.all(16),
+                                    hintText: 'Enter your email address',
+                                  ),
+                                  validator: _validateEmail,
+                                ),
+                                const SizedBox(height: 16),
+
+                                // Phone Number Field
+                                TextFormField(
+                                  controller: _phoneController,
+                                  keyboardType: TextInputType.phone,
+                                  decoration: InputDecoration(
+                                    labelText: 'Phone Number',
+                                    labelStyle: const TextStyle(color: Colors.grey),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: const BorderSide(color: Colors.grey),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: const BorderSide(color: Color(0xFF1976D2)),
+                                    ),
+                                    contentPadding: const EdgeInsets.all(16),
+                                    hintText: 'Enter your phone number (optional)',
+                                  ),
                                 ),
                                 const SizedBox(height: 16),
 
@@ -172,7 +271,7 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
                                   controller: _passwordController,
                                   obscureText: _obscurePassword,
                                   decoration: InputDecoration(
-                                    labelText: 'Password',
+                                    labelText: 'Password *',
                                     labelStyle: const TextStyle(color: Colors.grey),
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(8),
@@ -183,6 +282,7 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
                                       borderSide: const BorderSide(color: Color(0xFF1976D2)),
                                     ),
                                     contentPadding: const EdgeInsets.all(16),
+                                    hintText: 'Enter your password',
                                     suffixIcon: IconButton(
                                       icon: Icon(
                                         _obscurePassword ? Icons.visibility_off : Icons.visibility,
@@ -195,51 +295,29 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
                                       },
                                     ),
                                   ),
-                                  validator: (value) {
-                                    if (value == null || value.isEmpty) {
-                                      return 'Please enter your password';
-                                    }
-                                    return null;
-                                  },
+                                  validator: _validatePassword,
                                 ),
-                                const SizedBox(height: 16),
-
-                                // Remember Me & Forgot Password
-                                Row(
-                                  children: [
-                                    Checkbox(
-                                      value: authProvider.rememberMe,
-                                      onChanged: (value) {
-                                        authProvider.setRememberMe(value!);
-                                      },
-                                      activeColor: const Color(0xFF1976D2),
+                                const SizedBox(height: 8),
+                                
+                                // Password requirements
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  child: Text(
+                                    'Password must be at least 6 characters long',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontSize: 12,
                                     ),
-                                    const Text('Remember me'),
-                                    const Spacer(),
-                                    TextButton(
-                                      onPressed: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) => const ForgotPasswordScreen(),
-                                          ),
-                                        );
-                                      },
-                                      child: const Text(
-                                        'Forgot Password?',
-                                        style: TextStyle(color: Color(0xFF1976D2)),
-                                      ),
-                                    ),
-                                  ],
+                                  ),
                                 ),
                                 const SizedBox(height: 24),
 
-                                // BLUE LOGIN BUTTON
+                                // BLUE REGISTER BUTTON
                                 SizedBox(
                                   width: double.infinity,
                                   height: 50,
                                   child: ElevatedButton(
-                                    onPressed: authProvider.isLoading ? null : _login,
+                                    onPressed: authProvider.isLoading ? null : _register,
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: const Color(0xFF1976D2), // Blue color
                                       foregroundColor: Colors.white,
@@ -258,7 +336,7 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
                                             ),
                                           )
                                         : const Text(
-                                            'LOGIN',
+                                            'CREATE ACCOUNT',
                                             style: TextStyle(
                                               fontSize: 16,
                                               fontWeight: FontWeight.w600,
@@ -274,22 +352,22 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
 
                       const SizedBox(height: 32),
 
-                      // Register Section
+                      // Login Link
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Text("Don't have an account? "),
+                          const Text("Already have an account? "),
                           GestureDetector(
                             onTap: () {
-                              Navigator.push(
+                              Navigator.pushReplacement(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => const ClientRegisterScreen(),
+                                  builder: (_) => const ClientLoginScreen(),
                                 ),
                               );
                             },
                             child: const Text(
-                              'Register',
+                              'Sign In Here',
                               style: TextStyle(
                                 color: Color(0xFF1976D2),
                                 fontWeight: FontWeight.w600,

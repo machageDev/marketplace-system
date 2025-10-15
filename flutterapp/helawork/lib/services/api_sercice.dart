@@ -804,7 +804,247 @@ Future<List<Contract>> fetchContracts() async {
     return 'your-auth-token-here'; // Replace with actual token retrieval
   }
 
+
+  Future<Map<String, dynamic>> fetchDashboardData() async {
+    final response = await http.get(Uri.parse('$baseUrl/dashboard/'));
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to load dashboard data');
+    }
+  }
+
+  
+  Future<Map<String, dynamic>> apilogin(String username, String password) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/auth/login/'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'username': username,
+          'password': password,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'data': json.decode(response.body),
+        };
+      } else {
+        return {
+          'success': false,
+          'error': 'Invalid credentials. Please try again.',
+          'statusCode': response.statusCode,
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'error': 'Network error. Please check your connection.',
+      };
+    }
+  }
+
+  // Add this method to your existing ApiService class
+Future<Map<String, dynamic>> apiforgotpassword({
+  required String email,
+}) async {
+  try {
+    final response = await http.post(
+      Uri.parse('$baseUrl/auth/forgot-password/'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'email': email,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      return {
+        'success': true,
+        'message': 'Password reset instructions sent to your email.',
+      };
+    } else {
+      final errorData = json.decode(response.body);
+      return {
+        'success': false,
+        'error': errorData['message'] ?? 'Failed to process password reset request.',
+        'statusCode': response.statusCode,
+      };
+    }
+  } catch (e) {
+    return {
+      'success': false,
+      'error': 'Network error. Please check your connection.',
+    };
+  }
 }
+  // Add this method to your existing ApiService class
+Future<Map<String, dynamic>> apiregister({
+  required String username,
+  required String email,
+  required String password,
+  String? phoneNumber,
+}) async {
+  try {
+    final response = await http.post(
+      Uri.parse('$baseUrl/auth/register/'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'username': username,
+        'contact_email': email, // Using contact_email as per your HTML form
+        'password': password,
+        'phone_number': phoneNumber,
+        'role': 'client',
+      }),
+    );
+
+    if (response.statusCode == 201 || response.statusCode == 200) {
+      return {
+        'success': true,
+        'data': json.decode(response.body),
+        'message': 'Registration successful!',
+      };
+    } else {
+      final errorData = json.decode(response.body);
+      return {
+        'success': false,
+        'error': errorData['message'] ?? _getErrorMessage(response.statusCode),
+        'statusCode': response.statusCode,
+      };
+    }
+  } catch (e) {
+    return {
+      'success': false,
+      'error': 'Network error. Please check your connection.',
+    };
+  }
+}
+
+String _getErrorMessage(int statusCode) {
+  switch (statusCode) {
+    case 400:
+      return 'Invalid registration data. Please check your inputs.';
+    case 409:
+      return 'Username or email already exists.';
+    default:
+      return 'Registration failed. Please try again.';
+  }
+}
+// Add these methods to your existing ApiService class
+Future<Map<String, dynamic>> fetchEmployerTasks() async {
+  try {
+    final response = await http.get(
+      Uri.parse('$baseUrl/employer/tasks/'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer YOUR_TOKEN', // Add your auth token
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      return {
+        'success': true,
+        'tasks': data['tasks'] ?? [],
+        'stats': data['stats'] ?? {},
+      };
+    } else {
+      return {
+        'success': false,
+        'error': 'Failed to load tasks',
+      };
+    }
+  } catch (e) {
+    return {
+      'success': false,
+      'error': 'Network error. Please check your connection.',
+    };
+  }
+}
+
+Future<Map<String, dynamic>> fetchTaskStats() async {
+  try {
+    final response = await http.get(
+      Uri.parse('$baseUrl/employer/tasks/stats/'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer YOUR_TOKEN',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      return {
+        'success': true,
+        'stats': data,
+      };
+    } else {
+      return {
+        'success': false,
+        'error': 'Failed to load task statistics',
+      };
+    }
+  } catch (e) {
+    return {
+      'success': false,
+      'error': 'Network error. Please check your connection.',
+    };
+  }
+}
+// Add this method to your existing ApiService class
+Future<Map<String, dynamic>> createTask({
+  required String title,
+  required String description,
+  required String category,
+  double? budget,
+  DateTime? deadline,
+  String? skills,
+  bool isUrgent = false,
+}) async {
+  try {
+    final response = await http.post(
+      Uri.parse('$baseUrl/tasks/create/'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer YOUR_TOKEN', // Add your auth token
+      },
+      body: json.encode({
+        'title': title,
+        'description': description,
+        'category': category,
+        'budget': budget,
+        'deadline': deadline?.toIso8601String(),
+        'skills': skills,
+        'is_urgent': isUrgent,
+      }),
+    );
+
+    if (response.statusCode == 201 || response.statusCode == 200) {
+      return {
+        'success': true,
+        'message': 'Task created successfully!',
+        'data': json.decode(response.body),
+      };
+    } else {
+      final errorData = json.decode(response.body);
+      return {
+        'success': false,
+        'error': errorData['message'] ?? 'Failed to create task',
+        'statusCode': response.statusCode,
+      };
+    }
+  } catch (e) {
+    return {
+      'success': false,
+      'error': 'Network error. Please check your connection.',
+    };
+  }
+}
+}
+
+
 
 
   

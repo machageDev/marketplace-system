@@ -1,41 +1,41 @@
+
 import 'package:flutter/material.dart';
-import 'package:helawork/freelancer/provider/auth_provider.dart';
+import 'package:helawork/clients/provider/auth_provider.dart' as client_auth;
+import 'package:helawork/clients/provider/dashboard_provider.dart' as client_dashboard;
+import 'package:helawork/freelancer/provider/auth_provider.dart' as freelancer_auth;
 import 'package:helawork/freelancer/provider/contract_provider.dart';
-import 'package:helawork/freelancer/provider/dashbaord_provider.dart';
+import 'package:helawork/freelancer/provider/dashbaord_provider.dart' as freelancer_dashboard;
 import 'package:helawork/freelancer/provider/forgot_password_provider.dart';
 import 'package:helawork/freelancer/provider/proposal_provider.dart';
 import 'package:helawork/freelancer/provider/rating_provider.dart';
 import 'package:helawork/freelancer/provider/task_provider.dart';
 import 'package:helawork/freelancer/provider/user_profile_provider.dart';
-//import 'package:flutter_stripe/flutter_stripe.dart';
-import 'package:helawork/freelancer/screens/login_screen.dart';
+import 'package:helawork/freelancer/screens/login_screen.dart'; // Freelancer login
+import 'package:helawork/clients/screens/client_login_screen.dart'; // Client login - ADD THIS IMPORT
+import 'package:helawork/services/api_sercice.dart';
 import 'package:provider/provider.dart';
-
-// Import your providers
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 🧩 Initialize Stripe
-  //Stripe.publishableKey = 'pk_test_YourPublishableKeyHere'; 
-  //await Stripe.instance.applySettings();
-
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        // Freelancer Providers
+        ChangeNotifierProvider(create: (_) => freelancer_auth.AuthProvider()),
         ChangeNotifierProvider(create: (_) => ForgotPasswordProvider()),    
         ChangeNotifierProvider(create: (_) => UserProfileProvider()),  
-        ChangeNotifierProvider(create: (_) => DashboardProvider()),
-        ChangeNotifierProvider(create: (_) => TaskProvider()) , 
+        ChangeNotifierProvider(create: (_) => freelancer_dashboard.DashboardProvider()),
+        ChangeNotifierProvider(create: (_) => TaskProvider()), 
         ChangeNotifierProvider(create: (_) => ProposalProvider()),
         ChangeNotifierProvider(create: (_) => ContractProvider()..fetchContracts()),
         ChangeNotifierProvider(create: (_) => RatingProvider()),        
-
-
         
+        // Client Providers
+        ChangeNotifierProvider(create: (_) => client_dashboard.DashboardProvider(apiService: ApiService())),
+        ChangeNotifierProvider(create: (_) => client_auth.AuthProvider(apiService: ApiService())),
       ],
-      child: MyApp(),
+      child: const MyApp(),
     ),
   );
 }
@@ -49,12 +49,12 @@ class MyApp extends StatelessWidget {
       title: 'HELAWORK',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(),
-      home: RoleSelectionScreen(),
+      home: const RoleSelectionScreen(),
     );
   }
 }
 
-//  Role Selection Screen
+// Role Selection Screen
 class RoleSelectionScreen extends StatelessWidget {
   const RoleSelectionScreen({super.key});
 
@@ -78,6 +78,7 @@ class RoleSelectionScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 40),
+                // CLIENT BUTTON - Goes to Client Login Screen
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
@@ -88,13 +89,14 @@ class RoleSelectionScreen extends StatelessWidget {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => LoginScreen(), // Removed const
+                        builder: (_) => const ClientLoginScreen(), // CHANGED TO CLIENT LOGIN
                       ),
                     );
                   },
                   child: const Text('Client', style: TextStyle(fontSize: 18)),
                 ),
                 const SizedBox(height: 20),
+                // FREELANCER BUTTON - Goes to Freelancer Login Screen
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue,
@@ -105,7 +107,7 @@ class RoleSelectionScreen extends StatelessWidget {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => LoginScreen(), 
+                        builder: (_) => const LoginScreen(), // KEPT AS FREELANCER LOGIN
                       ),
                     );
                   },
