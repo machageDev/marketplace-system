@@ -33,7 +33,7 @@ from rest_framework.decorators import authentication_classes, permission_classes
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from webapp.serializers import ContractSerializer, EmployerProfileSerializer, EmployerRatingSerializer, EmployerSerializer, LoginSerializer, RegisterSerializer, TaskCreateSerializer, TaskSerializer, UserProfileSerializer
+from webapp.serializers import ContractSerializer, EmployerProfileSerializer, EmployerRatingSerializer, EmployerSerializer, LoginSerializer, ProposalSerializer, RegisterSerializer, TaskCreateSerializer, TaskSerializer, UserProfileSerializer
 from .authentication import CustomTokenAuthentication
 from .permissions import IsAuthenticated  
 from .models import UserProfile
@@ -650,4 +650,18 @@ def bulk_delete_tasks(request):
     return Response(
         {'message': f'{deleted_count} tasks deleted successfully'}, 
         status=status.HTTP_200_OK
-    )    
+    )  
+    
+    
+@api_view(['GET'])
+def get_freelancer_proposals(request, freelancer_id):
+    try:
+        proposals = Proposal.objects.filter(freelancer_id=freelancer_id)
+        serializer = ProposalSerializer(proposals, many=True)
+        return Response(serializer.data)
+    except Exception as e:
+        return Response(
+            {'error': str(e)}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+      

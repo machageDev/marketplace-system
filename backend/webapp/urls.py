@@ -28,5 +28,5 @@ urlpatterns = [
     path('tasks/create/', views.create_task, name='create-task'),
     path('tasks/<int:task_id>/delete/', views.delete_task, name='delete-task'),
     path('tasks/bulk-delete/', views.bulk_delete_tasks, name='bulk-delete-tasks'),
-    
+    path('freeproposal',views.get_freelancer_proposals,name='freeproposal'),
 ] 
