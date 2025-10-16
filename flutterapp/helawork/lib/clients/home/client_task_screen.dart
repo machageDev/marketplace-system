@@ -26,9 +26,9 @@ class _TasksScreenState extends State<TasksScreen> {
         return Colors.green;
       case 'in_progress':
       case 'in progress':
-        return Colors.blue;
+        return Colors.blueAccent;
       case 'completed':
-        return Colors.cyan;
+        return Colors.teal;
       case 'cancelled':
         return Colors.red;
       case 'pending':
@@ -56,9 +56,6 @@ class _TasksScreenState extends State<TasksScreen> {
     }
   }
 
-
-
-
   String _getTaskTitle(dynamic task) =>
       (task is Map<String, dynamic>) ? (task['title'] ?? 'Untitled Task') : 'Untitled Task';
 
@@ -82,22 +79,18 @@ class _TasksScreenState extends State<TasksScreen> {
   String _getTaskStatus(dynamic task) =>
       (task is Map<String, dynamic>) ? (task['status'] ?? 'open') : 'open';
 
-
-
-
-
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: const Text('My Tasks'),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 0,
+        title: const Text('My Tasks', style: TextStyle(color: Colors.white)),
+        backgroundColor: Colors.blueAccent,
+        elevation: 2,
+        centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: () {
               Provider.of<TaskProvider>(context, listen: false).fetchEmployerTasks();
             },
@@ -111,30 +104,49 @@ class _TasksScreenState extends State<TasksScreen> {
             MaterialPageRoute(builder: (_) => const CreateTaskScreen()),
           );
         },
-        icon: const Icon(Icons.add),
-        label: const Text("Create Task"),
-        backgroundColor: Colors.blue,
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text("Create Task", style: TextStyle(color: Colors.white)),
+        backgroundColor: Colors.blueAccent,
+        elevation: 4,
       ),
       body: Consumer<TaskProvider>(
         builder: (context, taskProvider, child) {
           if (taskProvider.isLoading) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(color: Colors.blueAccent),
+                  SizedBox(height: 16),
+                  Text('Loading tasks...', style: TextStyle(color: Colors.black54)),
+                ],
+              ),
+            );
           }
 
           if (taskProvider.errorMessage.isNotEmpty) {
             return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.error_outline, size: 64, color: Colors.red.shade300),
-                  const SizedBox(height: 16),
-                  Text(taskProvider.errorMessage, style: const TextStyle(fontSize: 16)),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: taskProvider.fetchEmployerTasks,
-                    child: const Text('Try Again'),
-                  ),
-                ],
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.error_outline, size: 64, color: Colors.red.shade300),
+                    const SizedBox(height: 16),
+                    const Text('Failed to load tasks',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.redAccent)),
+                    const SizedBox(height: 8),
+                    Text(taskProvider.errorMessage,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 14, color: Colors.black54)),
+                    const SizedBox(height: 20),
+                    ElevatedButton(
+                      onPressed: taskProvider.fetchEmployerTasks,
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+                      child: const Text('Try Again', style: TextStyle(color: Colors.white)),
+                    ),
+                  ],
+                ),
               ),
             );
           }
@@ -165,14 +177,18 @@ class _TasksScreenState extends State<TasksScreen> {
                   crossAxisCount: 2,
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  childAspectRatio: 2,
+                  childAspectRatio: 1.5,
                   mainAxisSpacing: 16,
                   crossAxisSpacing: 16,
                   children: [
-                    _buildStatCard('Total Tasks', totalTasks.toString(), Colors.blue),
-                    _buildStatCard('Open', openTasks.toString(), Colors.green),
-                    _buildStatCard('In Progress', inProgressTasks.toString(), Colors.cyan),
-                    _buildStatCard('Completed', completedTasks.toString(), Colors.orange),
+                    _buildStatCard('Total Tasks', totalTasks.toString(), 
+                        Colors.blueAccent, Colors.lightBlueAccent, Icons.assignment),
+                    _buildStatCard('Open Tasks', openTasks.toString(), 
+                        Colors.green, Colors.lightGreen, Icons.lock_open),
+                    _buildStatCard('In Progress', inProgressTasks.toString(), 
+                        Colors.orange, Colors.orangeAccent, Icons.autorenew),
+                    _buildStatCard('Completed', completedTasks.toString(), 
+                        Colors.teal, Colors.tealAccent, Icons.check_circle),
                   ],
                 ),
                 const SizedBox(height: 24),
@@ -189,13 +205,14 @@ class _TasksScreenState extends State<TasksScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        const Column(
+        Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('My Tasks', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            SizedBox(height: 4),
+            const Text('My Tasks', 
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+            const SizedBox(height: 4),
             Text('Manage and track all your posted tasks',
-                style: TextStyle(color: Colors.grey)),
+                style: TextStyle(color: Colors.grey.shade600)),
           ],
         ),
         OutlinedButton.icon(
@@ -205,36 +222,45 @@ class _TasksScreenState extends State<TasksScreen> {
               MaterialPageRoute(builder: (_) => const ClientDashboardScreen()),
             );
           },
-          icon: const Icon(Icons.dashboard),
-          label: const Text("Dashboard"),
+          icon: const Icon(Icons.dashboard, color: Colors.blueAccent),
+          label: const Text("Dashboard", style: TextStyle(color: Colors.blueAccent)),
+          style: OutlinedButton.styleFrom(
+            side: const BorderSide(color: Colors.blueAccent),
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildStatCard(String title, String value, Color color) {
+  Widget _buildStatCard(String title, String value, Color color1, Color color2, IconData icon) {
     return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
         decoration: BoxDecoration(
-          color: color.withOpacity(0.85),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(value,
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold)),
-              const SizedBox(height: 6),
-              Text(title,
-                  style: const TextStyle(color: Colors.white, fontSize: 14)),
-            ],
+          gradient: LinearGradient(
+            colors: [color1.withOpacity(0.8), color2.withOpacity(0.6)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: Colors.white, size: 24),
+            const SizedBox(height: 8),
+            Text(value,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            Text(title,
+                style: const TextStyle(color: Colors.white70, fontSize: 13)),
+          ],
         ),
       ),
     );
@@ -242,54 +268,77 @@ class _TasksScreenState extends State<TasksScreen> {
 
   Widget _buildTaskTable(List tasks, int totalTasks) {
     return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('All My Tasks',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                Text('$totalTasks tasks', style: const TextStyle(color: Colors.grey)),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+                Text('$totalTasks tasks', style: TextStyle(color: Colors.grey.shade600)),
               ],
             ),
-          ),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: DataTable(
-              columns: const [
-                DataColumn(label: Text('Title')),
-                DataColumn(label: Text('Category')),
-                DataColumn(label: Text('Budget')),
-                DataColumn(label: Text('Status')),
-              ],
-              rows: tasks.map((task) {
-                return DataRow(cells: [
-                  DataCell(Text(_getTaskTitle(task))),
-                  DataCell(Text(_getTaskCategory(task))),
-                  DataCell(Text(_getTaskBudget(task)?.toStringAsFixed(2) ?? 'N/A')),
-                  DataCell(
-                    Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: _getStatusColor(_getTaskStatus(task)),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        _getStatusText(_getTaskStatus(task)),
-                        style: const TextStyle(color: Colors.white),
+            const SizedBox(height: 16),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columnSpacing: 20,
+                horizontalMargin: 12,
+                columns: const [
+                  DataColumn(label: Text('Title', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent))),
+                  DataColumn(label: Text('Category', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent))),
+                  DataColumn(label: Text('Budget', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent))),
+                  DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent))),
+                ],
+                rows: tasks.map((task) {
+                  return DataRow(cells: [
+                    DataCell(
+                      SizedBox(
+                        width: 150,
+                        child: Text(_getTaskTitle(task),
+                            style: const TextStyle(fontWeight: FontWeight.w500)),
                       ),
                     ),
-                  ),
-                ]);
-              }).toList(),
+                    DataCell(
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade200,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(_getTaskCategory(task),
+                            style: const TextStyle(fontSize: 12)),
+                      ),
+                    ),
+                    DataCell(Text(
+                      _getTaskBudget(task) != null ? 
+                      'Ksh ${_getTaskBudget(task)!.toStringAsFixed(2)}' : 'Not set',
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    )),
+                    DataCell(
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: _getStatusColor(_getTaskStatus(task)),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          _getStatusText(_getTaskStatus(task)),
+                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                  ]);
+                }).toList(),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -297,16 +346,18 @@ class _TasksScreenState extends State<TasksScreen> {
   Widget _buildEmptyState(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(60),
+        padding: const EdgeInsets.all(40),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.assignment, size: 64, color: Colors.grey.shade400),
+            Icon(Icons.assignment, size: 80, color: Colors.grey.shade400),
             const SizedBox(height: 16),
             const Text('No Tasks Yet',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
             const SizedBox(height: 8),
-            const Text('Create your first task to get started!'),
+            const Text('Create your first task to get started!',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16, color: Colors.grey)),
             const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: () {
@@ -315,11 +366,12 @@ class _TasksScreenState extends State<TasksScreen> {
                   MaterialPageRoute(builder: (_) => const CreateTaskScreen()),
                 );
               },
-              icon: const Icon(Icons.add),
-              label: const Text("Create Task"),
+              icon: const Icon(Icons.add, color: Colors.white),
+              label: const Text("Create Your First Task", style: TextStyle(color: Colors.white)),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                foregroundColor: Colors.white,
+                backgroundColor: Colors.blueAccent,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
           ],

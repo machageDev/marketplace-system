@@ -1,9 +1,7 @@
-// lib/clients/screens/create_task_screen.dart
 import 'package:flutter/material.dart';
 import 'package:helawork/clients/home/client_task_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:helawork/clients/provider/task_provider.dart';
-
 
 class CreateTaskScreen extends StatefulWidget {
   const CreateTaskScreen({super.key});
@@ -81,7 +79,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
       barrierDismissible: false,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Task Created'),
+          title: const Text('Task Created', style: TextStyle(color: Colors.blueAccent)),
           content: Text(message),
           actions: [
             TextButton(
@@ -94,7 +92,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                   ),
                 );
               },
-              child: const Text('View Tasks'),
+              child: const Text('View Tasks', style: TextStyle(color: Colors.blueAccent)),
             ),
           ],
         );
@@ -132,14 +130,15 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: const Text('Create New Task'),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 0,
+        title: const Text('Create New Task', style: TextStyle(color: Colors.white)),
+        backgroundColor: Colors.blueAccent,
+        elevation: 2,
+        centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.help_outline),
+            icon: const Icon(Icons.help_outline, color: Colors.white),
             onPressed: () {
               // Show help dialog
             },
@@ -158,16 +157,16 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                   Card(
                     elevation: 4,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(16),
                     ),
                     child: Container(
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
-                          colors: [Colors.blue, Colors.lightBlue],
+                          colors: [Colors.blueAccent, Colors.lightBlueAccent],
                         ),
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(16),
                       ),
                       child: Padding(
                         padding: const EdgeInsets.all(20),
@@ -178,7 +177,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
+                                  const Text(
                                     'Create New Task',
                                     style: TextStyle(
                                       fontSize: 20,
@@ -212,7 +211,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                                   Icon(
                                     Icons.people,
                                     size: 16,
-                                    color: Colors.blue.shade700,
+                                    color: Colors.blueAccent,
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
@@ -220,7 +219,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                                     style: TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.blue.shade700,
+                                      color: Colors.blueAccent,
                                     ),
                                   ),
                                 ],
@@ -240,7 +239,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: Colors.red.shade200),
                       ),
                       child: Row(
@@ -261,9 +260,9 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
 
                   // Main Form Card
                   Card(
-                    elevation: 2,
+                    elevation: 3,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(16),
                     ),
                     child: Padding(
                       padding: const EdgeInsets.all(24),
@@ -274,17 +273,25 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                           _buildSectionHeader(
                             'Basic Information',
                             Icons.info,
-                            Colors.blue,
+                            Colors.blueAccent,
                           ),
                           const SizedBox(height: 16),
 
                           // Task Title
                           TextFormField(
                             controller: _titleController,
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               labelText: 'Task Title *',
+                              labelStyle: const TextStyle(color: Colors.blueAccent),
                               hintText: 'e.g., Website Development, Mobile App Design, Content Writing Service',
-                              border: OutlineInputBorder(),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(color: Colors.blueAccent),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(color: Colors.blueAccent),
+                              ),
                               floatingLabelBehavior: FloatingLabelBehavior.always,
                             ),
                             maxLength: 255,
@@ -303,10 +310,18 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                           // Task Description
                           TextFormField(
                             controller: _descriptionController,
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               labelText: 'Task Description *',
+                              labelStyle: const TextStyle(color: Colors.blueAccent),
                               hintText: 'Describe the task in detail including specific requirements, deliverables, timeline, and instructions...',
-                              border: OutlineInputBorder(),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(color: Colors.blueAccent),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(color: Colors.blueAccent),
+                              ),
                               alignLabelWithHint: true,
                               floatingLabelBehavior: FloatingLabelBehavior.always,
                             ),
@@ -320,13 +335,16 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(
-                                'Be specific about requirements, deliverables, and expectations. Clear descriptions attract better proposals.',
-                                style: TextStyle(
-                                  color: Colors.grey.shade600,
-                                  fontSize: 12,
+                              Expanded(
+                                child: Text(
+                                  'Be specific about requirements, deliverables, and expectations. Clear descriptions attract better proposals.',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade600,
+                                    fontSize: 12,
+                                  ),
                                 ),
                               ),
+                              const SizedBox(width: 16),
                               Text(
                                 '${_descriptionController.text.length} characters',
                                 style: TextStyle(
@@ -347,7 +365,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                           _buildSectionHeader(
                             'Category & Budget',
                             Icons.category,
-                            Colors.green,
+                            Colors.blueAccent,
                           ),
                           const SizedBox(height: 16),
 
@@ -357,9 +375,17 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                               Expanded(
                                 child: DropdownButtonFormField<String>(
                                   value: _selectedCategory.isEmpty ? null : _selectedCategory,
-                                  decoration: const InputDecoration(
+                                  decoration: InputDecoration(
                                     labelText: 'Category *',
-                                    border: OutlineInputBorder(),
+                                    labelStyle: const TextStyle(color: Colors.blueAccent),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: const BorderSide(color: Colors.blueAccent),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: const BorderSide(color: Colors.blueAccent),
+                                    ),
                                     floatingLabelBehavior: FloatingLabelBehavior.always,
                                   ),
                                   items: _categories.map((category) {
@@ -382,10 +408,18 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                               Expanded(
                                 child: TextFormField(
                                   controller: _budgetController,
-                                  decoration: const InputDecoration(
+                                  decoration: InputDecoration(
                                     labelText: 'Budget (Ksh)',
+                                    labelStyle: const TextStyle(color: Colors.blueAccent),
                                     prefixText: 'Ksh ',
-                                    border: OutlineInputBorder(),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: const BorderSide(color: Colors.blueAccent),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: const BorderSide(color: Colors.blueAccent),
+                                    ),
                                     floatingLabelBehavior: FloatingLabelBehavior.always,
                                   ),
                                   keyboardType: TextInputType.number,
@@ -407,7 +441,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                           _buildSectionHeader(
                             'Timeline & Requirements',
                             Icons.calendar_today,
-                            Colors.orange,
+                            Colors.blueAccent,
                           ),
                           const SizedBox(height: 16),
 
@@ -418,9 +452,13 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                                 child: InkWell(
                                   onTap: () => _selectDate(context),
                                   child: InputDecorator(
-                                    decoration: const InputDecoration(
+                                    decoration: InputDecoration(
                                       labelText: 'Deadline',
-                                      border: OutlineInputBorder(),
+                                      labelStyle: const TextStyle(color: Colors.blueAccent),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: const BorderSide(color: Colors.blueAccent),
+                                      ),
                                       floatingLabelBehavior: FloatingLabelBehavior.always,
                                     ),
                                     child: Row(
@@ -438,7 +476,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                                         ),
                                         Icon(
                                           Icons.calendar_today,
-                                          color: Colors.grey.shade400,
+                                          color: Colors.blueAccent,
                                         ),
                                       ],
                                     ),
@@ -451,10 +489,18 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                               Expanded(
                                 child: TextFormField(
                                   controller: _skillsController,
-                                  decoration: const InputDecoration(
+                                  decoration: InputDecoration(
                                     labelText: 'Required Skills',
+                                    labelStyle: const TextStyle(color: Colors.blueAccent),
                                     hintText: 'e.g., Python, Django, React, Graphic Design, SEO',
-                                    border: OutlineInputBorder(),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: const BorderSide(color: Colors.blueAccent),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: const BorderSide(color: Colors.blueAccent),
+                                    ),
                                     floatingLabelBehavior: FloatingLabelBehavior.always,
                                   ),
                                 ),
@@ -475,7 +521,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                           _buildSectionHeader(
                             'Additional Options',
                             Icons.settings,
-                            Colors.purple,
+                            Colors.blueAccent,
                           ),
                           const SizedBox(height: 16),
 
@@ -494,7 +540,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                                 _isUrgent = value;
                               });
                             },
-                            activeColor: Colors.blue,
+                            activeColor: Colors.blueAccent,
                           ),
                           const SizedBox(height: 32),
 
@@ -525,12 +571,13 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                                         horizontal: 24,
                                         vertical: 12,
                                       ),
+                                      side: const BorderSide(color: Colors.blueAccent),
                                     ),
                                     child: const Row(
                                       children: [
-                                        Icon(Icons.close),
+                                        Icon(Icons.close, color: Colors.blueAccent),
                                         SizedBox(width: 8),
-                                        Text('Cancel'),
+                                        Text('Cancel', style: TextStyle(color: Colors.blueAccent)),
                                       ],
                                     ),
                                   ),
@@ -538,11 +585,14 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                                   ElevatedButton(
                                     onPressed: taskProvider.isLoading ? null : _createTask,
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.blue,
+                                      backgroundColor: Colors.blueAccent,
                                       foregroundColor: Colors.white,
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 24,
                                         vertical: 12,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
                                       ),
                                     ),
                                     child: taskProvider.isLoading
