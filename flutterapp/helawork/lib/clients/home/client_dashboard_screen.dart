@@ -31,7 +31,16 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: const Text('Client Dashboard', style: TextStyle(color: Colors.white)),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Client Dashboard', style: TextStyle(color: Colors.white, fontSize: 18)),
+            Text(
+              'Welcome, ${provider.userName}',
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+          ],
+        ),
         backgroundColor: Colors.blueAccent,
         elevation: 2,
         centerTitle: true,
@@ -51,7 +60,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
             else if (provider.errorMessage.isNotEmpty)
               _buildErrorState(provider)
             else
-              _DashboardContent(provider: provider),
+              DashboardContent(provider: provider),
             const Center(child: Text('Tasks Page')),
             const Center(child: Text('Proposals Page')),
             const Center(child: Text('Payments Page')),
@@ -114,9 +123,9 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
       );
 }
 
-class _DashboardContent extends StatelessWidget {
+class DashboardContent extends StatelessWidget {
   final DashboardProvider? provider;
-  const _DashboardContent({this.provider});
+  const DashboardContent({super.key, this.provider});
 
   @override
   Widget build(BuildContext context) {
@@ -127,37 +136,38 @@ class _DashboardContent extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Stats Grid - Fixed overflow issue
+          _buildWelcomeCard(provider!),
+          const SizedBox(height: 20),
           GridView.count(
             crossAxisCount: 2,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            childAspectRatio: 1.2, // Better aspect ratio
+            childAspectRatio: 1.2,
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
             children: [
-              _StatCard(
+              StatCard(
                 title: 'Total Tasks',
                 value: provider!.totalTasks.toString(),
                 color1: Colors.blueAccent,
                 color2: Colors.lightBlueAccent,
                 icon: Icons.work_outline,
               ),
-              _StatCard(
+              StatCard(
                 title: 'Active Jobs',
                 value: provider!.ongoingTasks.toString(),
                 color1: Colors.teal,
                 color2: Colors.tealAccent,
                 icon: Icons.play_circle_fill,
               ),
-              _StatCard(
+              StatCard(
                 title: 'Completed',
                 value: provider!.completedTasks.toString(),
                 color1: Colors.green,
                 color2: Colors.lightGreen,
                 icon: Icons.check_circle_outline,
               ),
-              _StatCard(
+              StatCard(
                 title: 'Proposals',
                 value: provider!.pendingProposals.toString(),
                 color1: Colors.orange,
@@ -167,22 +177,76 @@ class _DashboardContent extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 24),
-          _SectionCard(
+          SectionCard(
             title: 'Recent Tasks',
             icon: Icons.assignment_outlined,
             child: provider!.recentTasks.isNotEmpty
                 ? _buildTasksTable(provider!.recentTasks)
-                : const _EmptyState(icon: Icons.assignment, message: 'No tasks posted yet'),
+                : const EmptyState(icon: Icons.assignment, message: 'No tasks posted yet'),
           ),
           const SizedBox(height: 20),
-          _SectionCard(
+          SectionCard(
             title: 'Recent Proposals',
             icon: Icons.people_outline,
             child: provider!.recentProposals.isNotEmpty
                 ? _buildProposalsList(provider!.recentProposals)
-                : const _EmptyState(icon: Icons.people_outline, message: 'No new proposals'),
+                : const EmptyState(icon: Icons.people_outline, message: 'No new proposals'),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildWelcomeCard(DashboardProvider provider) {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.blueAccent.withOpacity(0.8), Colors.lightBlueAccent.withOpacity(0.6)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            CircleAvatar(
+              backgroundColor: Colors.white,
+              radius: 30,
+              child: Text(
+                provider.userName.isNotEmpty ? provider.userName[0].toUpperCase() : 'L',
+                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.blueAccent),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Welcome back, ${provider.userName}!',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Here\'s your dashboard overview',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.white.withOpacity(0.9),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -280,14 +344,15 @@ class _DashboardContent extends StatelessWidget {
   }
 }
 
-class _StatCard extends StatelessWidget {
+class StatCard extends StatelessWidget {
   final String title;
   final String value;
   final Color color1;
   final Color color2;
   final IconData icon;
 
-  const _StatCard({
+  const StatCard({
+    super.key,
     required this.title,
     required this.value,
     required this.color1,
@@ -339,12 +404,17 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-class _SectionCard extends StatelessWidget {
+class SectionCard extends StatelessWidget {
   final String title;
   final Widget child;
   final IconData icon;
 
-  const _SectionCard({required this.title, required this.child, required this.icon});
+  const SectionCard({
+    super.key,
+    required this.title,
+    required this.child,
+    required this.icon,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -380,10 +450,15 @@ class _SectionCard extends StatelessWidget {
   }
 }
 
-class _EmptyState extends StatelessWidget {
+class EmptyState extends StatelessWidget {
   final IconData icon;
   final String message;
-  const _EmptyState({required this.icon, required this.message});
+
+  const EmptyState({
+    super.key,
+    required this.icon,
+    required this.message,
+  });
 
   @override
   Widget build(BuildContext context) {
