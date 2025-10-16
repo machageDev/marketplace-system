@@ -11,61 +11,63 @@ class TaskProvider extends ChangeNotifier {
   List<dynamic> get tasks => _tasks;
 
   // Create Task
-  Future<Map<String, dynamic>> createTask({
-    required String title,
-    required String description,
-    required String category,
-    double? budget,
-    DateTime? deadline,
-    String? skills,
-    bool isUrgent = false,
-  }) async {
-    _isLoading = true;
-    _errorMessage = '';
-    notifyListeners();
+ // In TaskProvider, update the createTask method to handle the UI feedback better
+Future<Map<String, dynamic>> createTask({
+  required String title,
+  required String description,
+  required String category,
+  double? budget,
+  DateTime? deadline,
+  String? skills,
+  bool isUrgent = false,
+}) async {
+  _isLoading = true;
+  _errorMessage = '';
+  notifyListeners();
 
-    try {
-      final result = await ApiService().createTask(
-        title: title,
-        description: description,
-        category: category,
-        budget: budget,
-        deadline: deadline,
-        skills: skills,
-        isUrgent: isUrgent,
-      );
+  try {
+    final result = await ApiService().createTask(
+      title: title,
+      description: description,
+      category: category,
+      budget: budget,
+      deadline: deadline,
+      skills: skills,
+      isUrgent: isUrgent,
+    );
 
-      _isLoading = false;
-      
-      if (result['success'] == true) {
-        // Add the new task to the local list
-        if (result['data'] != null) {
-          _tasks.insert(0, result['data']);
-        }
-        notifyListeners();
-        return {
-          'success': true,
-          'message': result['message'] ?? 'Task created successfully!',
-          'data': result['data'],
-        };
-      } else {
-        _errorMessage = result['error'] ?? 'Failed to create task';
-        notifyListeners();
-        return {
-          'success': false,
-          'message': result['error'] ?? 'Failed to create task',
-        };
+    _isLoading = false;
+    
+    if (result['success'] == true) {
+      // Add the new task to the local list
+      if (result['data'] != null) {
+        _tasks.insert(0, result['data']);
       }
-    } catch (e) {
-      _isLoading = false;
-      _errorMessage = e.toString();
+      _errorMessage = ''; // Clear any previous errors
+      notifyListeners();
+      return {
+        'success': true,
+        'message': result['message'] ?? 'Task created successfully!',
+        'data': result['data'],
+      };
+    } else {
+      _errorMessage = result['error'] ?? result['message'] ?? 'Failed to create task';
       notifyListeners();
       return {
         'success': false,
-        'message': e.toString(),
+        'message': _errorMessage,
       };
     }
+  } catch (e) {
+    _isLoading = false;
+    _errorMessage = e.toString();
+    notifyListeners();
+    return {
+      'success': false,
+      'message': e.toString(),
+    };
   }
+}
 
   // Fetch all tasks
   Future<void> fetchTasks() async {

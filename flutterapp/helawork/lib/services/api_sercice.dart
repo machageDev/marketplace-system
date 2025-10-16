@@ -25,7 +25,7 @@ class ApiService{
   static const String apiregisterUrl = '$baseUrl/register';
   static const String dashboardUrl = '$baseUrl/dashboard';
   static const String taskStatsUrl = '$baseUrl/employer/task/stats';
-  static const String createTaskUrl = '$baseUrl/employer/tasks/create';  
+  static const String createTaskUrl = '$baseUrl/tasks/create/';  
   static const String employerTasksUrl = '$baseUrl/employer/tasks';
   static const String apiuserprofileUrl = '$baseUrl/apiuserprofile';
   static const String contractUrl = '$baseUrl/contracts';
@@ -1003,16 +1003,16 @@ Future<Map<String, dynamic>> createTask({
         'description': description,
         'category': category,
         'budget': budget,
-        'deadline': deadline?.toIso8601String(),
+        'deadline': deadline?.toIso8601String().split('T')[0], // Date only for DateField
         'required_skills': skills,
         'is_urgent': isUrgent,
-        'status': 'open', // Default status
+        // No employer field - it will be set automatically from the authenticated user
       }),
     );
 
     print('Create Task Response: ${response.statusCode} - ${response.body}');
 
-    if (response.statusCode == 201 || response.statusCode == 200) {
+    if (response.statusCode == 201) {
       final responseData = json.decode(response.body);
       return {
         'success': true,
@@ -1023,8 +1023,8 @@ Future<Map<String, dynamic>> createTask({
       final errorData = json.decode(response.body);
       return {
         'success': false,
-        'error': errorData['message'] ?? 
-                errorData['error'] ?? 
+        'error': errorData['error'] ?? 
+                errorData['message'] ?? 
                 'Failed to create task. Status: ${response.statusCode}',
         'statusCode': response.statusCode,
       };
@@ -1037,7 +1037,6 @@ Future<Map<String, dynamic>> createTask({
     };
   }
 }
-
 // Fetch employer tasks - Updated
 Future<Map<String, dynamic>> fetchEmployerTasks() async {
   try {
