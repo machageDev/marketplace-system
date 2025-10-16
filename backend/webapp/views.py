@@ -662,27 +662,58 @@ def employer_profile(request, employer_id):
     
 # Create Task
 @api_view(['POST'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
 def create_task(request):
     """
     Create a new task
     """
-    serializer = TaskCreateSerializer(data=request.data)
-    if serializer.is_valid():
-        # Validate employer exists
-        employer_id = request.data.get('employer')
-        try:
-            employer = Employer.objects.get(pk=employer_id)
-        except Employer.DoesNotExist:
-            return Response(
-                {'error': 'Employer not found'}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+    try:
+        # Get employer using username instead of user field
+        employer = Employer.objects.get(username=request.user.username)
         
-        task = serializer.save()
-        return Response(TaskSerializer(task).data, status=status.HTTP_201_CREATED)
-    
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
+        # Prepare task data - handle empty skills
+        skills = request.data.get('skills')
+        if skills is None or skills == '':
+            skills = ''  # Set to empty string instead of null
+        
+        task_data = {
+            'employer': employer.employer_id,
+            'title': request.data.get('title'),
+            'description': request.data.get('description'),
+            'category': request.data.get('category'),
+            'budget': request.data.get('budget'),
+            'deadline': request.data.get('deadline'),
+            'required_skills': skills,  # Use the processed skills
+            'is_urgent': request.data.get('isUrgent', False)
+        }
+        
+        # Create task
+        serializer = TaskSerializer(data=task_data)
+        if serializer.is_valid():
+            task = serializer.save()
+            return Response({
+                'success': True,
+                'message': 'Task created successfully',
+                'task': TaskSerializer(task).data
+            }, status=status.HTTP_201_CREATED)
+        else:
+            return Response({
+                'success': False,
+                'message': 'Invalid data',
+                'errors': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+    except Employer.DoesNotExist:
+        return Response({
+            'success': False,
+            'message': 'Employer profile not found'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Error creating task: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 # Delete Task
 @api_view(['DELETE'])
 def delete_task(request, task_id):

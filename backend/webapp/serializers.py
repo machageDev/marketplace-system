@@ -201,64 +201,26 @@ class EmployerRegisterSerializer(serializers.Serializer):
     contact_email = serializers.EmailField()
     phone_number = serializers.CharField(max_length=20, required=False, allow_blank=True)
     
-class TaskSerializer(serializers.ModelSerializer):
-    is_open = serializers.ReadOnlyField()
-    has_assigned_freelancer = serializers.ReadOnlyField()
-    employer_username = serializers.CharField(source='employer.username', read_only=True)
-    assigned_user_username = serializers.CharField(source='assigned_user.username', read_only=True, allow_null=True)
-    
-    class Meta:
-        model = Task
-        fields = [
-            'task_id',
-            'title',
-            'description',
-            'category',
-            'budget',
-            'deadline',
-            'required_skills',
-            'is_urgent',
-            'is_approved',
-            'is_active',
-            'status',
-            'created_at',
-            'employer',
-            'assigned_user',
-            'is_open',
-            'has_assigned_freelancer',
-            'employer_username',
-            'assigned_user_username'
-        ]
-        read_only_fields = ['task_id', 'created_at', 'is_open', 'has_assigned_freelancer']
-    
-    def validate_budget(self, value):
-        if value is not None and value < 0:
-            raise serializers.ValidationError("Budget cannot be negative")
-        return value
-    
-    def validate_deadline(self, value):
-        if value and value < timezone.now().date():
-            raise serializers.ValidationError("Deadline cannot be in the past")
-        return value
-
+# In your serializers.py
 class TaskCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Task
         fields = [
-            'title',
-            'description',
-            'category',
-            'budget',
-            'deadline',
-            'required_skills',
-            'is_urgent',
-            'employer'
+            'employer', 'title', 'description', 'category', 
+            'budget', 'deadline', 'required_skills', 'is_urgent'
         ]
+        read_only_fields = ['employer']  # Make employer read-only since we set it automatically
+
+class TaskSerializer(serializers.ModelSerializer):
+    employer_name = serializers.CharField(source='employer.company_name', read_only=True)
+    employer_id = serializers.IntegerField(source='employer.employer_id', read_only=True)
     
-    def create(self, validated_data):
-        # Set default values for new tasks
-        validated_data['is_approved'] = False
-        validated_data['is_active'] = True
-        validated_data['status'] = 'open'
-        
-        return Task.objects.create(**validated_data)        
+    class Meta:
+        model = Task
+        fields = [
+            'task_id', 'employer', 'employer_id', 'employer_name', 'title', 'description', 
+            'category', 'budget', 'deadline', 'required_skills', 
+            'is_urgent', 'status', 'is_approved', 'is_active',
+            'assigned_user', 'created_at'
+        ]
+        read_only_fields = ['task_id', 'status', 'is_approved', 'is_active', 'assigned_user', 'created_at']       
