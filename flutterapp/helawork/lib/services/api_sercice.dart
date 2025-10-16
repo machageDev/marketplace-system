@@ -25,8 +25,9 @@ class ApiService{
   static const String apiregisterUrl = '$baseUrl/register';
   static const String dashboardUrl = '$baseUrl/dashboard';
   static const String taskStatsUrl = '$baseUrl/employer/task/stats';
-  static const String createTaskUrl = '$baseUrl/employer/tasks/create';
+  static const String createTaskUrl = '$baseUrl/employer/tasks/create';  
   static const String employerTasksUrl = '$baseUrl/employer/tasks';
+  static const String apiuserprofileUrl = '$baseUrl/apiuserprofile';
   static const String contractUrl = '$baseUrl/contracts';
   static const String fetchtaskUrl = '$baseUrl/api/task_completions/';
   static const String apiforgotpasswordUrl = '$baseUrl/auth/forgot_password/';
