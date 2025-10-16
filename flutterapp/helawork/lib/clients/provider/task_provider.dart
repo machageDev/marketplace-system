@@ -1,57 +1,124 @@
-// lib/clients/provider/task_provider.dart
-import 'package:flutter/foundation.dart';
-import 'package:helawork/clients/models/task_model.dart';
-
+import 'package:flutter/material.dart';
 import 'package:helawork/services/api_sercice.dart';
 
-
-class TaskProvider with ChangeNotifier {
-  final ApiService apiService;
-
-  TaskProvider({required this.apiService});
-
+class TaskProvider extends ChangeNotifier {
   bool _isLoading = false;
   String _errorMessage = '';
-  List<Task> _tasks = [];
-  Map<String, dynamic> _stats = {};
+  List<dynamic> _tasks = [];
 
-  // Getters
   bool get isLoading => _isLoading;
   String get errorMessage => _errorMessage;
-  List<Task> get tasks => _tasks;
-  Map<String, dynamic> get stats => _stats;
+  List<dynamic> get tasks => _tasks;
 
-  int get totalTasks => _stats['total_tasks'] ?? 0;
-  int get openTasks => _stats['open_tasks'] ?? 0;
-  int get assignedTasks => _stats['assigned_tasks'] ?? 0;
-  int get completedTasks => _stats['completed_tasks'] ?? 0;
-
-  // Load employer tasks
-  Future<void> loadEmployerTasks() async {
+  // Create Task
+  Future<Map<String, dynamic>> createTask({
+    required String title,
+    required String description,
+    required String category,
+    double? budget,
+    DateTime? deadline,
+    String? skills,
+    bool isUrgent = false,
+  }) async {
     _isLoading = true;
     _errorMessage = '';
     notifyListeners();
 
     try {
-      final response = await apiService.fetchEmployerTasks();
+      final result = await ApiService().createTask(
+        title: title,
+        description: description,
+        category: category,
+        budget: budget,
+        deadline: deadline,
+        skills: skills,
+        isUrgent: isUrgent,
+      );
 
-      if (response['success'] == true) {
-        final tasksData = response['tasks'] as List<dynamic>? ?? [];
-        _tasks = tasksData.map((taskJson) => Task.fromJson(taskJson)).toList();
-        _stats = response['stats'] ?? {};
-        _errorMessage = '';
+      _isLoading = false;
+      
+      if (result['success'] == true) {
+        // Add the new task to the local list
+        if (result['data'] != null) {
+          _tasks.insert(0, result['data']);
+        }
+        notifyListeners();
+        return {
+          'success': true,
+          'message': result['message'] ?? 'Task created successfully!',
+          'data': result['data'],
+        };
       } else {
-        _errorMessage = response['error'] ?? 'Failed to load tasks';
-        _tasks = [];
-        _stats = {};
+        _errorMessage = result['error'] ?? 'Failed to create task';
+        notifyListeners();
+        return {
+          'success': false,
+          'message': result['error'] ?? 'Failed to create task',
+        };
       }
     } catch (e) {
-      _errorMessage = 'An unexpected error occurred. Please try again.';
-      _tasks = [];
-      _stats = {};
-    } finally {
+      _isLoading = false;
+      _errorMessage = e.toString();
+      notifyListeners();
+      return {
+        'success': false,
+        'message': e.toString(),
+      };
+    }
+  }
+
+  // Fetch all tasks
+  Future<void> fetchTasks() async {
+    _isLoading = true;
+    _errorMessage = '';
+    notifyListeners();
+
+    try {
+      final tasks = await ApiService.fetchTasks();
+      _tasks = tasks;
       _isLoading = false;
       notifyListeners();
+    } catch (e) {
+      _isLoading = false;
+      _errorMessage = e.toString();
+      notifyListeners();
+    }
+  }
+
+  // Fetch employer's tasks
+  Future<Map<String, dynamic>> fetchEmployerTasks() async {
+    _isLoading = true;
+    _errorMessage = '';
+    notifyListeners();
+
+    try {
+      final result = await ApiService().fetchEmployerTasks();
+      _isLoading = false;
+      
+      if (result['success'] == true) {
+        _tasks = result['tasks'] ?? [];
+        notifyListeners();
+        return {
+          'success': true,
+          'tasks': _tasks,
+          'stats': result['stats'] ?? {},
+        };
+      } else {
+        _errorMessage = result['error'] ?? 'Failed to load tasks';
+        notifyListeners();
+        return {
+          'success': false,
+          'message': result['error'] ?? 'Failed to load tasks',
+        };
+      }
+    } catch (e) {
+      _isLoading = false;
+      _errorMessage = e.toString();
+      notifyListeners();
+      return {
+        'success': false,
+        'message': e.toString(),
+      };
     }
   }
 
@@ -60,55 +127,46 @@ class TaskProvider with ChangeNotifier {
     _errorMessage = '';
     notifyListeners();
   }
-  // Add this method to your existing TaskProvider class
-Future<Map<String, dynamic>> createTask({
-  required String title,
-  required String description,
-  required String category,
-  double? budget,
-  DateTime? deadline,
-  String? skills,
-  bool isUrgent = false,
-}) async {
-  _isLoading = true;
-  _errorMessage = '';
-  notifyListeners();
 
-  try {
-    final response = await apiService.createTask(
-      title: title,
-      description: description,
-      category: category,
-      budget: budget,
-      deadline: deadline,
-      skills: skills,
-      isUrgent: isUrgent,
-    );
+  // Get task by ID
+  dynamic getTaskById(int taskId) {
+    try {
+      return _tasks.firstWhere((task) => task['task_id'] == taskId);
+    } catch (e) {
+      return null;
+    }
+  }
 
-    _isLoading = false;
+  // Update task status
+  Future<Map<String, dynamic>> updateTaskStatus({
+    required int taskId,
+    required String status,
+  }) async {
+    _isLoading = true;
+    notifyListeners();
 
-    if (response['success'] == true) {
+    try {
+      // Find the task in local list
+      final taskIndex = _tasks.indexWhere((task) => task['task_id'] == taskId);
+      if (taskIndex != -1) {
+        _tasks[taskIndex]['status'] = status;
+      }
+
+      _isLoading = false;
       notifyListeners();
+      
       return {
         'success': true,
-        'message': response['message'] ?? 'Task created successfully!',
+        'message': 'Task status updated successfully',
       };
-    } else {
-      _errorMessage = response['error'] ?? 'Failed to create task';
+    } catch (e) {
+      _isLoading = false;
+      _errorMessage = e.toString();
       notifyListeners();
       return {
         'success': false,
-        'error': _errorMessage,
+        'message': e.toString(),
       };
     }
-  } catch (e) {
-    _errorMessage = 'An unexpected error occurred. Please try again.';
-    _isLoading = false;
-    notifyListeners();
-    return {
-      'success': false,
-      'error': _errorMessage,
-    };
   }
-}
 }

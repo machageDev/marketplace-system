@@ -23,7 +23,23 @@ class ApiService{
   static const String ratingsUrl = '$baseUrl/ratings';
   static const String apiloginUrl = '$baseUrl/login';
   static const String apiregisterUrl = '$baseUrl/register';
-  static const String dashboardUrl = '$baseUrl/dashbaord';
+  static const String dashboardUrl = '$baseUrl/dashboard';
+  static const String taskStatsUrl = '$baseUrl/employer/task/stats';
+  static const String createTaskUrl = '$baseUrl/employer/tasks/create';
+  static const String employerTasksUrl = '$baseUrl/employer/tasks';
+  static const String contractUrl = '$baseUrl/contracts';
+  static const String fetchtaskUrl = '$baseUrl/api/task_completions/';
+  static const String apiforgotpasswordUrl = '$baseUrl/auth/forgot_password/';
+  static const String getContractUrl = '$baseUrl/contracts/';
+  static const String taskcomplitionUrl = '$baseUrl/api/task_completions/';
+  static const String freelancercontractUrl = '$baseUrl/freelancer/contracts/';
+  static const String employerIdcontractUrl = '$baseUrl/employer/contracts/';
+  static const String acceptproposalUrl = '$baseUrl/proposals/accept/';
+  static const String rejectproposalUrl = '$baseUrl/proposals/reject/';
+  static const String acceptcontractUrl = '$baseUrl/contracts/accept/';
+  static const String rejectcontractUrl = '$baseUrl/contracts/reject/';
+  static const String clientproposalsUrl = '$baseUrl/client/proposals/';
+  static const String withdrawcompleteUrl = '$baseUrl/api/task_completions/';
 Future<Map<String, dynamic>> register(String name, String email,String phoneNO, String password,  String confirmPassword) async {
   final url = Uri.parse(registerUrl);
   try {
@@ -508,7 +524,7 @@ static Future<List<Proposal>> fetchProposals() async {
 // In fetchContracts method  
 Future<List<Contract>> fetchContracts() async {
   final String? token = await _getUserToken();
-  final url = Uri.parse("$baseUrl/contracts/");
+  final url = Uri.parse(contractUrl);
   final response = await http.get(
     url,
     headers: {
@@ -578,7 +594,7 @@ Future<List<Contract>> fetchContracts() async {
     try {
       final token = await _getToken();
       final response = await http.get(
-        Uri.parse('$baseUrl/api/task-completions/?task_id=$taskId'),
+        Uri.parse(fetchtaskUrl),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -609,7 +625,7 @@ Future<List<Contract>> fetchContracts() async {
     try {
       final token = await _getToken();
       final response = await http.post(
-        Uri.parse('$baseUrl/api/task-completions/'),
+        Uri.parse(taskcomplitionUrl),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -645,64 +661,14 @@ Future<List<Contract>> fetchContracts() async {
     }
   }
 
-  /// Update existing task completion
-  static Future<Map<String, dynamic>> updateTaskCompletion({
-    required int taskId,
-    required String notes,
-  }) async {
-    try {
-      // First get the completion ID for this task
-      final completion = await fetchTaskCompletion(taskId);
-      if (completion == null) {
-        return {
-          'success': false,
-          'message': 'No completion found to update',
-        };
-      }
-
-      final completionId = completion['completion_id'];
-      final token = await _getToken();
-      
-      final response = await http.patch(
-        Uri.parse('$baseUrl/api/task-completions/$completionId/'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-        body: json.encode({
-          'freelancer_submission_notes': notes,
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        return {
-          'success': true,
-          'message': 'Completion updated successfully',
-          'data': json.decode(response.body),
-        };
-      } else {
-        final errorData = json.decode(response.body);
-        return {
-          'success': false,
-          'message': errorData['non_field_errors']?[0] ?? 'Update failed',
-          'error': errorData,
-        };
-      }
-    } catch (e) {
-      print('Error updating completion: $e');
-      return {
-        'success': false,
-        'message': 'Network error: $e',
-      };
-    }
-  }
+  
 
   /// List all task completions for the current user
   static Future<List<Map<String, dynamic>>> fetchUserCompletions() async {
     try {
       final token = await _getToken();
       final response = await http.get(
-        Uri.parse('$baseUrl/api/task-completions/'),
+        Uri.parse(fetchtaskUrl),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -729,7 +695,7 @@ Future<List<Contract>> fetchContracts() async {
     try {
       final token = await _getToken();
       final response = await http.delete(
-        Uri.parse('$baseUrl/api/task-completions/$completionId/'),
+        Uri.parse(withdrawcompleteUrl),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -805,32 +771,23 @@ Future<List<Contract>> fetchContracts() async {
     // return prefs.getString('auth_token') ?? '';
     return 'your-auth-token-here'; // Replace with actual token retrieval
   }
+ 
 
 
-  Future<Map<String, dynamic>> fetchDashboardData() async {
-  final response = await http.get(Uri.parse(dashboardUrl));
-
-  if (response.statusCode == 200) {
-    final responseData = json.decode(response.body);
-    
-    // Check if response has success field
-    if (responseData['success'] == true) {
-      return responseData['data']; // Return the nested data
-    } else {
-      throw Exception('API returned error: ${responseData['error']}');
-    }
-  } else {
-    throw Exception('Failed to load dashboard data: ${response.statusCode}');
-  }
+Future<void> saveUserToken(String token) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString('user_token', token);
+  print("🧠 Token saved to SharedPreferences: $token");
 }
 
-  Future<Map<String, dynamic>> apilogin(String username, String password) async {
+
+
+Future<Map<String, dynamic>> apilogin(String username, String password) async {
   try {
-    print("=== FLUTTER DEBUG ===");
+    print("=== LOGIN API CALL ===");
     print("URL: $apiloginUrl");
     print("Username: $username");
-    print("Password: $password");
-    
+
     final response = await http.post(
       Uri.parse(apiloginUrl),
       headers: {'Content-Type': 'application/json'},
@@ -842,18 +799,27 @@ Future<List<Contract>> fetchContracts() async {
 
     print("Response status: ${response.statusCode}");
     print("Response body: ${response.body}");
-    print("Response headers: ${response.headers}");
 
     if (response.statusCode == 200) {
+      final responseData = json.decode(response.body);
+
+      // ✅ Check if token exists in the response
+      if (responseData['token'] != null && responseData['token'].toString().isNotEmpty) {
+        final token = responseData['token'].toString();
+
+        // ✅ Save token locally for future API calls
+        await saveUserToken(token);
+        print("✅ Token saved locally: $token");
+      } else {
+        print("⚠️ No token found in response: ${response.body}");
+      }
+
       return {
         'success': true,
-        'data': json.decode(response.body),
+        'data': responseData,
       };
     } else {
-      print("=== ERROR DETAILS ===");
-      print("Status code: ${response.statusCode}");
-      print("Error body: ${response.body}");
-      
+      print("❌ Login failed — ${response.statusCode}");
       return {
         'success': false,
         'error': 'Invalid credentials. Please try again.',
@@ -861,14 +827,66 @@ Future<List<Contract>> fetchContracts() async {
       };
     }
   } catch (e) {
-    print("=== EXCEPTION ===");
-    print("Exception type: ${e.runtimeType}");
-    print("Exception message: $e");
-    
+    print("=== LOGIN API ERROR ===");
+    print("Error: $e");
+    print("Error type: ${e.runtimeType}");
+
     return {
       'success': false,
       'error': 'Network error. Please check your connection.',
     };
+  }
+}
+Future<Map<String, dynamic>> fetchDashboardData() async {
+  try {
+    print("=== DASHBOARD API CALL ===");
+    print("URL: $dashboardUrl");
+
+    final String? token = await _getUserToken();
+
+    final headers = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+      print("✅ Added Authorization header: Bearer $token");
+    } else {
+      print("⚠️ No token found. You may need to log in again.");
+    }
+
+    final response = await http.get(Uri.parse(dashboardUrl), headers: headers);
+
+    print("Status Code: ${response.statusCode}");
+    print("Response Body: ${response.body}");
+
+    if (response.statusCode == 200) {
+      final responseData = json.decode(response.body);
+      print("Parsed Response: $responseData");
+
+      // Unified data structure handling
+      if (responseData is Map<String, dynamic>) {
+        if (responseData['success'] == true && responseData.containsKey('data')) {
+          return responseData['data'];
+        } else {
+          return responseData;
+        }
+      } else {
+        throw Exception('Unexpected response format: Expected Map');
+      }
+    } else if (response.statusCode == 401) {
+      throw Exception('Unauthorized: Please login again');
+    } else if (response.statusCode == 404) {
+      throw Exception('Dashboard endpoint not found');
+    } else {
+      throw Exception('Failed to load dashboard: ${response.statusCode}');
+    }
+  } catch (e) {
+    print("=== DASHBOARD API ERROR ===");
+    print("Error: $e");
+    print("Error type: ${e.runtimeType}");
+    rethrow;
   }
 }
 
@@ -878,7 +896,7 @@ Future<Map<String, dynamic>> apiforgotpassword({
 }) async {
   try {
     final response = await http.post(
-      Uri.parse('$baseUrl/auth/forgot-password/'),
+      Uri.parse(apiforgotpasswordUrl),
       headers: {'Content-Type': 'application/json'},
       body: json.encode({
         'email': email,
@@ -918,7 +936,7 @@ Future<Map<String, dynamic>> apiregister({
       headers: {'Content-Type': 'application/json'},
       body: json.encode({
         'username': username,
-        'contact_email': email, // Using contact_email as per your HTML form
+        'contact_email': email, 
         'password': password,
         'phone_number': phoneNumber,
         'role': 'client',
@@ -958,13 +976,77 @@ String _getErrorMessage(int statusCode) {
   }
 }
 // Add these methods to your existing ApiService class
-Future<Map<String, dynamic>> fetchEmployerTasks() async {
+// Add to your existing ApiService class
+
+// Create Task - Updated to match your API structure
+Future<Map<String, dynamic>> createTask({
+  required String title,
+  required String description,
+  required String category,
+  double? budget,
+  DateTime? deadline,
+  String? skills,
+  bool isUrgent = false,
+}) async {
   try {
-    final response = await http.get(
-      Uri.parse('$baseUrl/employer/tasks/'),
+    final String? token = await _getUserToken();
+    
+    final response = await http.post(
+      Uri.parse(createTaskUrl),
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer YOUR_TOKEN', // Add your auth token
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode({
+        'title': title,
+        'description': description,
+        'category': category,
+        'budget': budget,
+        'deadline': deadline?.toIso8601String(),
+        'required_skills': skills,
+        'is_urgent': isUrgent,
+        'status': 'open', // Default status
+      }),
+    );
+
+    print('Create Task Response: ${response.statusCode} - ${response.body}');
+
+    if (response.statusCode == 201 || response.statusCode == 200) {
+      final responseData = json.decode(response.body);
+      return {
+        'success': true,
+        'message': 'Task created successfully!',
+        'data': responseData,
+      };
+    } else {
+      final errorData = json.decode(response.body);
+      return {
+        'success': false,
+        'error': errorData['message'] ?? 
+                errorData['error'] ?? 
+                'Failed to create task. Status: ${response.statusCode}',
+        'statusCode': response.statusCode,
+      };
+    }
+  } catch (e) {
+    print('Create Task Error: $e');
+    return {
+      'success': false,
+      'error': 'Network error: $e',
+    };
+  }
+}
+
+// Fetch employer tasks - Updated
+Future<Map<String, dynamic>> fetchEmployerTasks() async {
+  try {
+    final String? token = await _getUserToken();
+    
+    final response = await http.get(
+      Uri.parse(employerTasksUrl),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
       },
     );
 
@@ -972,30 +1054,33 @@ Future<Map<String, dynamic>> fetchEmployerTasks() async {
       final data = json.decode(response.body);
       return {
         'success': true,
-        'tasks': data['tasks'] ?? [],
-        'stats': data['stats'] ?? {},
+        'tasks': data['tasks'] ?? data['data'] ?? [],
+        'stats': data['stats'] ?? data['statistics'] ?? {},
       };
     } else {
       return {
         'success': false,
-        'error': 'Failed to load tasks',
+        'error': 'Failed to load tasks: ${response.statusCode}',
       };
     }
   } catch (e) {
     return {
       'success': false,
-      'error': 'Network error. Please check your connection.',
+      'error': 'Network error: $e',
     };
   }
 }
 
+// Get task statistics
 Future<Map<String, dynamic>> fetchTaskStats() async {
   try {
+    final String? token = await _getUserToken();
+    
     final response = await http.get(
-      Uri.parse('$baseUrl/employer/tasks/stats/'),
+      Uri.parse(taskStatsUrl),
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer YOUR_TOKEN',
+        'Authorization': 'Bearer $token',
       },
     );
 
@@ -1014,56 +1099,7 @@ Future<Map<String, dynamic>> fetchTaskStats() async {
   } catch (e) {
     return {
       'success': false,
-      'error': 'Network error. Please check your connection.',
-    };
-  }
-}
-// Add this method to your existing ApiService class
-Future<Map<String, dynamic>> createTask({
-  required String title,
-  required String description,
-  required String category,
-  double? budget,
-  DateTime? deadline,
-  String? skills,
-  bool isUrgent = false,
-}) async {
-  try {
-    final response = await http.post(
-      Uri.parse('$baseUrl/tasks/create/'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer YOUR_TOKEN', // Add your auth token
-      },
-      body: json.encode({
-        'title': title,
-        'description': description,
-        'category': category,
-        'budget': budget,
-        'deadline': deadline?.toIso8601String(),
-        'skills': skills,
-        'is_urgent': isUrgent,
-      }),
-    );
-
-    if (response.statusCode == 201 || response.statusCode == 200) {
-      return {
-        'success': true,
-        'message': 'Task created successfully!',
-        'data': json.decode(response.body),
-      };
-    } else {
-      final errorData = json.decode(response.body);
-      return {
-        'success': false,
-        'error': errorData['message'] ?? 'Failed to create task',
-        'statusCode': response.statusCode,
-      };
-    }
-  } catch (e) {
-    return {
-      'success': false,
-      'error': 'Network error. Please check your connection.',
+      'error': 'Network error: $e',
     };
   }
 }
@@ -1071,7 +1107,7 @@ Future<Map<String, dynamic>> createTask({
  Future<Map<String, dynamic>> getContract(String contractId) async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/contracts/$contractId/'),
+        Uri.parse(getContractUrl),
         
       );
 
@@ -1089,7 +1125,7 @@ Future<Map<String, dynamic>> createTask({
   Future<Map<String, dynamic>> apiacceptContract(String contractId) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/contracts/$contractId/accept/'),
+        Uri.parse(acceptcontractUrl),
        
         body: json.encode({'accepted': true}),
       );
@@ -1108,7 +1144,7 @@ Future<Map<String, dynamic>> createTask({
   Future<List<dynamic>> getEmployerContracts(String employerId) async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/employers/$employerId/contracts/'),
+        Uri.parse(employerIdcontractUrl),
         
       );
 
@@ -1126,7 +1162,7 @@ Future<Map<String, dynamic>> createTask({
   Future<List<dynamic>> getFreelancerContracts(String freelancerId) async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/freelancers/$freelancerId/contracts/'),
+        Uri.parse(freelancercontractUrl),
        
       );
 
@@ -1157,7 +1193,7 @@ Future<Map<String, dynamic>> createTask({
   Future<List<dynamic>> getClientProposals() async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/client/proposals/'),
+        Uri.parse(clientproposalsUrl),
         headers: headers,
       );
 
@@ -1175,7 +1211,7 @@ Future<Map<String, dynamic>> createTask({
   Future<Map<String, dynamic>> acceptProposal(String proposalId) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/proposals/$proposalId/accept/'),
+        Uri.parse(acceptproposalUrl),
         headers: headers,
       );
 
@@ -1193,7 +1229,7 @@ Future<Map<String, dynamic>> createTask({
   Future<Map<String, dynamic>> rejectProposal(String proposalId) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/proposals/$proposalId/reject/'),
+        Uri.parse(rejectproposalUrl),
         headers: headers,
       );
 
