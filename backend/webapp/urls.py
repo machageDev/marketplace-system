@@ -31,4 +31,5 @@ urlpatterns = [
     path('tasks/bulk-delete/', views.bulk_delete_tasks, name='bulk-delete-tasks'),
     path('freeproposal',views.get_freelancer_proposals,name='freeproposal'),
     path('dashboard', views.employer_dashboard_api, name='employer_dashboard_api'),
+    path('employer/tasks/', views.get_employer_tasks, name='get_employer_tasks'),
 ] 

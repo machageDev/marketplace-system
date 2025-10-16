@@ -836,3 +836,52 @@ def employer_dashboard_api(request):
                 'employer_info': {},
             }
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+@api_view(['GET'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def get_employer_tasks(request):
+    """
+    Return all tasks belonging to the logged-in employer.
+    Includes debug logs for tracing token and authentication.
+    """
+    print("\n=== 🧩 Employer Tasks API Called ===")
+    print("🔹 Auth Header:", request.headers.get('Authorization'))
+    print("🔹 User:", request.user)
+    print("🔹 Is Authenticated:", request.user.is_authenticated)
+
+    try:
+        
+        employer = request.user  
+        print(f" Employer found: {employer.username} (ID: {employer.employer_id})")
+
+    except Exception as e:
+        print(f" Unexpected error fetching employer: {e}")
+        return Response(
+            {"success": False, "error": str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+   
+    try:
+        tasks = Task.objects.filter(employer=employer).order_by('-created_at')
+        print(f" Found {tasks.count()} tasks for employer.")
+        serializer = TaskSerializer(tasks, many=True)
+
+        return Response({
+            "success": True,
+            "tasks": serializer.data,
+            "count": len(serializer.data),
+            "employer": {
+                "id": employer.employer_id,
+                "username": employer.username,
+                "email": employer.contact_email
+            }
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        print(f" Error loading tasks: {e}")
+        return Response({
+            "success": False,
+            "error": "Error fetching tasks",
+            "details": str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
