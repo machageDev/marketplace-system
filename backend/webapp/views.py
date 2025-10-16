@@ -34,7 +34,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from webapp.serializers import ContractSerializer, EmployerLoginSerializer, EmployerProfileSerializer, EmployerRatingSerializer, EmployerRegisterSerializer, EmployerSerializer, LoginSerializer, ProposalSerializer, RegisterSerializer, TaskCreateSerializer, TaskSerializer, UserProfileSerializer
-from .authentication import CustomTokenAuthentication
+from .authentication import CustomTokenAuthentication, EmployerTokenAuthentication
 from .permissions import IsAuthenticated  
 from .models import UserProfile
 @csrf_exempt
@@ -518,44 +518,39 @@ def create_payment_intent(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def employer_login(request):
-    print("Raw request data:", request.data)
-    print("Request headers:", request.headers)
+    username = request.data.get('username')
+    password = request.data.get('password')
+
     print("Received data:", request.data)
-    serializer = EmployerLoginSerializer(data=request.data)
-    if serializer.is_valid():
-        username = serializer.validated_data['username'].strip()
-        password = serializer.validated_data['password']
-        print(f"Looking for employer: {username}") 
 
-        try:
-            employer = Employer.objects.get(username=username)
-            print(f"Found employer: {employer.username}, password: {employer.password}")
+    try:
+        employer = Employer.objects.get(username=username, password=password)
+        print(f"✅ Found employer: {employer.username}")
 
-            if employer.password == password:  
-                
-                
-                token, created = EmployerToken.objects.get_or_create(employer=employer)
-                if not created:
-                    
-                    token.key = uuid.uuid4()
-                    token.save()
+        # ✅ Create or refresh EmployerToken
+        token, created = EmployerToken.objects.get_or_create(employer=employer)
+        if not created:
+            token.key = uuid.uuid4()  # regenerate token
+            token.save()
 
-                return Response(
-                    {
-                        "message": "Login successful",
-                        "employer_id": employer.employer_id,
-                        "username": employer.username,
-                        "token": str(token.key),
-                    },
-                    status=status.HTTP_200_OK
-                )
-            else:
-                return Response({"error": "Invalid login"}, status=status.HTTP_400_BAD_REQUEST)
+        print(f"✅ Token generated/saved: {token.key}")
 
-        except Employer.DoesNotExist:
-            return Response({"error": "Invalid login"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({
+            'success': True,
+            'token': str(token.key),
+            'employer': {
+                'id': employer.employer_id,
+                'username': employer.username,
+                'email': employer.contact_email,
+            }
+        }, status=status.HTTP_200_OK)
 
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Employer.DoesNotExist:
+        print("❌ Invalid credentials")
+        return Response({
+            'success': False,
+            'error': 'Invalid credentials'
+        }, status=status.HTTP_401_UNAUTHORIZED)
 
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
@@ -737,51 +732,70 @@ def get_freelancer_proposals(request, freelancer_id):
             status=status.HTTP_400_BAD_REQUEST
         )
   
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.response import Response
+from rest_framework import status
+from .authentication import EmployerTokenAuthentication, IsAuthenticated
+from .models import Task, Proposal
+
 @api_view(['GET'])
+@authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def employer_dashboard_api(request):
+    print("=== Employer Dashboard API Called ===")
+    print("User:", request.user)
+    print("Headers:", request.headers)
+
     try:
-        employer = request.user.employer  
-        
-        
+        # ✅ In EmployerTokenAuthentication, we already return the Employer instance.
+        employer = request.user  
+
+        if employer is None:
+            print("⚠️ No employer found for this user.")
+            return Response({
+                'success': False,
+                'error': 'User is not associated with any employer account.'
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        # === STATISTICS ===
         all_tasks = Task.objects.filter(employer=employer)
-        
-        
         total_tasks = all_tasks.count()
         pending_proposals = Proposal.objects.filter(task__employer=employer).count()
         ongoing_tasks = all_tasks.filter(status='in_progress').count()
         completed_tasks = all_tasks.filter(status='completed').count()
-        total_spent = 0  # You can calculate this later when you have payment data
-        
-        # Get recent tasks (all statuses)
+        total_spent = 0  # TODO: Add real payment logic later
+
+        # === RECENT TASKS ===
         recent_tasks = all_tasks.order_by('-created_at')[:5]
         recent_proposals = Proposal.objects.filter(
             task__employer=employer
         ).select_related('freelancer', 'task').order_by('-submitted_at')[:5]
-        
-        # Serialize recent tasks
-        tasks_data = []
-        for task in recent_tasks:
-            tasks_data.append({
-                'task_id': task.task_id,
-                'title': task.title,
-                'status': task.status,
-                'created_at': task.created_at,
-                'budget': str(task.budget) if task.budget else None,
-            })
-        
-        # Serialize recent proposals
-        proposals_data = []
-        for proposal in recent_proposals:
-            proposals_data.append({
-                'proposal_id': proposal.proposal_id,
-                'freelancer_name': proposal.freelancer.username,
-                'task_title': proposal.task.title,
-                'bid_amount': str(proposal.bid_amount),
-                'status': proposal.status,
-                'submitted_at': proposal.submitted_at,
-            })
-        
+
+        # === SERIALIZE DATA ===
+        tasks_data = [
+            {
+                'task_id': t.task_id,
+                'title': t.title,
+                'status': t.status,
+                'created_at': t.created_at,
+                'budget': str(t.budget) if t.budget else None,
+            }
+            for t in recent_tasks
+        ]
+
+        proposals_data = [
+            {
+                'proposal_id': p.proposal_id,
+                'freelancer_name': getattr(p.freelancer, 'username', 'Unknown'),
+                'task_title': getattr(p.task, 'title', 'Unknown'),
+                'bid_amount': str(p.bid_amount),
+                'status': p.status,
+                'submitted_at': p.submitted_at,
+            }
+            for p in recent_proposals
+        ]
+
+        # === RESPONSE ===
         response_data = {
             'success': True,
             'data': {
@@ -801,11 +815,11 @@ def employer_dashboard_api(request):
                 }
             }
         }
-        
+
         return Response(response_data, status=status.HTTP_200_OK)
-        
+
     except Exception as e:
-        print(f"Dashboard API error: {e}")
+        print(f"❌ Dashboard API error: {e}")
         return Response({
             'success': False,
             'error': 'Failed to load dashboard data',
@@ -819,7 +833,6 @@ def employer_dashboard_api(request):
                 },
                 'recent_tasks': [],
                 'recent_proposals': [],
-                'employer_info': {}
+                'employer_info': {},
             }
-        }, status=status.HTTP_200_OK)
-      
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
