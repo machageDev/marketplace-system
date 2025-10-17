@@ -1,3 +1,6 @@
+import stripe
+from django.conf import settings
+from django.http import JsonResponse
 import json
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import authentication_classes, permission_classes, api_view
@@ -37,6 +40,7 @@ from webapp.serializers import ContractSerializer, EmployerLoginSerializer, Empl
 from .authentication import CustomTokenAuthentication, EmployerTokenAuthentication
 from .permissions import IsAuthenticated  
 from .models import UserProfile
+
 @csrf_exempt
 @api_view(['POST', 'PUT'])
 @authentication_classes([CustomTokenAuthentication])
@@ -491,9 +495,6 @@ def contract_detail(request, contract_id):
     serializer = ContractSerializer(contract)
     return Response(serializer.data, status=status.HTTP_200_OK)
 
-import stripe
-from django.conf import settings
-from django.http import JsonResponse
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
 
@@ -511,7 +512,6 @@ def create_payment_intent(request):
     return JsonResponse({
         "clientSecret": intent.client_secret
     })
-
 
 #clients rest api
 
