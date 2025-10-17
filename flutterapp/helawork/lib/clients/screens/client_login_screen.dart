@@ -46,48 +46,51 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Consumer<AuthProvider>(
-              builder: (context, authProvider, child) {
-                return Container(
-                  constraints: const BoxConstraints(maxWidth: 400),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: Consumer<AuthProvider>(
+                builder: (context, authProvider, child) {
+                  return Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       // Logo Section
                       const Column(
                         children: [
                           Icon(
                             Icons.work_outline,
-                            size: 60,
+                            size: 70,
                             color: Color(0xFF1976D2),
                           ),
-                          SizedBox(height: 16),
+                          SizedBox(height: 12),
                           Text(
                             'HelaWork',
                             style: TextStyle(
                               fontSize: 32,
-                              fontWeight: FontWeight.w700,
+                              fontWeight: FontWeight.bold,
                               color: Color(0xFF1976D2),
                             ),
                           ),
-                          SizedBox(height: 8),
+                          SizedBox(height: 6),
                           Text(
                             'CLIENT PORTAL',
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
                               color: Colors.grey,
-                              letterSpacing: 2,
+                              letterSpacing: 1.5,
                             ),
                           ),
                         ],
                       ),
+
                       const SizedBox(height: 40),
 
                       // Welcome Section
@@ -95,8 +98,9 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
                         children: [
                           Text(
                             'Welcome Back, Client!',
+                            textAlign: TextAlign.center,
                             style: TextStyle(
-                              fontSize: 24,
+                              fontSize: 22,
                               fontWeight: FontWeight.w600,
                               color: Colors.black87,
                             ),
@@ -104,35 +108,43 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
                           SizedBox(height: 8),
                           Text(
                             'Please log in to manage your projects',
+                            textAlign: TextAlign.center,
                             style: TextStyle(
-                              fontSize: 16,
+                              fontSize: 15,
                               color: Colors.grey,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 32),
+
+                      const SizedBox(height: 28),
 
                       // Error Message
-                      if (authProvider.errorMessage.isNotEmpty) 
+                      if (authProvider.errorMessage.isNotEmpty)
                         Container(
                           width: double.infinity,
-                          padding: const EdgeInsets.all(16),
+                          padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
                             color: const Color(0xFFFFEBEE),
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.red),
+                            border: Border.all(color: Colors.redAccent),
                           ),
                           child: Text(
                             authProvider.errorMessage,
-                            style: const TextStyle(color: Colors.red),
+                            style: const TextStyle(
+                              color: Colors.red,
+                              fontSize: 14,
+                            ),
+                            textAlign: TextAlign.center,
                           ),
                         ),
-                      if (authProvider.errorMessage.isNotEmpty) const SizedBox(height: 16),
+                      if (authProvider.errorMessage.isNotEmpty)
+                        const SizedBox(height: 16),
 
                       // Login Form
                       Card(
-                        elevation: 2,
+                        color: Colors.white,
+                        elevation: 3,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -141,22 +153,24 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
                           child: Form(
                             key: _formKey,
                             child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                // Username Field
+                                // Username
                                 TextFormField(
                                   controller: _usernameController,
                                   decoration: InputDecoration(
                                     labelText: 'Username',
-                                    labelStyle: const TextStyle(color: Colors.grey),
+                                    labelStyle:
+                                        const TextStyle(color: Colors.grey),
                                     border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: const BorderSide(color: Colors.grey),
+                                      borderRadius: BorderRadius.circular(10),
                                     ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: const BorderSide(color: Color(0xFF1976D2)),
+                                    focusedBorder: const OutlineInputBorder(
+                                      borderSide: BorderSide(
+                                          color: Color(0xFF1976D2), width: 2),
                                     ),
-                                    contentPadding: const EdgeInsets.all(16),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 14),
                                   ),
                                   validator: (value) {
                                     if (value == null || value.isEmpty) {
@@ -165,27 +179,30 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
                                     return null;
                                   },
                                 ),
-                                const SizedBox(height: 16),
+                                const SizedBox(height: 18),
 
-                                // Password Field
+                                // Password
                                 TextFormField(
                                   controller: _passwordController,
                                   obscureText: _obscurePassword,
                                   decoration: InputDecoration(
                                     labelText: 'Password',
-                                    labelStyle: const TextStyle(color: Colors.grey),
+                                    labelStyle:
+                                        const TextStyle(color: Colors.grey),
                                     border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: const BorderSide(color: Colors.grey),
+                                      borderRadius: BorderRadius.circular(10),
                                     ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: const BorderSide(color: Color(0xFF1976D2)),
+                                    focusedBorder: const OutlineInputBorder(
+                                      borderSide: BorderSide(
+                                          color: Color(0xFF1976D2), width: 2),
                                     ),
-                                    contentPadding: const EdgeInsets.all(16),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 14),
                                     suffixIcon: IconButton(
                                       icon: Icon(
-                                        _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                                        _obscurePassword
+                                            ? Icons.visibility_off
+                                            : Icons.visibility,
                                         color: Colors.grey,
                                       ),
                                       onPressed: () {
@@ -204,49 +221,61 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
                                 ),
                                 const SizedBox(height: 16),
 
-                                // Remember Me & Forgot Password
-                                Row(
+                                // Remember Me + Forgot Password
+                                Wrap(
+                                  alignment: WrapAlignment.spaceBetween,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
                                   children: [
-                                    Checkbox(
-                                      value: authProvider.rememberMe,
-                                      onChanged: (value) {
-                                        authProvider.setRememberMe(value!);
-                                      },
-                                      activeColor: const Color(0xFF1976D2),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Checkbox(
+                                          value: authProvider.rememberMe,
+                                          onChanged: (value) {
+                                            authProvider.setRememberMe(value!);
+                                          },
+                                          activeColor:
+                                              const Color(0xFF1976D2),
+                                        ),
+                                        const Text('Remember me'),
+                                      ],
                                     ),
-                                    const Text('Remember me'),
-                                    const Spacer(),
                                     TextButton(
                                       onPressed: () {
                                         Navigator.push(
                                           context,
                                           MaterialPageRoute(
-                                            builder: (_) => const ForgotPasswordScreen(),
+                                            builder: (_) =>
+                                                const ForgotPasswordScreen(),
                                           ),
                                         );
                                       },
                                       child: const Text(
                                         'Forgot Password?',
-                                        style: TextStyle(color: Color(0xFF1976D2)),
+                                        style: TextStyle(
+                                          color: Color(0xFF1976D2),
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                       ),
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 24),
+                                const SizedBox(height: 20),
 
-                                // BLUE LOGIN BUTTON
+                                // Login Button
                                 SizedBox(
-                                  width: double.infinity,
-                                  height: 50,
+                                  height: 48,
                                   child: ElevatedButton(
-                                    onPressed: authProvider.isLoading ? null : _login,
+                                    onPressed: authProvider.isLoading
+                                        ? null
+                                        : _login,
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFF1976D2), // Blue color
+                                      backgroundColor:
+                                          const Color(0xFF1976D2),
                                       foregroundColor: Colors.white,
                                       shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(8),
+                                        borderRadius: BorderRadius.circular(10),
                                       ),
-                                      elevation: 0,
                                     ),
                                     child: authProvider.isLoading
                                         ? const SizedBox(
@@ -254,7 +283,9 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
                                             width: 20,
                                             child: CircularProgressIndicator(
                                               strokeWidth: 2,
-                                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                              valueColor:
+                                                  AlwaysStoppedAnimation<Color>(
+                                                      Colors.white),
                                             ),
                                           )
                                         : const Text(
@@ -271,8 +302,7 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
                           ),
                         ),
                       ),
-
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 28),
 
                       // Register Section
                       Row(
@@ -292,16 +322,16 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
                               'Register',
                               style: TextStyle(
                                 color: Color(0xFF1976D2),
-                                fontWeight: FontWeight.w600,
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
                           ),
                         ],
                       ),
                     ],
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
           ),
         ),

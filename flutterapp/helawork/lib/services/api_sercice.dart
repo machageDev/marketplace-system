@@ -1201,23 +1201,34 @@ Future<Map<String, dynamic>> fetchTaskStats() async {
     return headers;
   }
 
-  // Get proposals for client
-  Future<List<dynamic>> getFreelancerProposals() async {
-    try {
-      final response = await http.get(
-        Uri.parse(freelancerproposalsUrl),
-        headers: headers,
-      );
+Future<List<dynamic>> getFreelancerProposals() async {
+  try {
+    // ✅ Get token from local storage
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('user_token');
 
-      if (response.statusCode == 200) {
-        return json.decode(response.body);
-      } else {
-        throw Exception('Failed to load proposals: ${response.statusCode}');
-      }
-    } catch (e) {
-      throw Exception('Failed to load proposals: $e');
+    // ✅ Define headers with token
+    final headers = {
+      'Content-Type': 'application/json',
+      if (token != null) 'Authorization': 'Bearer $token',
+    };
+
+    // ✅ Send GET request
+    final response = await http.get(
+      Uri.parse(freelancerproposalsUrl),
+      headers: headers,
+    );
+
+    // ✅ Handle response
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to load proposals: ${response.statusCode}');
     }
+  } catch (e) {
+    throw Exception('Failed to load proposals: $e');
   }
+}
 
   // Accept proposal
   Future<Map<String, dynamic>> acceptProposal(String proposalId) async {
