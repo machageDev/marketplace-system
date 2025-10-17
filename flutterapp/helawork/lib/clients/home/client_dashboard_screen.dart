@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:helawork/clients/home/client_proposal_screen.dart';
 import 'package:helawork/clients/home/client_task_screen.dart';
 import 'package:helawork/clients/provider/client_proposal_provider.dart' as client_proposal;
 import 'package:provider/provider.dart';
@@ -28,7 +29,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
     _pages = [
       const DashboardTab(),
       const TasksScreen(),
-      const Center(child: Text('Proposals Page')),
+      const ClientProposalsScreen(),
       const Center(child: Text('Payments Page')),
       const Center(child: Text('Profile Page')),
     ];

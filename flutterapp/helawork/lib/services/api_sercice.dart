@@ -39,7 +39,7 @@ class ApiService{
   static const String rejectproposalUrl = '$baseUrl/proposals/reject/';
   static const String acceptcontractUrl = '$baseUrl/contracts/accept/';
   static const String rejectcontractUrl = '$baseUrl/contracts/reject/';
-  static const String clientproposalsUrl = '$baseUrl/client/proposals/';
+  static const String freelancerproposalsUrl = '$baseUrl/client/proposals/';
   static const String withdrawcompleteUrl = '$baseUrl/api/task_completions/';
 Future<Map<String, dynamic>> register(String name, String email,String phoneNO, String password,  String confirmPassword) async {
   final url = Uri.parse(registerUrl);
@@ -69,7 +69,19 @@ Future<Map<String, dynamic>> register(String name, String email,String phoneNO, 
     return {"success": false, "message": "Network error, please try again."};
   }
 }
+ static Future<String> createPaymentIntent(int amount) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/create-payment-intent/'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'amount': amount}),
+    );
 
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body)['clientSecret'];
+    } else {
+      throw Exception('Failed to create PaymentIntent');
+    }
+  }
 static Future<String> getLoggedInUserName() async {
   final response = await http.get(
     Uri.parse("$baseUrl/apiuserlogin"),
@@ -1190,10 +1202,10 @@ Future<Map<String, dynamic>> fetchTaskStats() async {
   }
 
   // Get proposals for client
-  Future<List<dynamic>> getClientProposals() async {
+  Future<List<dynamic>> getFreelancerProposals() async {
     try {
       final response = await http.get(
-        Uri.parse(clientproposalsUrl),
+        Uri.parse(freelancerproposalsUrl),
         headers: headers,
       );
 
@@ -1242,7 +1254,11 @@ Future<Map<String, dynamic>> fetchTaskStats() async {
       throw Exception('Failed to reject proposal: $e');
     }
   }
+
 }
+
+
+
 
 
 

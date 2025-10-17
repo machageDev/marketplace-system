@@ -21,7 +21,7 @@ class ProposalsProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final response = await _apiService.getClientProposals();
+      final response = await _apiService.getFreelancerProposals();
       _proposals = (response).map((json) => Proposal.fromJson(json)).toList();
     } catch (e) {
       _errorMessage = 'Failed to load proposals: $e';

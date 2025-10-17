@@ -12,13 +12,15 @@ import 'package:helawork/freelancer/provider/proposal_provider.dart';
 import 'package:helawork/freelancer/provider/rating_provider.dart';
 import 'package:helawork/freelancer/provider/task_provider.dart';
 import 'package:helawork/freelancer/provider/user_profile_provider.dart';
-import 'package:helawork/freelancer/screens/login_screen.dart'; // Freelancer login
-import 'package:helawork/clients/screens/client_login_screen.dart'; // Client login - ADD THIS IMPORT
+import 'package:helawork/freelancer/screens/login_screen.dart'; 
+import 'package:helawork/clients/screens/client_login_screen.dart'; 
 import 'package:helawork/services/api_sercice.dart';
 import 'package:provider/provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+ 
+
 
   runApp(
     MultiProvider(
