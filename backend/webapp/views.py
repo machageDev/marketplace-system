@@ -525,15 +525,15 @@ def employer_login(request):
 
     try:
         employer = Employer.objects.get(username=username, password=password)
-        print(f"✅ Found employer: {employer.username}")
+        print(f"Found employer: {employer.username}")
 
-        # ✅ Create or refresh EmployerToken
+        
         token, created = EmployerToken.objects.get_or_create(employer=employer)
         if not created:
-            token.key = uuid.uuid4()  # regenerate token
+            token.key = uuid.uuid4()  
             token.save()
 
-        print(f"✅ Token generated/saved: {token.key}")
+        print(f"Token generated/saved: {token.key}")
 
         return Response({
             'success': True,
@@ -546,7 +546,7 @@ def employer_login(request):
         }, status=status.HTTP_200_OK)
 
     except Employer.DoesNotExist:
-        print("❌ Invalid credentials")
+        print(" Invalid credentials")
         return Response({
             'success': False,
             'error': 'Invalid credentials'
@@ -597,9 +597,7 @@ def employer_register(request):
 # Get Employer by ID
 @api_view(['GET'])
 def get_employer(request, pk):
-    """
-    Get employer details by ID
-    """
+    
     employer = get_object_or_404(Employer, pk=pk)
     serializer = EmployerSerializer(employer)
     return Response(serializer.data)
@@ -607,9 +605,6 @@ def get_employer(request, pk):
 # Update Employer
 @api_view(['PUT'])
 def update_employer(request, pk):
-    """
-    Update employer details
-    """
     employer = get_object_or_404(Employer, pk=pk)
     serializer = EmployerSerializer(employer, data=request.data, partial=True)
     if serializer.is_valid():
@@ -929,3 +924,40 @@ def get_employer_tasks(request):
             "error": "Error fetching tasks",
             "details": str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+ 
+ 
+api_view(['GET'])
+def get_employer_profile(request, employer_id):
+    """Fetch employer profile by employer ID."""
+    try:
+        profile = EmployerProfile.objects.get(employer_id=employer_id)
+        serializer = EmployerProfileSerializer(profile)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except EmployerProfile.DoesNotExist:
+        return Response({'error': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['POST'])
+def create_employer_profile(request):
+    """Create a new employer profile."""
+    serializer = EmployerProfileSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['PUT'])
+def update_employer_profile(request, employer_id):
+    """Update employer profile."""
+    try:
+        profile = EmployerProfile.objects.get(employer_id=employer_id)
+    except EmployerProfile.DoesNotExist:
+        return Response({'error': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    serializer = EmployerProfileSerializer(profile, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        

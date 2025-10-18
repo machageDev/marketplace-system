@@ -32,4 +32,8 @@ urlpatterns = [
     path('client/proposals/',views.get_freelancer_proposals,name='freeproposal'),
     path('dashboard', views.employer_dashboard_api, name='employer_dashboard_api'),
     path('employer/tasks/', views.get_employer_tasks, name='get_employer_tasks'),
+    
+    path('employer/<int:employer_id>/profile/', views.get_employer_profile, name='get_employer_profile'),
+    path('employer/profile/create/', views.create_employer_profile, name='create_employer_profile'),
+    path('employer/<int:employer_id>/profile/update/', views.update_employer_profile, name='update_employer_profile'),
 ] 

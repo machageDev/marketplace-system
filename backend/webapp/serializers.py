@@ -200,7 +200,11 @@ class EmployerRegisterSerializer(serializers.Serializer):
     password = serializers.CharField(max_length=128)
     contact_email = serializers.EmailField()
     phone_number = serializers.CharField(max_length=20, required=False, allow_blank=True)
-    
+
+class EmployerProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EmployerProfile
+        fields = ['id', 'employer', 'company_name', 'contact_email', 'phone_number', 'profile_picture']    
 # In your serializers.py
 class TaskCreateSerializer(serializers.ModelSerializer):
     class Meta:
