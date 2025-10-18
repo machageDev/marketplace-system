@@ -1265,6 +1265,25 @@ Future<List<dynamic>> getFreelancerProposals() async {
       throw Exception('Failed to reject proposal: $e');
     }
   }
+   Future<Map<String, dynamic>> getEmployerProfile(int employerId) async {
+    final response = await http.get(Uri.parse('$baseUrl/employer/$employerId/profile/'));
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception("Failed to load profile");
+    }
+  }
+
+  Future<bool> updateEmployerProfile(int employerId, Map<String, dynamic> data) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/employer/$employerId/profile/'),
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode(data),
+    );
+
+    return response.statusCode == 200;
+  }
 
 }
 
