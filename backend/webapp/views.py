@@ -567,15 +567,15 @@ def employer_register(request):
         contact_email = serializer.validated_data['contact_email']
         phone_number = serializer.validated_data.get('phone_number')
 
-        # Check if username already exists
+        
         if Employer.objects.filter(username=username).exists():
             return Response({"error": "Username already exists"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check if email already exists
+        
         if Employer.objects.filter(contact_email=contact_email).exists():
             return Response({"error": "Email already exists"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Create employer
+        
         employer = Employer.objects.create(
             username=username,
             password=password,
@@ -651,7 +651,7 @@ def employer_profile(request, employer_id):
             profile = employer.profile
             serializer = EmployerProfileSerializer(profile, data=request.data, partial=True)
         except EmployerProfile.DoesNotExist:
-            # Create profile if it doesn't exist
+            
             data = request.data.copy()
             serializer = EmployerProfileSerializer(data=data)
         
@@ -669,13 +669,13 @@ def create_task(request):
     Create a new task
     """
     try:
-        # Get employer using username instead of user field
+    
         employer = Employer.objects.get(username=request.user.username)
         
-        # Prepare task data - handle empty skills
+        
         skills = request.data.get('skills')
         if skills is None or skills == '':
-            skills = ''  # Set to empty string instead of null
+            skills = ''  
         
         task_data = {
             'employer': employer.employer_id,
@@ -684,7 +684,7 @@ def create_task(request):
             'category': request.data.get('category'),
             'budget': request.data.get('budget'),
             'deadline': request.data.get('deadline'),
-            'required_skills': skills,  # Use the processed skills
+            'required_skills': skills,  
             'is_urgent': request.data.get('isUrgent', False)
         }
         
@@ -750,18 +750,31 @@ def bulk_delete_tasks(request):
         status=status.HTTP_200_OK
     )  
     
-    
 @api_view(['GET'])
-def get_freelancer_proposals(request, freelancer_id):
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def get_freelancer_proposals(request):
     try:
-        proposals = Proposal.objects.filter(freelancer_id=freelancer_id)
+        
+        employer = request.user  
+        
+        
+        proposals = Proposal.objects.filter(task__employer=employer)
+        
         serializer = ProposalSerializer(proposals, many=True)
-        return Response(serializer.data)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    except Proposal.DoesNotExist:
+        return Response(
+            {'error': 'No proposals found for this employer.'},
+            status=status.HTTP_404_NOT_FOUND
+        )
     except Exception as e:
         return Response(
-            {'error': str(e)}, 
+            {'error': str(e)},
             status=status.HTTP_400_BAD_REQUEST
         )
+    
   
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.response import Response
@@ -778,7 +791,7 @@ def employer_dashboard_api(request):
     print("Headers:", request.headers)
 
     try:
-        # ✅ In EmployerTokenAuthentication, we already return the Employer instance.
+        
         employer = request.user  
 
         if employer is None:
@@ -794,7 +807,7 @@ def employer_dashboard_api(request):
         pending_proposals = Proposal.objects.filter(task__employer=employer).count()
         ongoing_tasks = all_tasks.filter(status='in_progress').count()
         completed_tasks = all_tasks.filter(status='completed').count()
-        total_spent = 0  # TODO: Add real payment logic later
+        total_spent = 0  
 
         # === RECENT TASKS ===
         recent_tasks = all_tasks.order_by('-created_at')[:5]
@@ -850,7 +863,7 @@ def employer_dashboard_api(request):
         return Response(response_data, status=status.HTTP_200_OK)
 
     except Exception as e:
-        print(f"❌ Dashboard API error: {e}")
+        print(f" Dashboard API error: {e}")
         return Response({
             'success': False,
             'error': 'Failed to load dashboard data',
@@ -875,7 +888,7 @@ def get_employer_tasks(request):
     Return all tasks belonging to the logged-in employer.
     Includes debug logs for tracing token and authentication.
     """
-    print("\n=== 🧩 Employer Tasks API Called ===")
+    print("\n===  Employer Tasks API Called ===")
     print("🔹 Auth Header:", request.headers.get('Authorization'))
     print("🔹 User:", request.user)
     print("🔹 Is Authenticated:", request.user.is_authenticated)
