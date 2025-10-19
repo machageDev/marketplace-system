@@ -31,7 +31,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
       const TasksScreen(),
       const ClientProposalsScreen(),
       const Center(child: Text('Payments Page')),
-      const Center(child: Text('Profile Page')),
+      const ClientProposalsScreen(),
     ];
 
     WidgetsBinding.instance.addPostFrameCallback((_) {

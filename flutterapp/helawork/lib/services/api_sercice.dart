@@ -1284,6 +1284,25 @@ Future<List<dynamic>> getFreelancerProposals() async {
 
     return response.statusCode == 200;
   }
+   Future<List<dynamic>> getTasksForRating(int employerId) async {
+    final response = await http.get(Uri.parse('$baseUrl/employer/$employerId/tasks-to-rate/'));
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception("Failed to load tasks");
+    }
+  }
+
+  Future<bool> apisubmitRating(Map<String, dynamic> data) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/freelancer/rate/'),
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode(data),
+    );
+
+    return response.statusCode == 201;
+  }
 
 }
 

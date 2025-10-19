@@ -1,6 +1,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:helawork/clients/provider/auth_provider.dart' as client_auth;
+import 'package:helawork/clients/provider/client_profile_provider.dart';
 import 'package:helawork/clients/provider/client_proposal_provider.dart' as client_proposal;
 import 'package:helawork/clients/provider/dashboard_provider.dart' as client_dashboard;
 import 'package:helawork/clients/provider/task_provider.dart' as client_task;
@@ -41,6 +42,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => client_auth.AuthProvider(apiService: ApiService())), 
         ChangeNotifierProvider(create: (_) => client_task.TaskProvider()),
         ChangeNotifierProvider(create: (_) => client_proposal.ProposalsProvider(apiService: ApiService())), 
+        ChangeNotifierProvider(create: (_) => ClientProfileProvider()),
       ],
       child: const MyApp(),
     ),
