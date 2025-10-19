@@ -228,3 +228,8 @@ class TaskSerializer(serializers.ModelSerializer):
             'assigned_user', 'created_at'
         ]
         read_only_fields = ['task_id', 'status', 'is_approved', 'is_active', 'assigned_user', 'created_at']       
+
+class FreelancerRatingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FreelancerRating
+        fields = '__all__'        

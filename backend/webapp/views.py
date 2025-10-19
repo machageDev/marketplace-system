@@ -36,7 +36,7 @@ from rest_framework.decorators import authentication_classes, permission_classes
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from webapp.serializers import ContractSerializer, EmployerLoginSerializer, EmployerProfileSerializer, EmployerRatingSerializer, EmployerRegisterSerializer, EmployerSerializer, LoginSerializer, ProposalSerializer, RegisterSerializer, TaskCreateSerializer, TaskSerializer, UserProfileSerializer
+from webapp.serializers import ContractSerializer, EmployerLoginSerializer, EmployerProfileSerializer, EmployerRatingSerializer, EmployerRegisterSerializer, EmployerSerializer, FreelancerRatingSerializer, LoginSerializer, ProposalSerializer, RegisterSerializer, TaskCreateSerializer, TaskSerializer, UserProfileSerializer
 from .authentication import CustomTokenAuthentication, EmployerTokenAuthentication
 from .permissions import IsAuthenticated  
 from .models import UserProfile
@@ -960,4 +960,31 @@ def update_employer_profile(request, employer_id):
         serializer.save()
         return Response(serializer.data, status=status.HTTP_200_OK)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
+
+
+@api_view(['GET'])
+def tasks_to_rate(request, employer_id):
+    """Get completed tasks for rating"""
+    tasks = Task.objects.filter(employer_id=employer_id, status='completed', assigned_user__isnull=False)
+    data = [
+        {
+            'task_id': task.id,
+            'title': task.title,
+            'description': task.description,
+            'assigned_user': {
+                'id': task.assigned_user.id,
+                'username': task.assigned_user.username
+            }
+        }
+        for task in tasks
+    ]
+    return Response(data)
+
+@api_view(['POST'])
+def rate_freelancer(request):
+    """Submit a rating for freelancer"""
+    serializer = FreelancerRatingSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
