@@ -1329,7 +1329,7 @@ Future<List<dynamic>> getFreelancerProposals() async {
     }
   }
    Future<List<dynamic>> getTasksForRating(int employerId) async {
-    final response = await http.get(Uri.parse(taskstorateUrl));
+    final response = await http.get(Uri.parse(tasktorateUrl));
 
     if (response.statusCode == 200) {
       return jsonDecode(response.body);
@@ -1349,5 +1349,20 @@ Future<List<dynamic>> getFreelancerProposals() async {
     );
 
     return response.statusCode == 201;
+  }
+   Future<Map<String, dynamic>> apigetContract(int id) async {
+    final response = await http.get(Uri.parse("$baseUrl/contracts/$id/"));
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception("Failed to load contract");
+    }
+  }
+
+   Future<void> bobacceptContract(int id) async {
+    final response = await http.post(Uri.parse("$baseUrl/contracts/$id/accept/"));
+    if (response.statusCode != 200) {
+      throw Exception("Failed to accept contract");
+    }
   }
 }  
