@@ -40,6 +40,11 @@ from webapp.serializers import ContractSerializer, EmployerLoginSerializer, Empl
 from .authentication import CustomTokenAuthentication, EmployerTokenAuthentication
 from .permissions import IsAuthenticated  
 from .models import UserProfile
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.response import Response
+from rest_framework import status
+from .authentication import EmployerTokenAuthentication, IsAuthenticated
+from .models import Task, Proposal
 
 @csrf_exempt
 @api_view(['POST', 'PUT'])
@@ -771,11 +776,7 @@ def get_freelancer_proposals(request):
         )
     
   
-from rest_framework.decorators import api_view, authentication_classes, permission_classes
-from rest_framework.response import Response
-from rest_framework import status
-from .authentication import EmployerTokenAuthentication, IsAuthenticated
-from .models import Task, Proposal
+
 
 @api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication])
@@ -927,6 +928,8 @@ def get_employer_tasks(request):
  
  
 api_view(['GET'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
 def get_employer_profile(request, employer_id):
     """Fetch employer profile by employer ID."""
     try:
@@ -938,6 +941,8 @@ def get_employer_profile(request, employer_id):
 
 
 @api_view(['POST'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
 def create_employer_profile(request):
     """Create a new employer profile."""
     serializer = EmployerProfileSerializer(data=request.data)
@@ -948,6 +953,8 @@ def create_employer_profile(request):
 
 
 @api_view(['PUT'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
 def update_employer_profile(request, employer_id):
     """Update employer profile."""
     try:
@@ -963,6 +970,8 @@ def update_employer_profile(request, employer_id):
 
 
 @api_view(['GET'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
 def tasks_to_rate(request, employer_id):
     """Get completed tasks for rating"""
     tasks = Task.objects.filter(employer_id=employer_id, status='completed', assigned_user__isnull=False)
@@ -981,6 +990,8 @@ def tasks_to_rate(request, employer_id):
     return Response(data)
 
 @api_view(['POST'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
 def rate_freelancer(request):
     """Submit a rating for freelancer"""
     serializer = FreelancerRatingSerializer(data=request.data)
@@ -988,3 +999,31 @@ def rate_freelancer(request):
         serializer.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+@api_view(['GET'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def employer_ratings(request):
+    
+    employer = get_object_or_404(Employer)
+    ratings = EmployerRating.objects.filter(employer=employer).select_related('freelancer', 'task')
+
+    if not ratings.exists():
+        return Response({
+            "employer": getattr(employer, 'company_name', str(employer)),
+            "average_score": None,
+            "total_reviews": 0,
+            "ratings": []
+        }, status=status.HTTP_200_OK)
+
+    serializer = EmployerRatingSerializer(ratings, many=True)
+    avg_score = round(sum(r.score for r in ratings) / ratings.count(), 2)
+
+    return Response({
+        "employer": getattr(employer, 'company_name', str(employer)),
+        "average_score": avg_score,
+        "total_reviews": ratings.count(),
+        "ratings": serializer.data
+    }, status=status.HTTP_200_OK)
