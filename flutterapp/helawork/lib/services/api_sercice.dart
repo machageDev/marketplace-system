@@ -42,6 +42,9 @@ class ApiService{
   static const String freelancerproposalsUrl = '$baseUrl/client/proposals/';
   static const String withdrawcompleteUrl = '$baseUrl/api/task_completions/';
   static const String fetchemployerratingUrl ='$baseUrl/apifetchratings';
+  static const String freelancerrateUrl = '$baseUrl/apifreelancerrates';
+  static const String tasktorateUrl ='$baseUrl/apitasks-to-rate';
+
 Future<Map<String, dynamic>> register(String name, String email,String phoneNO, String password,  String confirmPassword) async {
   final url = Uri.parse(registerUrl);
   try {
@@ -865,9 +868,9 @@ Future<Map<String, dynamic>> fetchDashboardData() async {
 
     if (token != null && token.isNotEmpty) {
       headers['Authorization'] = 'Bearer $token';
-      print("✅ Added Authorization header: Bearer $token");
+      print(" Added Authorization header: Bearer $token");
     } else {
-      print("⚠️ No token found. You may need to log in again.");
+      print(" No token found. You may need to log in again.");
     }
 
     final response = await http.get(Uri.parse(dashboardUrl), headers: headers);
@@ -1204,23 +1207,23 @@ Future<Map<String, dynamic>> fetchTaskStats() async {
 
 Future<List<dynamic>> getFreelancerProposals() async {
   try {
-    // ✅ Get token from local storage
+    
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('user_token');
 
-    // ✅ Define headers with token
+    
     final headers = {
       'Content-Type': 'application/json',
       if (token != null) 'Authorization': 'Bearer $token',
     };
 
-    // ✅ Send GET request
+  
     final response = await http.get(
       Uri.parse(freelancerproposalsUrl),
       headers: headers,
     );
 
-    // ✅ Handle response
+  
     if (response.statusCode == 200) {
       return json.decode(response.body);
     } else {
@@ -1276,17 +1279,57 @@ Future<List<dynamic>> getFreelancerProposals() async {
     }
   }
 
-  Future<bool> updateEmployerProfile(int employerId, Map<String, dynamic> data) async {
+    Future<Map<String, dynamic>> apigetEmployerProfile(int employerId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/employers/$employerId/profile/'),
+     headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token", // ✅ include token
+      },
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to load employer profile');
+    }
+  }
+
+  Future<bool> updateEmployerProfile(
+      int employerId, Map<String, dynamic> data) async {
     final response = await http.put(
-      Uri.parse('$baseUrl/employer/$employerId/profile/'),
-      headers: {"Content-Type": "application/json"},
+      Uri.parse('$baseUrl/employers/$employerId/profile/'), // ✅ correct endpoint
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token", // ✅ include token
+      },
       body: jsonEncode(data),
     );
 
-    return response.statusCode == 200;
+    if (response.statusCode == 200) {
+      return true;
+    } else {
+      throw Exception('Failed to update employer profile');
+    }
+  }
+
+  Future<List<dynamic>> fetchEmployerRatings(int employerId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/employers/$employerId/ratings/'),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token", 
+      },
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to fetch ratings');
+    }
   }
    Future<List<dynamic>> getTasksForRating(int employerId) async {
-    final response = await http.get(Uri.parse('$baseUrl/employer/$employerId/tasks-to-rate/'));
+    final response = await http.get(Uri.parse(taskstorateUrl));
 
     if (response.statusCode == 200) {
       return jsonDecode(response.body);
@@ -1297,38 +1340,14 @@ Future<List<dynamic>> getFreelancerProposals() async {
 
   Future<bool> apisubmitRating(Map<String, dynamic> data) async {
     final response = await http.post(
-      Uri.parse('$baseUrl/freelancer/rate/'),
-      headers: {"Content-Type": "application/json"},
+      Uri.parse(freelancerrateUrl),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
       body: jsonEncode(data),
     );
 
     return response.statusCode == 201;
   }
-
-
-   Future<Map<String, dynamic>> fetchEmployerRatings(int employerId) async {
-    final url = Uri.parse(fetchemployerratingUrl);
-
-    final response = await http.get(url, headers: {
-      'Content-Type': 'application/json',    
-       'Authorization': 'Bearer $token',
-    });
-
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body);
-    } else {
-      throw Exception(
-        'Failed to load employer ratings (status: ${response.statusCode})',
-      );
-    }
-  }
-
-}
-
-
-
-
-
-
-
-  
+}  

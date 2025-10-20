@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:helawork/clients/home/client_proposal_screen.dart';
 import 'package:helawork/clients/home/client_task_screen.dart';
+import 'package:helawork/clients/home/employer_raiting_screen.dart';
+import 'package:helawork/clients/screens/client_profile_screen.dart';
 import 'package:helawork/clients/provider/client_proposal_provider.dart' as client_proposal;
-import 'package:provider/provider.dart';
 import 'package:helawork/clients/provider/dashboard_provider.dart' as client_dashboard;
 import 'package:helawork/clients/provider/auth_provider.dart' as client_auth;
 import 'package:helawork/clients/provider/task_provider.dart' as client_task;
-
 import 'package:helawork/services/api_sercice.dart';
-
+import 'package:provider/provider.dart';
 
 class ClientDashboardScreen extends StatefulWidget {
   const ClientDashboardScreen({super.key});
@@ -19,23 +19,22 @@ class ClientDashboardScreen extends StatefulWidget {
 
 class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
   int _currentIndex = 0;
-
   late final List<Widget> _pages;
 
   @override
   void initState() {
     super.initState();
-
     _pages = [
       const DashboardTab(),
       const TasksScreen(),
       const ClientProposalsScreen(),
       const Center(child: Text('Payments Page')),
-      const ClientProposalsScreen(),
+      const EmployerRatingsScreen(token: ''), 
     ];
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<client_dashboard.DashboardProvider>(context, listen: false).loadDashboard();
+      Provider.of<client_dashboard.DashboardProvider>(context, listen: false)
+          .loadDashboard();
     });
   }
 
@@ -48,7 +47,8 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(
-          create: (_) => client_dashboard.DashboardProvider(apiService: ApiService()),
+          create: (_) =>
+              client_dashboard.DashboardProvider(apiService: ApiService()),
         ),
         ChangeNotifierProvider(
           create: (_) => client_auth.AuthProvider(apiService: ApiService()),
@@ -57,13 +57,15 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
           create: (_) => client_task.TaskProvider(),
         ),
         ChangeNotifierProvider(
-          create: (_) => client_proposal.ProposalsProvider(apiService: ApiService()),
+          create: (_) =>
+              client_proposal.ProposalsProvider(apiService: ApiService()),
         ),
       ],
       child: Scaffold(
         backgroundColor: Colors.grey[100],
         appBar: AppBar(
-          title: const Text('Client Dashboard', style: TextStyle(color: Colors.white)),
+          title: const Text('Client Dashboard',
+              style: TextStyle(color: Colors.white)),
           backgroundColor: Colors.blueAccent,
           elevation: 2,
           centerTitle: true,
@@ -94,8 +96,8 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
               label: 'Payments',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.person_outline),
-              label: 'Profile',
+              icon: Icon(Icons.star_outline),
+              label: 'Ratings',
             ),
           ],
         ),
@@ -104,7 +106,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
   }
 }
 
-// ------------------ Dashboard Tab Content ------------------
+// ------------------ Dashboard Tab ------------------
 
 class DashboardTab extends StatelessWidget {
   const DashboardTab({super.key});
@@ -125,7 +127,8 @@ class DashboardTab extends StatelessWidget {
           children: [
             CircularProgressIndicator(color: Colors.blueAccent),
             SizedBox(height: 16),
-            Text('Loading dashboard...', style: TextStyle(color: Colors.black54)),
+            Text('Loading dashboard...',
+                style: TextStyle(color: Colors.black54)),
           ],
         ),
       );
@@ -140,7 +143,10 @@ class DashboardTab extends StatelessWidget {
               const SizedBox(height: 16),
               const Text(
                 'Failed to load dashboard',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.redAccent),
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.redAccent),
               ),
               const SizedBox(height: 8),
               Text(provider.errorMessage,
@@ -149,7 +155,8 @@ class DashboardTab extends StatelessWidget {
               const SizedBox(height: 20),
               ElevatedButton(
                 onPressed: provider.loadDashboard,
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+                style:
+                    ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
                 child: const Text('Try Again'),
               ),
             ],
@@ -171,37 +178,32 @@ class DashboardContent extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildWelcomeCard(),
+          _buildWelcomeCard(context),
           const SizedBox(height: 20),
           _buildStatsGrid(),
           const SizedBox(height: 24),
           SectionCard(
-            title: 'Recent Tasks',
-            icon: Icons.assignment_outlined,
-            child: provider.recentTasks.isNotEmpty
-                ? _buildTasksTable(provider.recentTasks)
-                : const EmptyState(icon: Icons.assignment, message: 'No tasks posted yet'),
-          ),
-          const SizedBox(height: 20),
-          SectionCard(
-            title: 'Recent Proposals',
-            icon: Icons.people_outline,
-            child: provider.recentProposals.isNotEmpty
-                ? _buildProposalsList(provider.recentProposals)
-                : const EmptyState(icon: Icons.people_outline, message: 'No new proposals'),
+            title: 'Contracts',
+            icon: Icons.assignment_turned_in_outlined,
+            child: const Center(
+              child: Text(
+                'No contracts yet',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildWelcomeCard() {
+  Widget _buildWelcomeCard(BuildContext context) {
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
+          gradient: const LinearGradient(
             colors: [Colors.blueAccent, Colors.lightBlueAccent],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -211,19 +213,38 @@ class DashboardContent extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         child: Row(
           children: [
-            CircleAvatar(
-              backgroundColor: Colors.white,
-              radius: 30,
-              child: Text(
-                provider.userName.isNotEmpty ? provider.userName[0].toUpperCase() : 'L',
-                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.blueAccent),
+            GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        ClientProfileScreen(employerId:0),
+                  ),
+                );
+              },
+              child: CircleAvatar(
+                backgroundColor: Colors.white,
+                radius: 30,
+                child: Text(
+                  provider.userName.isNotEmpty
+                      ? provider.userName[0].toUpperCase()
+                      : 'C',
+                  style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blueAccent),
+                ),
               ),
             ),
             const SizedBox(width: 16),
             Expanded(
               child: Text(
                 'Welcome back, ${provider.userName}!',
-                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold),
               ),
             ),
           ],
@@ -241,43 +262,31 @@ class DashboardContent extends StatelessWidget {
       mainAxisSpacing: 12,
       childAspectRatio: 1.2,
       children: [
-        StatCard(title: 'Total Tasks', value: provider.totalTasks.toString(), color1: Colors.blue, color2: Colors.lightBlueAccent, icon: Icons.work_outline),
-        StatCard(title: 'Active Jobs', value: provider.ongoingTasks.toString(), color1: Colors.teal, color2: Colors.tealAccent, icon: Icons.play_circle_fill),
-        StatCard(title: 'Completed', value: provider.completedTasks.toString(), color1: Colors.green, color2: Colors.lightGreen, icon: Icons.check_circle_outline),
-        StatCard(title: 'Proposals', value: provider.pendingProposals.toString(), color1: Colors.orange, color2: Colors.deepOrangeAccent, icon: Icons.list_alt_outlined),
+        StatCard(
+            title: 'Total Tasks',
+            value: provider.totalTasks.toString(),
+            color1: Colors.blue,
+            color2: Colors.lightBlueAccent,
+            icon: Icons.work_outline),
+        StatCard(
+            title: 'Active Jobs',
+            value: provider.ongoingTasks.toString(),
+            color1: Colors.teal,
+            color2: Colors.tealAccent,
+            icon: Icons.play_circle_fill),
+        StatCard(
+            title: 'Completed',
+            value: provider.completedTasks.toString(),
+            color1: Colors.green,
+            color2: Colors.lightGreen,
+            icon: Icons.check_circle_outline),
+        StatCard(
+            title: 'Proposals',
+            value: provider.pendingProposals.toString(),
+            color1: Colors.orange,
+            color2: Colors.deepOrangeAccent,
+            icon: Icons.list_alt_outlined),
       ],
-    );
-  }
-
-  Widget _buildTasksTable(List<dynamic> tasks) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: DataTable(
-        columnSpacing: 20,
-        columns: const [
-          DataColumn(label: Text('Title', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('Budget', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
-        ],
-        rows: tasks.map((task) {
-          return DataRow(cells: [
-            DataCell(Text(task['title'] ?? 'Untitled')),
-            DataCell(Text('Ksh ${task['budget'] ?? 'N/A'}')),
-            DataCell(Text(task['status'] ?? 'Unknown')),
-          ]);
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildProposalsList(List<dynamic> proposals) {
-    return Column(
-      children: proposals.map((proposal) {
-        return ListTile(
-          title: Text(proposal['freelancer_name'] ?? 'Unknown Freelancer'),
-          subtitle: Text('Applied for: ${proposal['task_title'] ?? 'Unknown'}'),
-        );
-      }).toList(),
     );
   }
 }
@@ -317,7 +326,11 @@ class StatCard extends StatelessWidget {
           children: [
             Icon(icon, color: Colors.white),
             const SizedBox(height: 8),
-            Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+            Text(value,
+                style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white)),
             Text(title, style: const TextStyle(color: Colors.white70)),
           ],
         ),
@@ -352,33 +365,14 @@ class SectionCard extends StatelessWidget {
             Row(children: [
               Icon(icon, color: Colors.blueAccent),
               const SizedBox(width: 8),
-              Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+              Text(title,
+                  style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blueAccent)),
             ]),
             const SizedBox(height: 16),
             child,
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class EmptyState extends StatelessWidget {
-  final IconData icon;
-  final String message;
-
-  const EmptyState({super.key, required this.icon, required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Icon(icon, size: 50, color: Colors.grey.shade400),
-            const SizedBox(height: 8),
-            Text(message, style: TextStyle(color: Colors.grey.shade600)),
           ],
         ),
       ),
