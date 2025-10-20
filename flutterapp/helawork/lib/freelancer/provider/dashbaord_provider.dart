@@ -78,8 +78,7 @@ class DashboardProvider with ChangeNotifier {
       return status == "completed" || status.contains("complete");
     }).length;
 
-    // For pending proposals, you might need to fetch from a different API
-    // For now, setting to 0 - you can implement this based on your API
+  
     pendingProposals = 0;
     
     print('Dashboard stats - Total: $totalTasks, Ongoing: $ongoingTasks, Completed: $completedTasks, Pending Proposals: $pendingProposals');
@@ -90,10 +89,7 @@ class DashboardProvider with ChangeNotifier {
     try {
       print(' Loading profile picture from API...');
       
-      // Method 1: If you have a direct API endpoint for user profile
-      // profilePictureUrl = await ApiService.getUserProfilePicture();
-      
-      // Method 2: Fetch user profile data that includes picture
+     
       final userProfile = await ApiService.getUserProfile();
       if (userProfile != null && userProfile['profile_picture'] != null) {
         profilePictureUrl = userProfile['profile_picture'];
@@ -104,7 +100,7 @@ class DashboardProvider with ChangeNotifier {
       }
     } catch (e) {
       print(' Error loading profile picture: $e');
-      // Don't throw error - just continue without profile picture
+     
     }
   }
 

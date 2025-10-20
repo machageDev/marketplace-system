@@ -25,7 +25,7 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
     super.dispose();
   }
 
-  void _login() async {
+  Future<void> _login() async {
     if (_formKey.currentState!.validate()) {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final success = await authProvider.apilogin(
@@ -33,20 +33,25 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
         _passwordController.text.trim(),
       );
 
-      if (success && mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const ClientDashboardScreen(),
-          ),
-        );
+      if (mounted) {
+        if (success) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const ClientDashboardScreen(),
+            ),
+          );
+        } else if (authProvider.errorMessage.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(authProvider.errorMessage)),
+          );
+        }
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -61,65 +66,48 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      // Logo Section
-                      const Column(
-                        children: [
-                          Icon(
-                            Icons.work_outline,
-                            size: 70,
-                            color: Color(0xFF1976D2),
-                          ),
-                          SizedBox(height: 12),
-                          Text(
-                            'HelaWork',
-                            style: TextStyle(
-                              fontSize: 32,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF1976D2),
-                            ),
-                          ),
-                          SizedBox(height: 6),
-                          Text(
-                            'CLIENT PORTAL',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.grey,
-                              letterSpacing: 1.5,
-                            ),
-                          ),
-                        ],
+                      const Icon(Icons.work_outline,
+                          size: 70, color: Color(0xFF1976D2)),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'HelaWork',
+                        style: TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1976D2)),
                       ),
-
+                      const SizedBox(height: 6),
+                      const Text(
+                        'CLIENT PORTAL',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
                       const SizedBox(height: 40),
 
-                      // Welcome Section
-                      const Column(
-                        children: [
-                          Text(
-                            'Welcome Back, Client!',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black87,
-                            ),
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            'Please log in to manage your projects',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 15,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ],
+                      const Text(
+                        'Welcome Back, Client!',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                        ),
                       ),
-
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Please log in to manage your projects',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 15,
+                          color: Colors.grey,
+                        ),
+                      ),
                       const SizedBox(height: 28),
 
-                      // Error Message
                       if (authProvider.errorMessage.isNotEmpty)
                         Container(
                           width: double.infinity,
@@ -158,6 +146,7 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
                                 // Username
                                 TextFormField(
                                   controller: _usernameController,
+                                  style: const TextStyle(color: Colors.black),
                                   decoration: InputDecoration(
                                     labelText: 'Username',
                                     labelStyle:
@@ -184,6 +173,7 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
                                 // Password
                                 TextFormField(
                                   controller: _passwordController,
+                                  style: const TextStyle(color: Colors.black),
                                   obscureText: _obscurePassword,
                                   decoration: InputDecoration(
                                     labelText: 'Password',
@@ -221,10 +211,12 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
                                 ),
                                 const SizedBox(height: 16),
 
-                                // Remember Me + Forgot Password
+                                // ✅ Fixed Overflow Row
                                 Wrap(
                                   alignment: WrapAlignment.spaceBetween,
                                   crossAxisAlignment: WrapCrossAlignment.center,
+                                  spacing: 8,
+                                  runSpacing: 4,
                                   children: [
                                     Row(
                                       mainAxisSize: MainAxisSize.min,
@@ -232,7 +224,8 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
                                         Checkbox(
                                           value: authProvider.rememberMe,
                                           onChanged: (value) {
-                                            authProvider.setRememberMe(value!);
+                                            authProvider
+                                                .setRememberMe(value ?? false);
                                           },
                                           activeColor:
                                               const Color(0xFF1976D2),
@@ -260,6 +253,7 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
                                     ),
                                   ],
                                 ),
+
                                 const SizedBox(height: 20),
 
                                 // Login Button
@@ -304,7 +298,6 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
                       ),
                       const SizedBox(height: 28),
 
-                      // Register Section
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [

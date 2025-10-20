@@ -157,7 +157,7 @@ class _ClientRegisterScreenState extends State<ClientRegisterScreen> {
                         child: Column(
                           children: [
                             const Text(
-                              'Create Employer Account',
+                              'Create Client Account',
                               style: TextStyle(
                                 fontSize: 22,
                                 fontWeight: FontWeight.w600,
@@ -194,12 +194,19 @@ class _ClientRegisterScreenState extends State<ClientRegisterScreen> {
                             // Password Field
                             TextFormField(
                               controller: _passwordController,
+                              style: const TextStyle(color: Colors.black),
                               obscureText: _obscurePassword,
                               decoration: InputDecoration(
                                 labelText: 'Password',
                                 hintText: 'Enter your password',
+                                labelStyle: const TextStyle(color: Colors.grey),
+                                hintStyle: const TextStyle(color: Colors.grey),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8),
+                                ),
+                                focusedBorder: const OutlineInputBorder(
+                                  borderSide:
+                                      BorderSide(color: primaryColor, width: 1.5),
                                 ),
                                 suffixIcon: IconButton(
                                   icon: Icon(
@@ -211,6 +218,10 @@ class _ClientRegisterScreenState extends State<ClientRegisterScreen> {
                                   onPressed: () => setState(() {
                                     _obscurePassword = !_obscurePassword;
                                   }),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 14,
                                 ),
                               ),
                               validator: _validatePassword,
@@ -238,6 +249,7 @@ class _ClientRegisterScreenState extends State<ClientRegisterScreen> {
                                         style: TextStyle(
                                           fontSize: 16,
                                           fontWeight: FontWeight.bold,
+                                          color: Colors.white,
                                         ),
                                       ),
                               ),
@@ -252,7 +264,8 @@ class _ClientRegisterScreenState extends State<ClientRegisterScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Text("Already have an account? "),
+                        const Text("Already have an account? ",
+                            style: TextStyle(color: Colors.black)),
                         GestureDetector(
                           onTap: () {
                             Navigator.pushReplacement(
@@ -266,7 +279,7 @@ class _ClientRegisterScreenState extends State<ClientRegisterScreen> {
                             'Sign In Here',
                             style: TextStyle(
                               color: primaryColor,
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
                         ),
@@ -293,14 +306,18 @@ class _ClientRegisterScreenState extends State<ClientRegisterScreen> {
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
+      style: const TextStyle(color: Colors.black), // ✅ visible text
       decoration: InputDecoration(
         labelText: label,
+        labelStyle: const TextStyle(color: Colors.grey),
         hintText: hint,
+        hintStyle: const TextStyle(color: Colors.grey),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
         focusedBorder: const OutlineInputBorder(
           borderSide: BorderSide(color: primaryColor, width: 1.5),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
       validator: validator,
     );

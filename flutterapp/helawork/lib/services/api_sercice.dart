@@ -41,6 +41,7 @@ class ApiService{
   static const String rejectcontractUrl = '$baseUrl/contracts/reject/';
   static const String freelancerproposalsUrl = '$baseUrl/client/proposals/';
   static const String withdrawcompleteUrl = '$baseUrl/api/task_completions/';
+  static const String fetchemployerratingUrl ='$baseUrl/apifetchratings';
 Future<Map<String, dynamic>> register(String name, String email,String phoneNO, String password,  String confirmPassword) async {
   final url = Uri.parse(registerUrl);
   try {
@@ -1302,6 +1303,24 @@ Future<List<dynamic>> getFreelancerProposals() async {
     );
 
     return response.statusCode == 201;
+  }
+
+
+   Future<Map<String, dynamic>> fetchEmployerRatings(int employerId) async {
+    final url = Uri.parse(fetchemployerratingUrl);
+
+    final response = await http.get(url, headers: {
+      'Content-Type': 'application/json',    
+       'Authorization': 'Bearer $token',
+    });
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception(
+        'Failed to load employer ratings (status: ${response.statusCode})',
+      );
+    }
   }
 
 }
