@@ -1,10 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:helawork/clients/models/client_proposal.dart';
+import 'package:helawork/clients/provider/client_proposal_provider.dart' as client_proposal;
 
-class ProposalViewScreen extends StatelessWidget {
+class ProposalViewScreen extends StatefulWidget {
   final Proposal proposal;
 
   const ProposalViewScreen({super.key, required this.proposal});
+
+  @override
+  State<ProposalViewScreen> createState() => _ProposalViewScreenState();
+}
+
+class _ProposalViewScreenState extends State<ProposalViewScreen> {
+  bool _isProcessing = false;
 
   @override
   Widget build(BuildContext context) {
@@ -22,7 +31,7 @@ class ProposalViewScreen extends StatelessWidget {
           children: [
             // Task title
             Text(
-              proposal.task.title,
+              widget.proposal.task.title,
               style: const TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
@@ -38,8 +47,8 @@ class ProposalViewScreen extends StatelessWidget {
                   radius: 28,
                   backgroundColor: Colors.blue,
                   child: Text(
-                    proposal.freelancer.name.isNotEmpty
-                        ? proposal.freelancer.name[0].toUpperCase()
+                    widget.proposal.freelancer.name.isNotEmpty
+                        ? widget.proposal.freelancer.name[0].toUpperCase()
                         : 'F',
                     style: const TextStyle(
                       fontSize: 22,
@@ -54,7 +63,7 @@ class ProposalViewScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        proposal.freelancer.name,
+                        widget.proposal.freelancer.name,
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w600,
@@ -80,21 +89,21 @@ class ProposalViewScreen extends StatelessWidget {
             const SizedBox(height: 20),
 
             // Status badge
-            _buildStatusBadge(proposal.status),
+            _buildStatusBadge(widget.proposal.status),
             const SizedBox(height: 20),
 
             // Proposal details box
             _buildDetailsBox(
               label: 'Proposed Amount',
-              value: 'Ksh ${proposal.bidAmount.toStringAsFixed(2)}',
+              value: 'Ksh ${widget.proposal.bidAmount.toStringAsFixed(2)}',
             ),
             _buildDetailsBox(
               label: 'Estimated Days',
-              value: '${proposal.estimatedDays} days',
+              value: '${widget.proposal.estimatedDays} days',
             ),
             _buildDetailsBox(
               label: 'Submitted On',
-              value: proposal.submittedDate,
+              value: widget.proposal.submittedDate,
             ),
             const SizedBox(height: 20),
 
@@ -116,8 +125,8 @@ class ProposalViewScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                proposal.coverLetter.isNotEmpty
-                    ? proposal.coverLetter
+                widget.proposal.coverLetter.isNotEmpty
+                    ? widget.proposal.coverLetter
                     : "No cover letter provided.",
                 style: const TextStyle(
                   color: Colors.black87,
@@ -128,40 +137,162 @@ class ProposalViewScreen extends StatelessWidget {
             ),
             const SizedBox(height: 30),
 
-            // Action Buttons
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildButton(
-                  label: 'Accept',
-                  color: Colors.green,
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Proposal accepted'),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-                  },
+            // Action Buttons - Only show if proposal is pending
+            if (widget.proposal.status.toLowerCase() == 'pending') ...[
+              _isProcessing
+                  ? const Center(child: CircularProgressIndicator())
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _buildButton(
+                          label: 'Accept',
+                          color: Colors.green,
+                          onTap: () => _handleAcceptProposal(context),
+                        ),
+                        _buildButton(
+                          label: 'Reject',
+                          color: Colors.red,
+                          onTap: () => _handleRejectProposal(context),
+                        ),
+                      ],
+                    ),
+            ],
+
+            // Show message if already processed
+            if (widget.proposal.status.toLowerCase() != 'pending') ...[
+              Center(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'Proposal already ${widget.proposal.status}',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.grey,
+                    ),
+                  ),
                 ),
-                _buildButton(
-                  label: 'Reject',
-                  color: Colors.red,
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Proposal rejected'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
+              ),
+            ],
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _handleAcceptProposal(BuildContext context) async {
+    setState(() {
+      _isProcessing = true;
+    });
+
+    try {
+      final proposalProvider = Provider.of<client_proposal.ProposalsProvider>(
+        context,
+        listen: false,
+      );
+
+      final success = await proposalProvider.acceptProposal(widget.proposal.id);
+
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Proposal accepted successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        
+        // Navigate back or update UI
+        Navigator.pop(context, true); // Return true to indicate success
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to accept proposal: ${proposalProvider.errorMessage}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isProcessing = false;
+      });
+    }
+  }
+
+  Future<void> _handleRejectProposal(BuildContext context) async {
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reject Proposal'),
+        content: const Text('Are you sure you want to reject this proposal?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Reject'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() {
+      _isProcessing = true;
+    });
+
+    try {
+      final proposalProvider = Provider.of<client_proposal.ProposalsProvider>(
+        context,
+        listen: false,
+      );
+
+      final success = await proposalProvider.rejectProposal(widget.proposal.id);
+
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Proposal rejected.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        
+        Navigator.pop(context, true); // Return true to indicate success
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to reject proposal: ${proposalProvider.errorMessage}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isProcessing = false;
+      });
+    }
   }
 
   Widget _buildStatusBadge(String status) {

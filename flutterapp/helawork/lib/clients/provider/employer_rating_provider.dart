@@ -14,22 +14,23 @@ class EmployerRatingProvider with ChangeNotifier {
   String? get errorMessage => _errorMessage;
 
   /// Fetch employer ratings from the API
-  Future<void> fetchRatings(int employerId) async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
+  Future<void> fetchRatings(int token) async {
+  _isLoading = true;
+  _errorMessage = null;
+  notifyListeners();
 
-    try {
-      _ratings = (await _apiService.fetchEmployerRatings(employerId));
-    } catch (e) {
-      _errorMessage = "Failed to load employer ratings. Please try again.";
-      if (kDebugMode) {
-        print("Error fetching ratings: $e");
-      }
-      _ratings = [];
-    }
-
-    _isLoading = false;
-    notifyListeners();
+  try {
+    print('🔄 Fetching employer ratings...');
+    _ratings = await _apiService.fetchEmployerRatings();
+    print('✅ Successfully fetched ${_ratings.length} ratings');
+  } catch (e) {
+    _errorMessage = "Failed to load employer ratings. Please try again.";
+    print('❌ Error fetching ratings: $e');
+    _ratings = [];
   }
+
+  _isLoading = false;
+  notifyListeners();
+}
+
 }

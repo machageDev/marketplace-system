@@ -14,7 +14,7 @@ class ClientRatingProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      _tasks = await _apiService.getTasksForRating(employerId);
+      _tasks = await _apiService.getTasksForRating();
     } catch (e) {
       _tasks = [];
     }

@@ -41,12 +41,12 @@ class ApiService{
   static const String acceptcontractUrl = '$baseUrl/contracts/accept/';
   static const String rejectcontractUrl = '$baseUrl/contracts/reject/';
   static const String freelancerproposalsUrl = '$baseUrl/client/proposals/';
-  static const String withdrawcompleteUrl = '$baseUrl/api/task_completions/';
-  static const String fetchemployerratingUrl ='$baseUrl/apifetchratings';
+  static const String withdrawcompleteUrl = '$baseUrl/api/task_completions/'; 
   static const String freelancerrateUrl = '$baseUrl/apifreelancerrates';
   static const String tasktorateUrl ='$baseUrl/apitasks-to-rate';
   static const String employerprofileUrl = '$baseUrl/apiemployerprofile';
-
+  static const String submitRatingUrl = '$baseUrl/employer_ratings/';
+  static const String employerratingsUrl ='$baseUrl/apifetchratings';
 Future<Map<String, dynamic>> register(String name, String email,String phoneNO, String password,  String confirmPassword) async {
   final url = Uri.parse(registerUrl);
   try {
@@ -1008,10 +1008,7 @@ String _getErrorMessage(int statusCode) {
       return 'Registration failed. Please try again.';
   }
 }
-// Add these methods to your existing ApiService class
-// Add to your existing ApiService class
 
-// Create Task - Updated to match your API structure
 Future<Map<String, dynamic>> createTask({
   required String title,
   required String description,
@@ -1250,41 +1247,47 @@ Future<List<dynamic>> getFreelancerProposals() async {
   }
 }
 
-  // Accept proposal
-  Future<Map<String, dynamic>> acceptProposal(String proposalId) async {
-    try {
-      final response = await http.post(
-        Uri.parse(acceptproposalUrl),
-        headers: headers,
-      );
+ 
+Future<Map<String, dynamic>> acceptProposal(String proposalId) async {
+  try {
+    final response = await http.post(
+      Uri.parse(acceptproposalUrl), // No ID in URL
+      headers: headers,
+      body: json.encode({
+        'proposal_id': proposalId, // Send ID in request body
+      }),
+    );
 
-      if (response.statusCode == 200) {
-        return json.decode(response.body);
-      } else {
-        throw Exception('Failed to accept proposal: ${response.statusCode}');
-      }
-    } catch (e) {
-      throw Exception('Failed to accept proposal: $e');
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to accept proposal: ${response.statusCode}');
     }
+  } catch (e) {
+    throw Exception('Failed to accept proposal: $e');
   }
+}
 
-  // Reject proposal
-  Future<Map<String, dynamic>> rejectProposal(String proposalId) async {
-    try {
-      final response = await http.post(
-        Uri.parse(rejectproposalUrl),
-        headers: headers,
-      );
 
-      if (response.statusCode == 200) {
-        return json.decode(response.body);
-      } else {
-        throw Exception('Failed to reject proposal: ${response.statusCode}');
-      }
-    } catch (e) {
-      throw Exception('Failed to reject proposal: $e');
+Future<Map<String, dynamic>> rejectProposal(String proposalId) async {
+  try {
+    final response = await http.post(
+      Uri.parse(rejectproposalUrl), // No ID in URL
+      headers: headers,
+      body: json.encode({
+        'proposal_id': proposalId, // Send ID in request body
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to reject proposal: ${response.statusCode}');
     }
+  } catch (e) {
+    throw Exception('Failed to reject proposal: $e');
   }
+}
    Future<Map<String, dynamic>> getEmployerProfile(int employerId) async {
     final response = await http.get(Uri.parse(employerprofileUrl));
 
@@ -1314,10 +1317,10 @@ Future<List<dynamic>> getFreelancerProposals() async {
   Future<bool> updateEmployerProfile(
       int employerId, Map<String, dynamic> data) async {
     final response = await http.put(
-      Uri.parse('$baseUrl/employers/$employerId/profile/'), // ✅ correct endpoint
+      Uri.parse('$baseUrl/employers/$employerId/profile/'), 
       headers: {
         "Content-Type": "application/json",
-        "Authorization": "Bearer $token", // ✅ include token
+        "Authorization": "Bearer $token", 
       },
       body: jsonEncode(data),
     );
@@ -1329,65 +1332,116 @@ Future<List<dynamic>> getFreelancerProposals() async {
     }
   }
 
-  Future<List<dynamic>> fetchEmployerRatings(int employerId) async {
+Future<List<dynamic>> fetchEmployerRatings() async {
+  try {
+    
+    final String? token = await _getUserToken();
+    
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
+
     final response = await http.get(
-      Uri.parse('$baseUrl/employers/$employerId/ratings/'),
+      Uri.parse(employerratingsUrl),
       headers: {
         "Content-Type": "application/json",
         "Authorization": "Bearer $token", 
       },
     );
 
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body);
-    } else {
-      throw Exception('Failed to fetch ratings');
-    }
-  }
-   Future<List<dynamic>> getTasksForRating(int employerId) async {
-    final response = await http.get(Uri.parse(tasktorateUrl));
+    print('Employer Ratings API Response:');
+    print('URL: $employerratingsUrl');
+    print('Status: ${response.statusCode}');
+    print('Body: ${response.body}');
 
     if (response.statusCode == 200) {
       return jsonDecode(response.body);
     } else {
-      throw Exception("Failed to load tasks");
+      throw Exception('Failed to fetch ratings: ${response.statusCode}');
     }
+  } catch (e) {
+    print('Error in fetchEmployerRatings: $e');
+    rethrow;
   }
+}
 
-  Future<bool> apisubmitRating(Map<String, dynamic> data) async {
+Future<bool> apisubmitRating(Map<String, dynamic> data) async {
+  final response = await http.post(
+    Uri.parse(freelancerrateUrl),
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer $token", 
+    },
+    body: jsonEncode(data),
+  );
+
+  return response.statusCode == 201;
+}
+Future<List<dynamic>> getTasksForRating() async {
+  try {
+
+    final String? token = await _getUserToken();
+    
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
+
+    final response = await http.get(
+      Uri.parse(tasktorateUrl),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token", // ✅ Now using actual token
+      },
+    );
+
+    print('Tasks for Rating API Response:');
+    print('URL: $tasktorateUrl');
+    print('Status: ${response.statusCode}');
+    print('Body: ${response.body}');
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception("Failed to load tasks: ${response.statusCode}");
+    }
+  } catch (e) {
+    print('Error in getTasksForRating: $e');
+    rethrow;
+  }
+}  
+Future<bool> apifreelancersubmitRating(Map<String, dynamic> data) async {
+  try {
+
+    final String? token = await _getUserToken();
+    
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
+
     final response = await http.post(
       Uri.parse(freelancerrateUrl),
       headers: {
         "Content-Type": "application/json",
-        "Authorization": "Bearer $token",
+        "Authorization": "Bearer $token", 
       },
       body: jsonEncode(data),
     );
 
+    print('Submit Rating API Response:');
+    print('URL: $freelancerrateUrl');
+    print('Status: ${response.statusCode}');
+    print('Body: ${response.body}');
+
     return response.statusCode == 201;
+  } catch (e) {
+    print('Error in apisubmitRating: $e');
+    rethrow;
   }
-  
- 
-  Future<Map<String, dynamic>> apigetContract() async {
-    final response = await http.get(
-      Uri.parse("$baseUrl/contracts/current/"),
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer $token",
-      },
-    );
-
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
-    } else {
-      throw Exception("Failed to load contract");
-    }
-  }
-
-  // ✅ Employer accepts contract
+}
+  //  Employer accepts contract
   Future<void> acceptContractapi() async {
     final response = await http.post(
-      Uri.parse("$baseUrl/contracts/accept/"),
+      Uri.parse(acceptcontractUrl),
       headers: {
         "Content-Type": "application/json",
         "Authorization": "Bearer $token",
