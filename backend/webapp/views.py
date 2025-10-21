@@ -21,7 +21,7 @@ from rest_framework.response import Response
 from django.db import IntegrityError, transaction
 from rest_framework import status
 from django.core.mail import send_mail
-from .models import Contract, Employer, EmployerProfile, EmployerRating, EmployerToken, FreelancerRating, Proposal, Task, UserProfile
+from .models import Contract, Employer, EmployerProfile, EmployerRating, EmployerToken, FreelancerRating, Proposal, Task, TaskCompletion, UserProfile
 from django.contrib.auth.hashers import check_password
 from .models import  User
 from rest_framework.permissions import IsAuthenticated
@@ -36,7 +36,7 @@ from rest_framework.decorators import authentication_classes, permission_classes
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from webapp.serializers import ContractSerializer, EmployerLoginSerializer, EmployerProfileSerializer, EmployerRatingSerializer, EmployerRegisterSerializer, EmployerSerializer, FreelancerRatingSerializer, LoginSerializer, ProposalSerializer, RegisterSerializer, TaskCreateSerializer, TaskSerializer, UserProfileSerializer
+from webapp.serializers import ContractSerializer, EmployerLoginSerializer, EmployerProfileSerializer, EmployerRatingSerializer, EmployerRegisterSerializer, EmployerSerializer, FreelancerRatingSerializer, LoginSerializer, ProposalSerializer, RegisterSerializer, TaskCompletionSerializer, TaskCreateSerializer, TaskSerializer, UserProfileSerializer
 from .authentication import CustomTokenAuthentication, EmployerTokenAuthentication
 from .permissions import IsAuthenticated  
 from .models import UserProfile
@@ -1037,3 +1037,45 @@ def employer_ratings(request):
         return Response({
             "error": "Employer profile not found"
         }, status=status.HTTP_404_NOT_FOUND)
+
+
+
+@api_view(['GET', 'POST'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def task_completion_list(request):
+    if request.method == 'GET':
+        completions = TaskCompletion.objects.all()
+        serializer = TaskCompletionSerializer(completions, many=True)
+        return Response(serializer.data)
+    
+    elif request.method == 'POST':
+        serializer = TaskCompletionSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['GET', 'PUT', 'DELETE'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def task_completion_detail(request, pk):
+    try:
+        completion = TaskCompletion.objects.get(pk=pk)
+    except TaskCompletion.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+    
+    if request.method == 'GET':
+        serializer = TaskCompletionSerializer(completion)
+        return Response(serializer.data)
+    
+    elif request.method == 'PUT':
+        serializer = TaskCompletionSerializer(completion, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    elif request.method == 'DELETE':
+        completion.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)        

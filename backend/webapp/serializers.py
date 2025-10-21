@@ -2,7 +2,7 @@ from datetime import timezone
 from rest_framework import serializers 
 
 
-from .models import Contract, Proposal, User, UserProfile
+from .models import Contract, Proposal, TaskCompletion, User, UserProfile
 from .models import Employer, User
 from .models import Task
 from .models import EmployerRating, FreelancerRating
@@ -233,3 +233,27 @@ class FreelancerRatingSerializer(serializers.ModelSerializer):
     class Meta:
         model = FreelancerRating
         fields = '__all__'        
+
+
+class TaskCompletionSerializer(serializers.ModelSerializer):
+    user_username = serializers.CharField(source='user.username', read_only=True)
+    task_title = serializers.CharField(source='task.title', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    
+    class Meta:
+        model = TaskCompletion
+        fields = [
+            'completion_id',
+            'user', 'user_username',
+            'task', 'task_title',
+            'amount',
+            'completed_at',
+            'paid',
+            'status', 'status_display',
+            'employer_notes',
+            'freelancer_notes',
+            'payment_date',
+            'payment_reference',
+        ]
+        read_only_fields = ['completion_id', 'completed_at']
+        

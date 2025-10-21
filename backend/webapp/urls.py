@@ -36,4 +36,6 @@ urlpatterns = [
     path('employer/profile/create/', views.create_employer_profile, name='create_employer_profile'),
     path('employer/<int:employer_id>/profile/update/', views.update_employer_profile, name='update_employer_profile'),
     path('apifetchratings', views.employer_ratings, name='employer_ratings'),
+    path('completetask', views.task_completion_list, name='task-completion-list'),
+    path('task-completions/<int:pk>/', views.task_completion_detail, name='task-completion-detail'),
 ] 
