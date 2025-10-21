@@ -1010,8 +1010,7 @@ def rate_freelancer(request):
 @permission_classes([IsAuthenticated])
 def employer_ratings(request):
     try:
-        # ✅ FIXED: Use the correct field - looks like Employer is the User itself
-        # Since it has username, password fields directly
+        
         employer = get_object_or_404(Employer, username=request.user.username)
         
         ratings = EmployerRating.objects.filter(employer=employer).select_related('freelancer', 'task')
