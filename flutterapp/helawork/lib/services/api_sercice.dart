@@ -628,7 +628,7 @@ Future<List<Contract>> fetchContracts() async {
   try {
     final token = await _getToken();
     
-    // ✅ FIXED: Add taskId to the URL or filter parameters
+    
     final response = await http.get(
       Uri.parse('$fetchtaskUrl?task_id=$taskId'), // Option 1: Query parameter
       // OR
@@ -643,7 +643,7 @@ Future<List<Contract>> fetchContracts() async {
       final data = json.decode(response.body);
       
       if (data is List && data.isNotEmpty) {
-        // ✅ FIXED: Filter by taskId from the list
+        
         final completion = data.firstWhere(
           (item) => item['task_id'] == taskId || 
                     item['task']?['task_id'] == taskId,
@@ -652,7 +652,7 @@ Future<List<Contract>> fetchContracts() async {
         
         return completion != null ? _parseCompletionData(completion) : null;
       }
-      return null; // No completion exists for this task
+      return null; 
     } else {
       throw Exception('Failed to load completion: ${response.statusCode}');
     }

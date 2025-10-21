@@ -51,7 +51,7 @@ class TaskProvider with ChangeNotifier {
     } catch (e) {
       _errorMessage = 'Failed to load tasks: $e';
       print('Error loading tasks for proposals: $e');
-      rethrow; // Important for error handling in forms
+      rethrow;
     } finally {
       _setLoading(false);
     }
@@ -61,7 +61,7 @@ class TaskProvider with ChangeNotifier {
   List<Map<String, dynamic>> get availableTasks {
     print(' Available tasks called - total tasks: ${_tasks.length}');
     
-    // Debug: Print all tasks to see what we have
+    
     for (var task in _tasks) {
       print(' Task: ${task['title']} - assigned: ${task['assigned_user'] != null}, completed: ${task['completed'] ?? false}, approved: ${task['is_approved'] ?? false}');
     }

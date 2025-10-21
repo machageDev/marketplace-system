@@ -11,7 +11,7 @@ class DashboardProvider with ChangeNotifier {
   bool isLoading = false;
   String? error;
 
-  // ADDED: New fields for dashboard notifications and stats
+  
   int totalTasks = 0;
   int pendingProposals = 0;
   int ongoingTasks = 0;
@@ -76,8 +76,7 @@ class DashboardProvider with ChangeNotifier {
       return status == "completed" || status.contains("complete");
     }).length;
 
-    // For pending proposals, you might need to fetch from a different API
-    // For now, setting to 0 - you can implement this based on your API
+   
     pendingProposals = 0;
     
     print('Dashboard stats - Total: $totalTasks, Ongoing: $ongoingTasks, Completed: $completedTasks, Pending Proposals: $pendingProposals');
@@ -102,7 +101,7 @@ class DashboardProvider with ChangeNotifier {
       }
     } catch (e) {
       print(' Error loading profile picture: $e');
-      // Don't throw error - just continue without profile picture
+      
     }
   }
 
