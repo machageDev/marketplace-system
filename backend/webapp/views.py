@@ -418,6 +418,8 @@ def apisubmit_proposal(request):
         print(f" TRACEBACK: {traceback.format_exc()}")
         return JsonResponse({"error": f"Server error: {str(e)}"}, status=500)
 @api_view(['GET'])
+@authentication_classes([CustomTokenAuthentication])
+@permission_classes([IsAuthenticated])
 def apitask_list(request):
     
     try:
@@ -1002,28 +1004,37 @@ def rate_freelancer(request):
 
 
 
+# views.py
 @api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def employer_ratings(request):
-    
-    employer = get_object_or_404(Employer)
-    ratings = EmployerRating.objects.filter(employer=employer).select_related('freelancer', 'task')
+    try:
+        # ✅ FIXED: Use the correct field - looks like Employer is the User itself
+        # Since it has username, password fields directly
+        employer = get_object_or_404(Employer, username=request.user.username)
+        
+        ratings = EmployerRating.objects.filter(employer=employer).select_related('freelancer', 'task')
 
-    if not ratings.exists():
+        if not ratings.exists():
+            return Response({
+                "employer": getattr(employer, 'company_name', employer.username),
+                "average_score": None,
+                "total_reviews": 0,
+                "ratings": []
+            }, status=status.HTTP_200_OK)
+
+        serializer = EmployerRatingSerializer(ratings, many=True)
+        avg_score = round(sum(r.score for r in ratings) / ratings.count(), 2)
+
         return Response({
-            "employer": getattr(employer, 'company_name', str(employer)),
-            "average_score": None,
-            "total_reviews": 0,
-            "ratings": []
+            "employer": getattr(employer, 'company_name', employer.username),
+            "average_score": avg_score,
+            "total_reviews": ratings.count(),
+            "ratings": serializer.data
         }, status=status.HTTP_200_OK)
-
-    serializer = EmployerRatingSerializer(ratings, many=True)
-    avg_score = round(sum(r.score for r in ratings) / ratings.count(), 2)
-
-    return Response({
-        "employer": getattr(employer, 'company_name', str(employer)),
-        "average_score": avg_score,
-        "total_reviews": ratings.count(),
-        "ratings": serializer.data
-    }, status=status.HTTP_200_OK)
+        
+    except Employer.DoesNotExist:
+        return Response({
+            "error": "Employer profile not found"
+        }, status=status.HTTP_404_NOT_FOUND)
