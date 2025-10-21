@@ -95,7 +95,7 @@ def apiuserprofile(request):
 @csrf_exempt
 @api_view(['GET'])
 def debug_auth_test(request):
-    """Temporary endpoint to test authentication"""
+   
     from .models import UserToken
     
     auth_header = request.META.get('HTTP_AUTHORIZATION', '')
@@ -161,10 +161,7 @@ def apiregister(request):
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def employer_ratings_list(request):
-    """
-    GET: List all employer ratings
-    POST: Create a new employer rating
-    """
+   
     try:
         if request.method == 'GET':
             ratings = EmployerRating.objects.all()
@@ -193,11 +190,7 @@ def employer_ratings_list(request):
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def employer_rating_detail(request):
-    """
-    GET: Get specific employer rating
-    PUT: Update employer rating
-    DELETE: Delete employer rating
-    """
+   
     try:
         rating = EmployerRating.objects.get()
         
@@ -236,9 +229,7 @@ def employer_rating_detail(request):
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def my_employer_ratings(request):
-    """
-    GET: Get all ratings submitted by the current employer
-    """
+   
     try:
         ratings = EmployerRating.objects.filter(employer=request.user)
         serializer = EmployerRatingSerializer(ratings, many=True)
@@ -251,9 +242,7 @@ def my_employer_ratings(request):
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def freelancer_ratings(request, freelancer_id):
-    """
-    GET: Get all ratings for a specific freelancer
-    """
+    
     try:
         ratings = EmployerRating.objects.filter(freelancer_id=freelancer_id)
         serializer = EmployerRatingSerializer(ratings, many=True)
@@ -793,7 +782,7 @@ def employer_dashboard_api(request):
         employer = request.user  
 
         if employer is None:
-            print("⚠️ No employer found for this user.")
+            print("No employer found for this user.")
             return Response({
                 'success': False,
                 'error': 'User is not associated with any employer account.'
