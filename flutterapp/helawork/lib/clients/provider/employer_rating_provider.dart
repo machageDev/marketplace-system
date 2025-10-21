@@ -13,24 +13,23 @@ class EmployerRatingProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
-  /// Fetch employer ratings from the API
-  Future<void> fetchRatings(int token) async {
-  _isLoading = true;
-  _errorMessage = null;
-  notifyListeners();
+  /// Fetch employer ratings - no parameters needed
+  Future<void> fetchRatings() async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
 
-  try {
-    print('🔄 Fetching employer ratings...');
-    _ratings = await _apiService.fetchEmployerRatings();
-    print('✅ Successfully fetched ${_ratings.length} ratings');
-  } catch (e) {
-    _errorMessage = "Failed to load employer ratings. Please try again.";
-    print('❌ Error fetching ratings: $e');
-    _ratings = [];
+    try {
+      print(' Fetching employer ratings...');
+      _ratings = await _apiService.fetchEmployerRatings();
+      print(' Successfully fetched ${_ratings.length} ratings');
+    } catch (e) {
+      _errorMessage = "Failed to load employer ratings. Please try again.";
+      print(' Error fetching ratings: $e');
+      _ratings = [];
+    }
+
+    _isLoading = false;
+    notifyListeners();
   }
-
-  _isLoading = false;
-  notifyListeners();
-}
-
 }

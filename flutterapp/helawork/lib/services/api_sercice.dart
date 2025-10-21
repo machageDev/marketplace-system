@@ -136,7 +136,7 @@ Future<Map<String, dynamic>> login(String name, String password) async {
       final String? token = responseData["token"];
       if (token != null) {
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('user_token', token); // Save with consistent key
+        await prefs.setString('user_token', token); 
         print(' TOKEN SAVED TO SHARED PREFERENCES: ${token.substring(0, 10)}...');
       }
 
@@ -810,7 +810,7 @@ Future<List<Contract>> fetchContracts() async {
 Future<void> saveUserToken(String token) async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setString('user_token', token);
-  print("🧠 Token saved to SharedPreferences: $token");
+  print(" Token saved to SharedPreferences: $token");
 }
 
 
@@ -836,11 +836,11 @@ Future<Map<String, dynamic>> apilogin(String username, String password) async {
     if (response.statusCode == 200) {
       final responseData = json.decode(response.body);
 
-      // ✅ Check if token exists in the response
+      // Check if token exists in the response
       if (responseData['token'] != null && responseData['token'].toString().isNotEmpty) {
         final token = responseData['token'].toString();
 
-        // ✅ Save token locally for future API calls
+        //  Save token locally for future API calls
         await saveUserToken(token);
         print(" Token saved locally: $token");
       } else {
@@ -1168,7 +1168,6 @@ Future<Map<String, dynamic>> fetchTaskStats() async {
       throw Exception('Failed to accept contract: $e');
     }
   }
-
   // Get contracts by employer
   Future<List<dynamic>> getEmployerContracts(String employerId) async {
     try {
@@ -1251,10 +1250,10 @@ Future<List<dynamic>> getFreelancerProposals() async {
 Future<Map<String, dynamic>> acceptProposal(String proposalId) async {
   try {
     final response = await http.post(
-      Uri.parse(acceptproposalUrl), // No ID in URL
+      Uri.parse(acceptproposalUrl), 
       headers: headers,
       body: json.encode({
-        'proposal_id': proposalId, // Send ID in request body
+        'proposal_id': proposalId, 
       }),
     );
 
@@ -1272,10 +1271,10 @@ Future<Map<String, dynamic>> acceptProposal(String proposalId) async {
 Future<Map<String, dynamic>> rejectProposal(String proposalId) async {
   try {
     final response = await http.post(
-      Uri.parse(rejectproposalUrl), // No ID in URL
+      Uri.parse(rejectproposalUrl), 
       headers: headers,
       body: json.encode({
-        'proposal_id': proposalId, // Send ID in request body
+        'proposal_id': proposalId, 
       }),
     );
 
@@ -1303,7 +1302,7 @@ Future<Map<String, dynamic>> rejectProposal(String proposalId) async {
       Uri.parse('$baseUrl/employers/$employerId/profile/'),
      headers: {
         "Content-Type": "application/json",
-        "Authorization": "Bearer $token", // ✅ include token
+        "Authorization": "Bearer $token", 
       },
     );
 
@@ -1332,38 +1331,6 @@ Future<Map<String, dynamic>> rejectProposal(String proposalId) async {
     }
   }
 
-Future<List<dynamic>> fetchEmployerRatings() async {
-  try {
-    
-    final String? token = await _getUserToken();
-    
-    if (token == null) {
-      throw Exception('No authentication token found');
-    }
-
-    final response = await http.get(
-      Uri.parse(employerratingsUrl),
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer $token", 
-      },
-    );
-
-    print('Employer Ratings API Response:');
-    print('URL: $employerratingsUrl');
-    print('Status: ${response.statusCode}');
-    print('Body: ${response.body}');
-
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body);
-    } else {
-      throw Exception('Failed to fetch ratings: ${response.statusCode}');
-    }
-  } catch (e) {
-    print('Error in fetchEmployerRatings: $e');
-    rethrow;
-  }
-}
 
 Future<bool> apisubmitRating(Map<String, dynamic> data) async {
   final response = await http.post(
@@ -1390,7 +1357,7 @@ Future<List<dynamic>> getTasksForRating() async {
       Uri.parse(tasktorateUrl),
       headers: {
         "Content-Type": "application/json",
-        "Authorization": "Bearer $token", // ✅ Now using actual token
+        "Authorization": "Bearer $token", 
       },
     );
 
@@ -1452,4 +1419,45 @@ Future<bool> apifreelancersubmitRating(Map<String, dynamic> data) async {
       throw Exception("Failed to accept contract");
     }
   }
+
+
+  Future<List<dynamic>> fetchEmployerRatings() async {
+  try {
+    
+    final String? token = await _getUserToken();
+    
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
+
+    final response = await http.get(
+      Uri.parse(employerratingsUrl),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+    );
+
+    print('Employer Ratings API Response:');
+    print('URL: $employerratingsUrl');
+    print('Status: ${response.statusCode}');
+    print('Body: ${response.body}');
+
+    if (response.statusCode == 200) {
+      final responseData = jsonDecode(response.body);
+      
+      //  MAGIC: Handle the new API response structure
+      if (responseData is Map && responseData.containsKey('ratings')) {
+        return responseData['ratings']; // Return just the ratings array
+      } else {
+        return responseData; // Fallback for old structure
+      }
+    } else {
+      throw Exception('Failed to fetch ratings: ${response.statusCode}');
+    }
+  } catch (e) {
+    print('Error in fetchEmployerRatings: $e');
+    rethrow;
+  }
+}
 }  
