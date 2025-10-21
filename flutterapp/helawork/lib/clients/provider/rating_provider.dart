@@ -5,32 +5,31 @@ class ClientRatingProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
 
   bool _isLoading = false;
-  List<dynamic> _tasks = [];
-  String? _errorMessage; 
+  List<dynamic> _completedTasks = [];
+  String? _errorMessage;
 
-  
   String? get errorMessage => _errorMessage;
   bool get isLoading => _isLoading;
-  List<dynamic> get tasks => _tasks;
+  List<dynamic> get completedTasks => _completedTasks;
 
-  Future<void> fetchTasks(int employerId) async {
+  Future<void> fetchCompletedTasks(int employerId) async {
     _isLoading = true;
-    _errorMessage = null; 
+    _errorMessage = null;
     notifyListeners();
 
     try {
-      _tasks = await _apiService.getTasksForRating();
-      _errorMessage = null; 
+      _completedTasks = await _apiService.getCompletedTasksForRating(employerId);
+      _errorMessage = null;
     } catch (e) {
-      _errorMessage = "Failed to load tasks: $e";
-      _tasks = [];
+      _errorMessage = "Failed to load completed tasks: $e";
+      _completedTasks = [];
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  Future<bool> submitRating({
+  Future<bool> submitFreelancerRating({
     required int taskId,
     required int freelancerId,
     required int employerId,
@@ -38,7 +37,7 @@ class ClientRatingProvider with ChangeNotifier {
     String? review,
   }) async {
     _isLoading = true;
-    _errorMessage = null; 
+    _errorMessage = null;
     notifyListeners();
 
     try {
@@ -50,7 +49,7 @@ class ClientRatingProvider with ChangeNotifier {
         "review": review ?? "",
       };
 
-      final success = await _apiService.apisubmitRating(data);
+      final success = await _apiService.submitFreelancerRating(data);
       
       if (!success) {
         _errorMessage = "Failed to submit rating";
@@ -58,7 +57,7 @@ class ClientRatingProvider with ChangeNotifier {
       
       return success;
     } catch (e) {
-      _errorMessage = "Failed to submit rating: $e"; 
+      _errorMessage = "Failed to submit rating: $e";
       return false;
     } finally {
       _isLoading = false;

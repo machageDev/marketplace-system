@@ -47,6 +47,7 @@ class ApiService{
   static const String employerprofileUrl = '$baseUrl/apiemployerprofile';
   static const String submitRatingUrl = '$baseUrl/employer_ratings/';
   static const String employerratingsUrl ='$baseUrl/apifetchratings';
+  static const String taskforratingUrl = '$baseUrl/completetask';
 Future<Map<String, dynamic>> register(String name, String email,String phoneNO, String password,  String confirmPassword) async {
   final url = Uri.parse(registerUrl);
   try {
@@ -624,32 +625,42 @@ Future<List<Contract>> fetchContracts() async {
 
   /// Fetch task completion data for a specific task
   static Future<Map<String, dynamic>?> fetchTaskCompletion(int taskId) async {
-    try {
-      final token = await _getToken();
-      final response = await http.get(
-        Uri.parse(fetchtaskUrl),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-      );
+  try {
+    final token = await _getToken();
+    
+    // ✅ FIXED: Add taskId to the URL or filter parameters
+    final response = await http.get(
+      Uri.parse('$fetchtaskUrl?task_id=$taskId'), // Option 1: Query parameter
+      // OR
+      // Uri.parse('$fetchtaskUrl/$taskId/'), // Option 2: URL path parameter
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data is List && data.isNotEmpty) {
-          // Return the first completion (should only be one per task for current user)
-          return _parseCompletionData(data.first);
-        }
-        return null; // No completion exists
-      } else {
-        throw Exception('Failed to load completion: ${response.statusCode}');
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      
+      if (data is List && data.isNotEmpty) {
+        // ✅ FIXED: Filter by taskId from the list
+        final completion = data.firstWhere(
+          (item) => item['task_id'] == taskId || 
+                    item['task']?['task_id'] == taskId,
+          orElse: () => null,
+        );
+        
+        return completion != null ? _parseCompletionData(completion) : null;
       }
-    } catch (e) {
-      print('Error fetching task completion: $e');
-      rethrow;
+      return null; // No completion exists for this task
+    } else {
+      throw Exception('Failed to load completion: ${response.statusCode}');
     }
+  } catch (e) {
+    print('Error fetching task completion: $e');
+    rethrow;
   }
-
+}
   /// Submit new task completion
   static Future<Map<String, dynamic>> submitTaskCompletion({
     required int taskId,
@@ -1402,6 +1413,67 @@ Future<bool> apifreelancersubmitRating(Map<String, dynamic> data) async {
     return response.statusCode == 201;
   } catch (e) {
     print('Error in apisubmitRating: $e');
+    rethrow;
+  }
+}
+// Add this method to your ApiService class
+Future<List<dynamic>> getCompletedTasksForRating(int employerId) async {
+  try {
+    final String? token = await _getUserToken();
+    
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
+
+    final response = await http.get(
+      Uri.parse(taskforratingUrl),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+    );
+
+    print('Completed Tasks for Rating API Response:');
+    print('URL: $tasktorateUrl');
+    print('Status: ${response.statusCode}');
+    print('Body: ${response.body}');
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to load completed tasks: ${response.statusCode}');
+    }
+  } catch (e) {
+    print('Error in getCompletedTasksForRating: $e');
+    rethrow;
+  }
+}
+// Add this method to your ApiService class
+Future<bool> submitFreelancerRating(Map<String, dynamic> data) async {
+  try {
+    final String? token = await _getUserToken();
+    
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
+
+    final response = await http.post(
+      Uri.parse(freelancerrateUrl),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token", 
+      },
+      body: jsonEncode(data),
+    );
+
+    print('Submit Freelancer Rating API Response:');
+    print('URL: $freelancerrateUrl');
+    print('Status: ${response.statusCode}');
+    print('Body: ${response.body}');
+
+    return response.statusCode == 201;
+  } catch (e) {
+    print('Error in submitFreelancerRating: $e');
     rethrow;
   }
 }
