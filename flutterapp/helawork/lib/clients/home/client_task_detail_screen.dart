@@ -4,7 +4,7 @@ class TaskDetailScreen extends StatelessWidget {
   final int taskId;
   final dynamic task;
 
-  const TaskDetailScreen({super.key, required this.taskId, required this.task});
+  const TaskDetailScreen({super.key, required this.taskId, required this.task, required employer});
 
   Color _getStatusColor(String status) {
     switch (status.toLowerCase()) {

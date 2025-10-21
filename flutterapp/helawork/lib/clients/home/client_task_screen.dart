@@ -95,7 +95,11 @@ class _TasksScreenState extends State<TasksScreen> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => TaskDetailScreen(taskId: taskId, task: task),
+          builder: (_) => TaskDetailScreen(
+            taskId: taskId, 
+            task: task, 
+            employer: task['employer'] ?? {}, // ✅ FIXED: Correct syntax
+          ),
         ),
       );
     } else {

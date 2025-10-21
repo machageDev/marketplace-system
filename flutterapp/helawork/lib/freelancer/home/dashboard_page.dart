@@ -7,7 +7,6 @@ import 'package:helawork/freelancer/home/user_profile_screen.dart';
 import 'package:helawork/freelancer/provider/dashbaord_provider.dart';
 import 'package:provider/provider.dart';
 
-
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
 
@@ -18,11 +17,13 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage> {
   int _selectedIndex = 0;
 
-  final List<Widget> _pages = const [
-    SizedBox(), 
-    TaskPage(),
-    
-    ProposalsScreen(),
+  // FIXED: Add all 5 pages to match bottom navigation items
+  final List<Widget> _pages = [
+    const SizedBox(), // Home (index 0)
+    const TaskPage(), // Tasks (index 1)
+    const Center(child: Text("Payments", style: TextStyle(color: Colors.white))), // Payments (index 2)
+    const ProposalsScreen(), // Proposals (index 3)
+    const Center(child: Text("Completed Tasks", style: TextStyle(color: Colors.white))), // Completed Tasks (index 4)
   ];
 
   @override
@@ -65,8 +66,6 @@ class _DashboardPageState extends State<DashboardPage> {
           children: [
             _buildUserHeader(dashboard),
             const SizedBox(height: 20),
-            _buildQuickActions(),
-            const SizedBox(height: 20),
             _buildNotificationsSection(dashboard),
             const SizedBox(height: 20),
             _buildStatsCards(dashboard),
@@ -108,15 +107,18 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
         ),
         const SizedBox(width: 12),
-        Text(
-          dashboard.userName ?? "Guest User",
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
+        Expanded(
+          child: Text(
+            dashboard.userName ?? "Guest User",
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+            overflow: TextOverflow.ellipsis,
           ),
         ),
-        const Spacer(),
+        const SizedBox(width: 12),
         // Notification badge with count
         Stack(
           children: [
@@ -220,7 +222,7 @@ class _DashboardPageState extends State<DashboardPage> {
           crossAxisCount: 2,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
-          childAspectRatio: 1.2,
+          childAspectRatio: 1.4,
           children: [
             _buildStatCard(
               "Active Tasks",
@@ -252,55 +254,6 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // ================= QUICK ACTIONS =================
-  Widget _buildQuickActions() {
-    return Row(
-      children: [
-        Expanded(
-          child: ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            onPressed: () => _onItemTapped(1),
-            icon: const Icon(Icons.task, color: Colors.white),
-            label: const Text(
-              "Tasks",
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            onPressed: () => _onItemTapped(3),
-            icon: const Icon(Icons.article, color: Colors.white),
-            label: const Text(
-              "Proposals",
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   // ================= RATINGS SECTION =================
   Widget _buildRatingsSection() {
     return Column(
@@ -315,24 +268,27 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
         ),
         const SizedBox(height: 10),
-        ElevatedButton.icon(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.green,
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
-          ),
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const RatingsScreen()),
-            );
-          },
-          icon: const Icon(Icons.star, color: Colors.white),
-          label: const Text(
-            "View Ratings",
-            style: TextStyle(color: Colors.white, fontSize: 16),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const RatingsScreen()),
+              );
+            },
+            icon: const Icon(Icons.star, color: Colors.white),
+            label: const Text(
+              "View Ratings",
+              style: TextStyle(color: Colors.white, fontSize: 16),
+            ),
           ),
         ),
       ],
@@ -353,24 +309,27 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
         ),
         const SizedBox(height: 10),
-        ElevatedButton.icon(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.blueGrey.shade700,
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blueGrey.shade700,
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
-          ),
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const ContractScreen()),
-            );
-          },
-          icon: const Icon(Icons.article, color: Colors.white),
-          label: const Text(
-            "View Contracts",
-            style: TextStyle(color: Colors.white, fontSize: 16),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ContractScreen()),
+              );
+            },
+            icon: const Icon(Icons.article, color: Colors.white),
+            label: const Text(
+              "View Contracts",
+              style: TextStyle(color: Colors.white, fontSize: 16),
+            ),
           ),
         ),
       ],
@@ -427,7 +386,7 @@ class _DashboardPageState extends State<DashboardPage> {
         'message': '${dashboard.completedTasks} task(s) have been completed',
         'icon': Icons.check_circle,
         'color': Colors.purple,
-        'action': () => _onItemTapped(1), // Navigate to tasks
+        'action': () => _onItemTapped(4), // Navigate to completed tasks
       });
     }
 
@@ -546,17 +505,17 @@ class _DashboardPageState extends State<DashboardPage> {
       color: Colors.grey[900],
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: color, size: 30),
-            const SizedBox(height: 8),
+            Icon(icon, color: color, size: 24),
+            const SizedBox(height: 6),
             Text(
               value,
               style: const TextStyle(
                 color: Colors.white,
-                fontSize: 20,
+                fontSize: 16,
                 fontWeight: FontWeight.bold,
               ),
             ),

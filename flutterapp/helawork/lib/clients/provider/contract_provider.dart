@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:helawork/clients/models/contract_model.dart';
 import 'package:helawork/services/api_sercice.dart';
 
-
 class ClientContractProvider with ChangeNotifier {
   ContractModel? _contract;
   bool _isLoading = false;
@@ -10,12 +9,13 @@ class ClientContractProvider with ChangeNotifier {
   ContractModel? get contract => _contract;
   bool get isLoading => _isLoading;
 
-  Future<void> fetchContract(int contractId) async {
+  Future<void> fetchContract(String token, String contractId) async {
     _isLoading = true;
     notifyListeners();
 
     try {
-      final data = await ApiService.apigetContract(contractId);
+      final apiService = ApiService(token: token);
+      final data = await apiService.getContract(int.parse(contractId) as String); // ✅ fixed
       _contract = ContractModel.fromJson(data);
     } catch (e) {
       print("Error fetching contract: $e");
@@ -25,9 +25,10 @@ class ClientContractProvider with ChangeNotifier {
     }
   }
 
-  Future<void> acceptContract(int contractId) async {
+  Future<void> acceptContract(String token, String contractId) async {
     try {
-      await ApiService.bobacceptContract(contractId);
+      final apiService = ApiService(token: token);
+      await apiService.acceptContract(int.parse(contractId)); // ✅ fixed
       _contract?.employerAccepted = true;
       notifyListeners();
     } catch (e) {
