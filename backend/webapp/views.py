@@ -1068,3 +1068,94 @@ def task_completion_detail(request, pk):
     elif request.method == 'DELETE':
         completion.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)        
+
+
+import uuid
+import requests
+from django.conf import settings
+from django.http import JsonResponse, HttpResponseRedirect
+from django.views.decorators.csrf import csrf_exempt
+
+@csrf_exempt
+def initialize_payment(request):
+    if request.method == "POST":
+        amount = request.POST.get("amount")
+
+        # create unique transaction reference
+        tx_ref = "HLW_" + str(uuid.uuid4())
+
+        data = {
+            "tx_ref": tx_ref,
+            "amount": amount,
+            "currency": "KES",
+            "redirect_url": "http://127.0.0.1:8000/payment/callback/",
+            "payment_options": "card,mpesa",
+            "customer": {
+                "email": request.user.email if request.user.is_authenticated else "client@example.com",
+                "phonenumber": "254742461239",
+                "name": request.user.username if request.user.is_authenticated else "Anonymous Client",
+            },
+            "customizations": {
+                "title": "Helawork Payment",
+                "description": "Client paying freelancer for a completed project",
+            },
+        }
+
+        headers = {
+            "Authorization": f"Bearer {settings.FLUTTERWAVE_SECRET_KEY}",
+            "Content-Type": "application/json",
+        }
+
+        r = requests.post("https://api.flutterwave.com/v3/payments", json=data, headers=headers)
+        res = r.json()
+
+        # Redirect client to Flutterwave checkout page
+        if res.get("status") == "success":
+            link = res["data"]["link"]
+            return HttpResponseRedirect(link)
+        else:
+            return JsonResponse({"error": res}, status=400)
+
+    return JsonResponse({"error": "Invalid request method"}, status=405)
+
+
+
+@csrf_exempt
+def payment_callback(request):
+    status = request.GET.get("status")
+    tx_ref = request.GET.get("tx_ref")
+
+    if status == "successful":
+        headers = {
+            "Authorization": f"Bearer {settings.FLUTTERWAVE_SECRET_KEY}",
+        }
+        verify_url = f"https://api.flutterwave.com/v3/transactions/verify_by_reference?tx_ref={tx_ref}"
+        verify_res = requests.get(verify_url, headers=headers).json()
+
+        if verify_res["status"] == "success":
+            data = verify_res["data"]
+            amount = float(data["amount"])
+
+            # Calculate commission
+            commission = round(amount * 0.10, 2)   # 10%
+            freelancer_amount = round(amount - commission, 2)
+
+            # Example: update your database
+            # job = Job.objects.get(tx_ref=tx_ref)
+            # job.status = "paid"
+            # job.freelancer_wallet_balance += freelancer_amount
+            # job.platform_revenue += commission
+            # job.save()
+
+            return JsonResponse({
+                "message": "Payment verified and commission applied",
+                "total_paid": amount,
+                "platform_fee": commission,
+                "freelancer_gets": freelancer_amount,
+            })
+        else:
+            return JsonResponse({"error": "Could not verify transaction"}, status=400)
+    else:
+        return JsonResponse({"message": "Payment failed or cancelled"})
+
+    

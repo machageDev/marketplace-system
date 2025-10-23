@@ -137,4 +137,9 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-STRIPE_SECRET_KEY = "sk_test_..."  # Your secret key
+
+# Flutterwave credentials
+FLUTTERWAVE_PUBLIC_KEY = "FLWPUBK_TEST-xxxxxxxxxxxxxxxxxxxx"
+FLUTTERWAVE_SECRET_KEY = "FLWSECK_TEST-xxxxxxxxxxxxxxxxxxxx"
+FLUTTERWAVE_ENCRYPTION_KEY = "FLWENCK_TEST-xxxxxxxxxxxxxxxxxxxx"
+FLUTTERWAVE_BASE_URL = "https://api.flutterwave.com/v3/"

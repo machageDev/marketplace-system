@@ -38,4 +38,9 @@ urlpatterns = [
     path('apifetchratings', views.employer_ratings, name='employer_ratings'),
     path('completetask', views.task_completion_list, name='task-completion-list'),
     path('task-completions/<int:pk>/', views.task_completion_detail, name='task-completion-detail'),
+    
+    
+    path('payment/initialize/', views.initialize_payment, name='initialize_payment'),
+    path('payment/callback/', views.payment_callback, name='payment_callback'),
+
 ] 
