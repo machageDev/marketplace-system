@@ -1550,4 +1550,6 @@ Future<bool> submitFreelancerRating(Map<String, dynamic> data) async {
       return null;
     }
   }
+
+ 
 }  

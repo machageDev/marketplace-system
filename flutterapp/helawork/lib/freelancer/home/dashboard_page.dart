@@ -4,6 +4,7 @@ import 'package:helawork/freelancer/home/proposal_screen.dart';
 import 'package:helawork/freelancer/home/rating_screen.dart';
 import 'package:helawork/freelancer/home/task_page.dart';
 import 'package:helawork/freelancer/home/user_profile_screen.dart';
+import 'package:helawork/freelancer/home/wallet_screen.dart';
 import 'package:helawork/freelancer/provider/dashbaord_provider.dart';
 import 'package:provider/provider.dart';
 
@@ -17,13 +18,12 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage> {
   int _selectedIndex = 0;
 
-  // FIXED: Add all 5 pages to match bottom navigation items
   final List<Widget> _pages = [
-    const SizedBox(), // Home (index 0)
-    const TaskPage(), // Tasks (index 1)
-    const Center(child: Text("Payments", style: TextStyle(color: Colors.white))), // Payments (index 2)
+    const SizedBox(), 
+    const TaskPage(), 
+    const WalletScreen(token: '',),
     const ProposalsScreen(), // Proposals (index 3)
-    const Center(child: Text("Completed Tasks", style: TextStyle(color: Colors.white))), // Completed Tasks (index 4)
+    const Center(child: Text("Completed Tasks", style: TextStyle(color: Colors.white))), 
   ];
 
   @override
