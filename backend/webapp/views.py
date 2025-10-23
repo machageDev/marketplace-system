@@ -492,24 +492,6 @@ def contract_detail(request, contract_id):
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-stripe.api_key = settings.STRIPE_SECRET_KEY
-
-def create_payment_intent(request):
-    data = json.loads(request.body)
-    amount = data.get("amount")  # in cents
-    currency = "usd"
-
-    intent = stripe.PaymentIntent.create(
-        amount=amount,
-        currency=currency,
-        automatic_payment_methods={"enabled": True},
-    )
-
-    return JsonResponse({
-        "clientSecret": intent.client_secret
-    })
-
-#clients rest api
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -1119,43 +1101,41 @@ def initialize_payment(request):
     return JsonResponse({"error": "Invalid request method"}, status=405)
 
 
+# views.py
+import requests
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.conf import settings
+from .models import User
 
 @csrf_exempt
 def payment_callback(request):
-    status = request.GET.get("status")
-    tx_ref = request.GET.get("tx_ref")
+    tx_ref = request.GET.get('tx_ref')
+    transaction_id = request.GET.get('transaction_id')
 
-    if status == "successful":
-        headers = {
-            "Authorization": f"Bearer {settings.FLUTTERWAVE_SECRET_KEY}",
-        }
-        verify_url = f"https://api.flutterwave.com/v3/transactions/verify_by_reference?tx_ref={tx_ref}"
-        verify_res = requests.get(verify_url, headers=headers).json()
+    headers = {
+        'Authorization': f'Bearer {settings.FLUTTERWAVE_SECRET_KEY}',
+    }
 
-        if verify_res["status"] == "success":
-            data = verify_res["data"]
-            amount = float(data["amount"])
+    verify_url = f"https://api.flutterwave.com/v3/transactions/{transaction_id}/verify"
+    response = requests.get(verify_url, headers=headers)
+    res_data = response.json()
 
-            # Calculate commission
-            commission = round(amount * 0.10, 2)   # 10%
-            freelancer_amount = round(amount - commission, 2)
+    if res_data['status'] == 'success' and res_data['data']['status'] == 'successful':
+        amount = float(res_data['data']['amount'])
+        freelancer_id = res_data['data']['meta'].get('freelancer_id')
 
-            # Example: update your database
-            # job = Job.objects.get(tx_ref=tx_ref)
-            # job.status = "paid"
-            # job.freelancer_wallet_balance += freelancer_amount
-            # job.platform_revenue += commission
-            # job.save()
+        try:
+            freelancer = User.objects.get(user_id=freelancer_id)
+        except User.DoesNotExist:
+            return JsonResponse({'message': 'Freelancer not found'}, status=404)
 
-            return JsonResponse({
-                "message": "Payment verified and commission applied",
-                "total_paid": amount,
-                "platform_fee": commission,
-                "freelancer_gets": freelancer_amount,
-            })
-        else:
-            return JsonResponse({"error": "Could not verify transaction"}, status=400)
+        # Deduct 10% system fee
+        net_amount = amount * 0.9
+        freelancer.wallet_balance += net_amount
+        freelancer.save()
+
+        return JsonResponse({'message': 'Payment verified, wallet credited successfully.'})
     else:
-        return JsonResponse({"message": "Payment failed or cancelled"})
-
+        return JsonResponse({'message': 'Payment verification failed.'}, status=400)
     

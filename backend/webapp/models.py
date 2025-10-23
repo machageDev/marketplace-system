@@ -10,6 +10,7 @@ class User(models.Model):
     email = models.EmailField(unique=True)
     phoneNo = models.CharField(max_length=13, null=True, blank=True)
     password = models.CharField(max_length=128, null=True, blank=True)
+    wallet_balance = models.DecimalField(max_digits=12, decimal_places=2, default=0.00) 
 
     def set_password(self, raw_password):
         self.password = make_password(raw_password)
@@ -288,3 +289,6 @@ class PaymentRecord(models.Model):
 
     def __str__(self):
         return f"{self.tx_ref} - {self.status}"
+    
+    
+    
