@@ -2,7 +2,7 @@ from datetime import timezone
 from rest_framework import serializers 
 
 
-from .models import Contract, Proposal, TaskCompletion, User, UserProfile
+from .models import Contract, Proposal, TaskCompletion, User, UserProfile, Wallet
 from .models import Employer, User
 from .models import Task
 from .models import EmployerRating, FreelancerRating
@@ -256,4 +256,7 @@ class TaskCompletionSerializer(serializers.ModelSerializer):
             'payment_reference',
         ]
         read_only_fields = ['completion_id', 'completed_at']
-        
+class WalletSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Wallet
+        fields = ['id', 'balance', 'updated_at']        

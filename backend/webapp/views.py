@@ -1,3 +1,4 @@
+from decimal import Decimal
 import stripe
 from django.conf import settings
 from django.http import JsonResponse
@@ -21,7 +22,7 @@ from rest_framework.response import Response
 from django.db import IntegrityError, transaction
 from rest_framework import status
 from django.core.mail import send_mail
-from .models import Contract, Employer, EmployerProfile, EmployerRating, EmployerToken, FreelancerRating, Proposal, Task, TaskCompletion, UserProfile
+from .models import Contract, Employer, EmployerProfile, EmployerRating, EmployerToken, FreelancerRating, Proposal, Task, TaskCompletion, UserProfile, Wallet
 from django.contrib.auth.hashers import check_password
 from .models import  User
 from rest_framework.permissions import IsAuthenticated
@@ -36,7 +37,7 @@ from rest_framework.decorators import authentication_classes, permission_classes
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from webapp.serializers import ContractSerializer, EmployerLoginSerializer, EmployerProfileSerializer, EmployerRatingSerializer, EmployerRegisterSerializer, EmployerSerializer, FreelancerRatingSerializer, LoginSerializer, ProposalSerializer, RegisterSerializer, TaskCompletionSerializer, TaskCreateSerializer, TaskSerializer, UserProfileSerializer
+from webapp.serializers import ContractSerializer, EmployerLoginSerializer, EmployerProfileSerializer, EmployerRatingSerializer, EmployerRegisterSerializer, EmployerSerializer, FreelancerRatingSerializer, LoginSerializer, ProposalSerializer, RegisterSerializer, TaskCompletionSerializer, TaskCreateSerializer, TaskSerializer, UserProfileSerializer, WalletSerializer
 from .authentication import CustomTokenAuthentication, EmployerTokenAuthentication
 from .permissions import IsAuthenticated  
 from .models import UserProfile
@@ -1138,4 +1139,41 @@ def payment_callback(request):
         return JsonResponse({'message': 'Payment verified, wallet credited successfully.'})
     else:
         return JsonResponse({'message': 'Payment verification failed.'}, status=400)
-    
+
+
+@api_view(['GET'])
+def get_wallet_balance(request, user_id):
+    try:
+        wallet = Wallet.objects.get(user__user_id=user_id)
+        serializer = WalletSerializer(wallet)
+        return Response(serializer.data)
+    except Wallet.DoesNotExist:
+        return Response({'error': 'Wallet not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+#  Withdraw Funds
+@api_view(['POST'])
+def withdraw_funds(request, user_id):
+    amount = Decimal(request.data.get('amount', 0))
+    try:
+        wallet = Wallet.objects.get(user__user_id=user_id)
+        if wallet.balance < amount:
+            return Response({'error': 'Insufficient funds'}, status=status.HTTP_400_BAD_REQUEST)
+        wallet.balance -= amount
+        wallet.save()
+        return Response({'message': f'{amount} withdrawn successfully', 'balance': wallet.balance})
+    except Wallet.DoesNotExist:
+        return Response({'error': 'Wallet not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+#  Top Up via Flutterwave (initial logic)
+@api_view(['POST'])
+def top_up_wallet(request, user_id):
+    amount = Decimal(request.data.get('amount', 0))
+    try:
+        wallet = Wallet.objects.get(user__user_id=user_id)
+        wallet.balance += amount
+        wallet.save()
+        return Response({'message': f'{amount} added successfully', 'balance': wallet.balance})
+    except Wallet.DoesNotExist:
+        return Response({'error': 'Wallet not found'}, status=status.HTTP_404_NOT_FOUND)    
