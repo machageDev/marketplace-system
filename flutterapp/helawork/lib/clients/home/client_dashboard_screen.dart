@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:helawork/clients/home/client_proposal_screen.dart';
 import 'package:helawork/clients/home/client_task_screen.dart';
 import 'package:helawork/clients/home/employer_raiting_screen.dart';
+import 'package:helawork/clients/home/flutterwave_payment_screen.dart';
 import 'package:helawork/clients/screens/client_profile_screen.dart';
 import 'package:helawork/clients/provider/client_proposal_provider.dart' as client_proposal;
 import 'package:helawork/clients/provider/dashboard_provider.dart' as client_dashboard;
@@ -28,7 +29,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
       const DashboardTab(),
       const TasksScreen(),
       const ClientProposalsScreen(),
-      const Center(child: Text('Payments Page')),
+      const FlutterwavePaymentScreen(paymentUrl: '',),
       const EmployerRatingsScreen(token: '', employerId: 0), 
     ];
 

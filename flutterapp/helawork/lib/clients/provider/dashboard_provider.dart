@@ -97,8 +97,7 @@ class DashboardProvider extends ChangeNotifier {
         } else {
           _userName = 'User'; // Final fallback
           print("7. Using fallback user name: $_userName");
-        }
-      }
+        }      }
       
       print("8. Dashboard data updated: $dashboardData");
       

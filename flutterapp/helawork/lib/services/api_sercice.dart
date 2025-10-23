@@ -1532,4 +1532,22 @@ Future<bool> submitFreelancerRating(Map<String, dynamic> data) async {
     rethrow;
   }
 }
+
+ Future<String?> initializePayment(double amount) async {
+    var url = Uri.parse("$baseUrl/payment/initialize/");
+    var response = await http.post(url, body: {
+      'amount': amount.toString(),
+    });
+
+    if (response.statusCode == 302) {
+      // Django redirects directly to checkout link
+      return response.headers['location'];
+    } else if (response.statusCode == 200) {
+      var data = jsonDecode(response.body);
+      return data['data']['link']; // in case you return JSON with link
+    } else {
+      print("Error: ${response.body}");
+      return null;
+    }
+  }
 }  
