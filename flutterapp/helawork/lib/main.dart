@@ -72,7 +72,7 @@ class RoleSelectionScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0E21),
+      backgroundColor: Colors.black,
       body: SafeArea(
         child: SingleChildScrollView(
           child: Padding(
@@ -88,11 +88,11 @@ class RoleSelectionScreen extends StatelessWidget {
                       width: 120,
                       height: 120,
                       decoration: BoxDecoration(
-                        color: Colors.blue.shade800,
+                        color: Colors.white,
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.blue.withOpacity(0.3),
+                            color: Colors.white.withOpacity(0.3),
                             blurRadius: 20,
                             spreadRadius: 5,
                           )
@@ -101,7 +101,7 @@ class RoleSelectionScreen extends StatelessWidget {
                       child: const Icon(
                         Icons.work_outline,
                         size: 60,
-                        color: Colors.white,
+                        color: Colors.black,
                       ),
                     ),
                     const SizedBox(height: 24),
@@ -132,20 +132,20 @@ class RoleSelectionScreen extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
+                    color: Colors.white,
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.white.withOpacity(0.1)),
+                    border: Border.all(color: Colors.grey.shade300),
                   ),
                   child: Column(
                     children: [
                       const Row(
                         children: [
-                          Icon(Icons.security, color: Colors.green, size: 20),
+                          Icon(Icons.security, color: Colors.black, size: 20),
                           SizedBox(width: 8),
                           Text(
                             'Secure & Trusted Platform',
                             style: TextStyle(
-                              color: Colors.white,
+                              color: Colors.black,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -154,12 +154,12 @@ class RoleSelectionScreen extends StatelessWidget {
                       const SizedBox(height: 12),
                       const Row(
                         children: [
-                          Icon(Icons.verified_user, color: Colors.blue, size: 20),
+                          Icon(Icons.verified_user, color: Colors.black, size: 20),
                           SizedBox(width: 8),
                           Text(
                             'Verified Professionals',
                             style: TextStyle(
-                              color: Colors.white,
+                              color: Colors.black,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -168,12 +168,12 @@ class RoleSelectionScreen extends StatelessWidget {
                       const SizedBox(height: 12),
                       const Row(
                         children: [
-                          Icon(Icons.payment, color: Colors.orange, size: 20),
+                          Icon(Icons.payment, color: Colors.black, size: 20),
                           SizedBox(width: 8),
                           Text(
                             'Safe Payment System',
                             style: TextStyle(
-                              color: Colors.white,
+                              color: Colors.black,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -183,7 +183,7 @@ class RoleSelectionScreen extends StatelessWidget {
                       Text(
                         'Connect with top talent or find amazing opportunities in our secure marketplace designed for success.',
                         style: TextStyle(
-                          color: Colors.grey.shade400,
+                          color: Colors.grey.shade700,
                           fontSize: 14,
                           height: 1.5,
                         ),
@@ -220,18 +220,11 @@ class RoleSelectionScreen extends StatelessWidget {
                   width: double.infinity,
                   height: 140,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Colors.green.shade800,
-                        Colors.green.shade600,
-                      ],
-                    ),
+                    color: Colors.white,
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.green.withOpacity(0.3),
+                        color: Colors.grey.withOpacity(0.5),
                         blurRadius: 15,
                         offset: const Offset(0, 5),
                       ),
@@ -257,12 +250,12 @@ class RoleSelectionScreen extends StatelessWidget {
                               width: 60,
                               height: 60,
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
+                                color: Colors.black.withOpacity(0.1),
                                 shape: BoxShape.circle,
                               ),
                               child: const Icon(
                                 Icons.business_center,
-                                color: Colors.white,
+                                color: Colors.black,
                                 size: 30,
                               ),
                             ),
@@ -277,14 +270,14 @@ class RoleSelectionScreen extends StatelessWidget {
                                     style: TextStyle(
                                       fontSize: 22,
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.white,
+                                      color: Colors.black,
                                     ),
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
                                     'Hire professionals for your projects',
                                     style: TextStyle(
-                                      color: Colors.white.withOpacity(0.8),
+                                      color: Colors.black.withOpacity(0.7),
                                       fontSize: 14,
                                     ),
                                   ),
@@ -293,7 +286,7 @@ class RoleSelectionScreen extends StatelessWidget {
                             ),
                             const Icon(
                               Icons.arrow_forward_ios,
-                              color: Colors.white,
+                              color: Colors.black,
                               size: 20,
                             ),
                           ],
@@ -310,18 +303,11 @@ class RoleSelectionScreen extends StatelessWidget {
                   width: double.infinity,
                   height: 140,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Colors.blue.shade800,
-                        Colors.blue.shade600,
-                      ],
-                    ),
+                    color: Colors.white,
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.blue.withOpacity(0.3),
+                        color: Colors.grey.withOpacity(0.5),
                         blurRadius: 15,
                         offset: const Offset(0, 5),
                       ),
@@ -347,12 +333,12 @@ class RoleSelectionScreen extends StatelessWidget {
                               width: 60,
                               height: 60,
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
+                                color: Colors.black.withOpacity(0.1),
                                 shape: BoxShape.circle,
                               ),
                               child: const Icon(
                                 Icons.person,
-                                color: Colors.white,
+                                color: Colors.black,
                                 size: 30,
                               ),
                             ),
@@ -367,14 +353,14 @@ class RoleSelectionScreen extends StatelessWidget {
                                     style: TextStyle(
                                       fontSize: 22,
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.white,
+                                      color: Colors.black,
                                     ),
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
                                     'Find work and grow your career',
                                     style: TextStyle(
-                                      color: Colors.white.withOpacity(0.8),
+                                      color: Colors.black.withOpacity(0.7),
                                       fontSize: 14,
                                     ),
                                   ),
@@ -383,7 +369,7 @@ class RoleSelectionScreen extends StatelessWidget {
                             ),
                             const Icon(
                               Icons.arrow_forward_ios,
-                              color: Colors.white,
+                              color: Colors.black,
                               size: 20,
                             ),
                           ],

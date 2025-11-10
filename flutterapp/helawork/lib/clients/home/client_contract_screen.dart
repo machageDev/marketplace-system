@@ -8,10 +8,10 @@ class ClientContractScreen extends StatefulWidget {
   final String contractId;
 
   const ClientContractScreen({
-    Key? key,
+    super.key,
     required this.token,
     required this.contractId,
-  }) : super(key: key);
+  });
 
   @override
   State<ClientContractScreen> createState() => _ClientContractScreenState();

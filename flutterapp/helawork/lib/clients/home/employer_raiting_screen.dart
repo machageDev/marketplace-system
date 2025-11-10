@@ -157,8 +157,8 @@ class _EmployerRatingsScreenState extends State<EmployerRatingsScreen> {
         onPressed: _navigateToRateFreelancer,
         backgroundColor: Colors.blueAccent,
         foregroundColor: Colors.white,
-        child: const Icon(Icons.star_rate_rounded),
         tooltip: 'Rate Freelancer',
+        child: const Icon(Icons.star_rate_rounded),
       ),
     );
   }
