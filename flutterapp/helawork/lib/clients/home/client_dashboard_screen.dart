@@ -29,7 +29,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
       const DashboardTab(),
       const TasksScreen(),
       const ClientProposalsScreen(),
-      const FlutterwavePaymentScreen(paymentUrl: '',),
+      const PaymentScreen(),
       const EmployerRatingsScreen(token: '', employerId: 0), 
     ];
 

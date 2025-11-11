@@ -1,19 +1,85 @@
 import 'package:flutter/material.dart';
-import 'package:webview_flutter/webview_flutter.dart';
+import 'package:flutterwave_standard/flutterwave.dart';
 
-class FlutterwavePaymentScreen extends StatelessWidget {
-  final String paymentUrl;
+class PaymentScreen extends StatefulWidget {
+  const PaymentScreen({super.key});
 
-  const FlutterwavePaymentScreen({super.key, required this.paymentUrl});
+  @override
+  State<PaymentScreen> createState() => _PaymentScreenState();
+}
+
+class _PaymentScreenState extends State<PaymentScreen> {
+  final String publicKey = "FLWPUBK_TEST-xxxxxxxxxxxxxxxxxxxxxxxx-X"; // your key
+  final String currency = "KES";
+
+  void makePayment() async {
+    //  Create Customer
+    final Customer customer = Customer(
+      name: "Client Helawork",
+      phoneNumber: "0712345678",
+      email: "client@helawork.com",
+    );
+
+    //  Create payment object
+    final Flutterwave flutterwave = Flutterwave(
+      publicKey: publicKey,
+      amount: "2000",
+      currency: currency,
+      txRef: DateTime.now().millisecondsSinceEpoch.toString(),
+      isTestMode: true, // false in production
+      customer: customer,
+      paymentOptions: "card,mpesa,ussd,banktransfer",
+      customization: Customization(
+        title: "Helawork Wallet Top-Up",
+        description: "Top-up your Helawork wallet",
+      ),
+      redirectUrl: "https://your-backend.com/payment/verify",
+    );
+
+    //  Trigger payment (requires context here)
+    final ChargeResponse response = await flutterwave.charge();
+
+    if (response.success == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(" Payment successful!")),
+      );
+      print("Payment successful: ${response.status}");
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(" Payment failed or cancelled.")),
+      );
+      print("Payment failed or cancelled: ${response.status}");
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Complete Payment')),
-      body: WebViewWidget(
-        controller: WebViewController()
-          ..setJavaScriptMode(JavaScriptMode.unrestricted)
-          ..loadRequest(Uri.parse(paymentUrl)),
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text(
+          "Wallet Top Up",
+          style: TextStyle(color: Colors.blueAccent),
+        ),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.blueAccent),
+      ),
+      body: Center(
+        child: ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.blueAccent,
+            padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          onPressed: makePayment,
+          child: const Text(
+            "Pay with Flutterwave",
+            style: TextStyle(fontSize: 16, color: Colors.white),
+          ),
+        ),
       ),
     );
   }
