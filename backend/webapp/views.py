@@ -1207,11 +1207,64 @@ def withdraw_funds(request, user_id):
 #  Top Up via Flutterwave (initial logic)
 @api_view(['POST'])
 def top_up_wallet(request, user_id):
+    """
+    Initialize a Flutterwave payment for wallet top-up.
+    Returns a payment link for the frontend.
+    """
     amount = Decimal(request.data.get('amount', 0))
+    if amount <= 0:
+        return Response({'error': 'Invalid amount'}, status=status.HTTP_400_BAD_REQUEST)
+
     try:
         wallet = Wallet.objects.get(user__user_id=user_id)
-        wallet.balance += amount
-        wallet.save()
-        return Response({'message': f'{amount} added successfully', 'balance': wallet.balance})
+        user = wallet.user
     except Wallet.DoesNotExist:
-        return Response({'error': 'Wallet not found'}, status=status.HTTP_404_NOT_FOUND)    
+        return Response({'error': 'Wallet not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    # Prepare Flutterwave payload
+    payload = {
+        "tx_ref": f"wallet-{user.user_id}-{wallet.id}",
+        "amount": float(amount),
+        "currency": "USD",  # Change if needed
+        "payment_options": "card,ussd,banktransfer",
+        "redirect_url": settings.FLUTTERWAVE_REDIRECT_URL,  # Frontend redirect after payment
+        "customer": {
+            "email": user.email,
+            "name": f"{user.first_name} {user.last_name}"
+        },
+        "meta": {
+            "user_id": user.user_id,
+            "wallet_id": wallet.id
+        },
+        "customizations": {
+            "title": "Wallet Top-up",
+            "description": f"Top-up wallet for user {user.user_id}",
+        }
+    }
+
+    headers = {
+        "Authorization": f"Bearer {settings.FLUTTERWAVE_SECRET_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    try:
+        response = requests.post(
+            "https://api.flutterwave.com/v3/payments",
+            headers=headers,
+            data=json.dumps(payload),
+            timeout=10
+        )
+        res_data = response.json()
+        if res_data.get("status") == "success":
+            payment_link = res_data["data"]["link"]
+            return Response({
+                "message": "Payment initialized successfully",
+                "payment_link": payment_link
+            })
+        else:
+            return Response({
+                "error": "Failed to initialize payment",
+                "details": res_data
+            }, status=status.HTTP_400_BAD_REQUEST)
+    except requests.RequestException as e:
+        return Response({'error': f"Payment initialization failed: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
