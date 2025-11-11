@@ -17,7 +17,7 @@ class PaymentService {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => FlutterwavePaymentScreen(paymentUrl: paymentLink),
+          builder: (context) => PaymentScreen(paymentUrl: paymentLink),
         ),
       );
     } else {
