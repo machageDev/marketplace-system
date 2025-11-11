@@ -604,9 +604,7 @@ def delete_employer(request, pk):
 # Get or Update Profile
 @api_view(['GET', 'PUT'])
 def employer_profile(request, employer_id):
-    """
-    Get or update employer profile
-    """
+    
     employer = get_object_or_404(Employer, pk=employer_id)
     
     if request.method == 'GET':
@@ -639,9 +637,7 @@ def employer_profile(request, employer_id):
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def create_task(request):
-    """
-    Create a new task
-    """
+    
     try:
     
         employer = Employer.objects.get(username=request.user.username)
@@ -691,9 +687,7 @@ def create_task(request):
 # Delete Task
 @api_view(['DELETE'])
 def delete_task(request, task_id):
-    """
-    Delete a task by ID
-    """
+    
     task = get_object_or_404(Task, pk=task_id)
     task.delete()
     return Response(
@@ -704,9 +698,7 @@ def delete_task(request, task_id):
 # Bulk Delete Tasks
 @api_view(['DELETE'])
 def bulk_delete_tasks(request):
-    """
-    Delete multiple tasks by IDs
-    """
+    
     task_ids = request.data.get('task_ids', [])
     
     if not task_ids:
@@ -771,7 +763,7 @@ def employer_dashboard_api(request):
                 'error': 'User is not associated with any employer account.'
             }, status=status.HTTP_403_FORBIDDEN)
 
-        # === STATISTICS ===
+        #  STATISTICS 
         all_tasks = Task.objects.filter(employer=employer)
         total_tasks = all_tasks.count()
         pending_proposals = Proposal.objects.filter(task__employer=employer).count()
@@ -779,13 +771,13 @@ def employer_dashboard_api(request):
         completed_tasks = all_tasks.filter(status='completed').count()
         total_spent = 0  
 
-        # === RECENT TASKS ===
+        #  RECENT TASKS 
         recent_tasks = all_tasks.order_by('-created_at')[:5]
         recent_proposals = Proposal.objects.filter(
             task__employer=employer
         ).select_related('freelancer', 'task').order_by('-submitted_at')[:5]
 
-        # === SERIALIZE DATA ===
+        #  SERIALIZE DATA 
         tasks_data = [
             {
                 'task_id': t.task_id,
@@ -809,7 +801,7 @@ def employer_dashboard_api(request):
             for p in recent_proposals
         ]
 
-        # === RESPONSE ===
+        #RESPONSE 
         response_data = {
             'success': True,
             'data': {
@@ -854,14 +846,11 @@ def employer_dashboard_api(request):
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def get_employer_tasks(request):
-    """
-    Return all tasks belonging to the logged-in employer.
-    Includes debug logs for tracing token and authentication.
-    """
+    
     print("\n===  Employer Tasks API Called ===")
-    print("🔹 Auth Header:", request.headers.get('Authorization'))
-    print("🔹 User:", request.user)
-    print("🔹 Is Authenticated:", request.user.is_authenticated)
+    print(" Auth Header:", request.headers.get('Authorization'))
+    print(" User:", request.user)
+    print(" Is Authenticated:", request.user.is_authenticated)
 
     try:
         
@@ -905,7 +894,7 @@ api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def get_employer_profile(request, employer_id):
-    """Fetch employer profile by employer ID."""
+   
     try:
         profile = EmployerProfile.objects.get(employer_id=employer_id)
         serializer = EmployerProfileSerializer(profile)
@@ -918,7 +907,7 @@ def get_employer_profile(request, employer_id):
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def create_employer_profile(request):
-    """Create a new employer profile."""
+    
     serializer = EmployerProfileSerializer(data=request.data)
     if serializer.is_valid():
         serializer.save()
