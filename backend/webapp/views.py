@@ -393,7 +393,7 @@ def apisubmit_proposal(request):
 
         return JsonResponse({
             "id": proposal,
-            "task_id": proposal.task.id,
+            "task_id": proposal.task_id,
             "freelancer_id": proposal.freelancer.id,
             "cover_letter": proposal.cover_letter,
             "bid_amount": float(proposal.bid_amount),
@@ -1103,41 +1103,79 @@ def initialize_payment(request):
 
 
 # views.py
+import json
+import logging
 import requests
+from decimal import Decimal
+
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
-from .models import User
+
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+
+from .models import User, Wallet
+
+logger = logging.getLogger(__name__)
 
 @csrf_exempt
 def payment_callback(request):
-    tx_ref = request.GET.get('tx_ref')
-    transaction_id = request.GET.get('transaction_id')
+    """
+    Flutterwave webhook callback to verify and credit wallet.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'message': 'Invalid request method'}, status=405)
 
+    try:
+        payload = json.loads(request.body)
+        tx_ref = payload.get('tx_ref')
+        transaction_id = payload.get('id')  # Flutterwave transaction ID
+    except (json.JSONDecodeError, KeyError) as e:
+        logger.error(f"Invalid payload: {e}")
+        return JsonResponse({'message': 'Invalid payload'}, status=400)
+
+    # Verify payment with Flutterwave
     headers = {
         'Authorization': f'Bearer {settings.FLUTTERWAVE_SECRET_KEY}',
     }
-
     verify_url = f"https://api.flutterwave.com/v3/transactions/{transaction_id}/verify"
-    response = requests.get(verify_url, headers=headers)
-    res_data = response.json()
+    
+    try:
+        response = requests.get(verify_url, headers=headers, timeout=10)
+        res_data = response.json()
+    except requests.RequestException as e:
+        logger.error(f"Error verifying payment: {e}")
+        return JsonResponse({'message': 'Payment verification failed'}, status=500)
 
-    if res_data['status'] == 'success' and res_data['data']['status'] == 'successful':
-        amount = float(res_data['data']['amount'])
-        freelancer_id = res_data['data']['meta'].get('freelancer_id')
+    if res_data.get('status') == 'success' and res_data['data'].get('status') == 'successful':
+        amount = Decimal(res_data['data'].get('amount', 0))
+        meta = res_data['data'].get('meta', {})
+        freelancer_id = meta.get('freelancer_id')
+
+        if not freelancer_id:
+            logger.error("No freelancer_id in meta")
+            return JsonResponse({'message': 'Freelancer ID not provided'}, status=400)
 
         try:
             freelancer = User.objects.get(user_id=freelancer_id)
         except User.DoesNotExist:
+            logger.error(f"Freelancer not found: {freelancer_id}")
             return JsonResponse({'message': 'Freelancer not found'}, status=404)
 
-        # Deduct 10% system fee
-        net_amount = amount * 0.9
-        freelancer.wallet_balance += net_amount
-        freelancer.save()
+        # Get or create wallet
+        wallet, _ = Wallet.objects.get_or_create(user=freelancer)
 
-        return JsonResponse({'message': 'Payment verified, wallet credited successfully.'})
+        # Deduct 10% system fee
+        net_amount = amount * Decimal('0.9')
+        wallet.balance += net_amount
+        wallet.save()
+
+        logger.info(f"Wallet credited: User {freelancer_id}, Amount {net_amount}")
+        return JsonResponse({'message': 'Payment verified, wallet credited successfully.'}, status=200)
     else:
+        logger.warning(f"Payment verification failed: {res_data}")
         return JsonResponse({'message': 'Payment verification failed.'}, status=400)
 
 

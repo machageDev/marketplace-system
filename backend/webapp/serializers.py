@@ -96,11 +96,20 @@ class FreelancerRatingSerializer(serializers.ModelSerializer):
 
 
 class ProposalSerializer(serializers.ModelSerializer):
+    task = TaskSerializer(read_only=True)  
+    freelancer = UserSerializer(read_only=True) 
+
     class Meta:
         model = Proposal
-        fields = ['proposal_id', 'task', 'freelancer', 'cover_letter', 'bid_amount', 'submitted_at']
+        fields = [
+            'proposal_id',
+            'task',
+            'freelancer',
+            'cover_letter',
+            'bid_amount',
+            'submitted_at'
+        ]
         read_only_fields = ['proposal_id', 'submitted_at']
-
 
 class ContractSerializer(serializers.ModelSerializer):
     task_title = serializers.CharField(source="task.title", read_only=True)
