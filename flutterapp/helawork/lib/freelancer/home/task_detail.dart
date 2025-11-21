@@ -39,10 +39,10 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100], // Light background like TaskPage
+      backgroundColor: Colors.grey[900], 
       appBar: AppBar(
         title: const Text('Task Details'),
-        backgroundColor: Theme.of(context).colorScheme.primary, // Same as TaskPage
+        backgroundColor: Theme.of(context).colorScheme.primary, 
         elevation: 0,
       ),
       body: Consumer<ClientProfileProvider>(
