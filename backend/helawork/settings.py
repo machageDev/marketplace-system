@@ -139,7 +139,10 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Flutterwave credentials
-FLUTTERWAVE_PUBLIC_KEY = "FLWPUBK_TEST-xxxxxxxxxxxxxxxxxxxx"
-FLUTTERWAVE_SECRET_KEY = "FLWSECK_TEST-xxxxxxxxxxxxxxxxxxxx"
-FLUTTERWAVE_ENCRYPTION_KEY = "FLWENCK_TEST-xxxxxxxxxxxxxxxxxxxx"
-FLUTTERWAVE_BASE_URL = "https://api.flutterwave.com/v3/"
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+PAYSTACK_SECRET_KEY = os.getenv("PAYSTACK_SECRET_KEY")
+
