@@ -1033,54 +1033,40 @@ def task_completion_detail(request, pk):
         completion.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)        
 
-
-import uuid
+import json
 import requests
-from django.conf import settings
-from django.http import JsonResponse, HttpResponseRedirect
+from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.conf import settings
+
 
 @csrf_exempt
 def initialize_payment(request):
+    """Create Paystack transaction and return authorization URL"""
+    
     if request.method == "POST":
-        amount = request.POST.get("amount")
+        data = json.loads(request.body)
 
-        # create unique transaction reference
-        tx_ref = "HLW_" + str(uuid.uuid4())
-
-        data = {
-            "tx_ref": tx_ref,
-            "amount": amount,
-            "currency": "KES",
-            "redirect_url": "http://127.0.0.1:8000/payment/callback/",
-            "payment_options": "card,mpesa",
-            "customer": {
-                "email": request.user.email if request.user.is_authenticated else "client@example.com",
-                "phonenumber": "254742461239",
-                "name": request.user.username if request.user.is_authenticated else "Anonymous Client",
-            },
-            "customizations": {
-                "title": "Helawork Payment",
-                "description": "Client paying freelancer for a completed project",
-            },
-        }
+        email = data.get("email")
+        amount = int(data.get("amount")) * 100  # Paystack uses *100
 
         headers = {
-            "Authorization": f"Bearer {settings.FLUTTERWAVE_SECRET_KEY}",
+            "Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}",
             "Content-Type": "application/json",
         }
 
-        r = requests.post("https://api.flutterwave.com/v3/payments", json=data, headers=headers)
-        res = r.json()
+        payload = {
+            "email": email,
+            "amount": amount,
+        }
 
-        # Redirect client to Flutterwave checkout page
-        if res.get("status") == "success":
-            link = res["data"]["link"]
-            return HttpResponseRedirect(link)
-        else:
-            return JsonResponse({"error": res}, status=400)
+        response = requests.post(
+            "https://api.paystack.co/transaction/initialize",
+            headers=headers,
+            json=payload
+        )
 
-    return JsonResponse({"error": "Invalid request method"}, status=405)
+        return JsonResponse(response.json(), safe=False)
 
 
 # views.py
