@@ -1,5 +1,4 @@
 from decimal import Decimal
-import stripe
 from django.conf import settings
 from django.http import JsonResponse
 import json
@@ -17,27 +16,20 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
-from rest_framework.views import APIView
+
 from rest_framework.response import Response
-from django.db import IntegrityError, transaction
+from django.db import  transaction
 from rest_framework import status
 from django.core.mail import send_mail
-from .models import Contract, Employer, EmployerProfile, EmployerRating, EmployerToken, FreelancerRating, Proposal, Task, TaskCompletion, UserProfile, Wallet
-from django.contrib.auth.hashers import check_password
+from .models import Contract, Employer, EmployerProfile, EmployerRating, EmployerToken, Proposal, Task, TaskCompletion, UserProfile, Wallet
 from .models import  User
 from rest_framework.permissions import IsAuthenticated
-from django.shortcuts import render
-from django.db.models import Sum
-from django.contrib import messages
-from django.contrib.auth.hashers import make_password
-from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
-from django.utils.encoding import force_bytes, force_str
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import authentication_classes, permission_classes, api_view
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from webapp.serializers import ContractSerializer, EmployerLoginSerializer, EmployerProfileSerializer, EmployerRatingSerializer, EmployerRegisterSerializer, EmployerSerializer, FreelancerRatingSerializer, LoginSerializer, ProposalSerializer, RegisterSerializer, TaskCompletionSerializer, TaskCreateSerializer, TaskSerializer, UserProfileSerializer, WalletSerializer
+from webapp.serializers import ContractSerializer, EmployerProfileSerializer, EmployerRatingSerializer, EmployerRegisterSerializer, EmployerSerializer, FreelancerRatingSerializer, LoginSerializer, ProposalSerializer, RegisterSerializer, TaskCompletionSerializer, TaskCreateSerializer, TaskSerializer, UserProfileSerializer, WalletSerializer
 from .authentication import CustomTokenAuthentication, EmployerTokenAuthentication
 from .permissions import IsAuthenticated  
 from .models import UserProfile
