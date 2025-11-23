@@ -1,27 +1,59 @@
-import 'package:flutter/material.dart';
-import 'package:helawork/clients/home/flutterwave_payment_screen.dart';
-import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class PaymentService {
-  Future<void> makePayment(BuildContext context, double amount) async {
-    final response = await http.post(
-      Uri.parse('http://192.168.100.188:8000/api/initialize-payment/'),
-      body: {'amount': amount.toString()},
-    );
-
-    if (response.statusCode == 200) {
-      final jsonResponse = json.decode(response.body);
-      final paymentLink = jsonResponse['data']['link'];
-
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => PaymentScreen(paymentUrl: paymentLink),
-        ),
+  static const String baseUrl = 'http://your-django-server.com/api';
+  
+  static Future<Map<String, dynamic>> initializePayment({
+    required double amount,
+    required String email,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token');
+      
+      final response = await http.post(
+        Uri.parse('$baseUrl/initialize-payment/'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode({
+          'amount': amount,
+          'email': email,
+        }),
       );
-    } else {
-      print('Payment initialization failed: ${response.body}');
+      
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('Failed to initialize payment');
+      }
+    } catch (e) {
+      throw Exception('Payment initialization error: $e');
+    }
+  }
+  
+  static Future<Map<String, dynamic>> verifyPayment(String reference) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token');
+      
+      final response = await http.get(
+        Uri.parse('$baseUrl/verify-payment/$reference/'),
+        headers: {
+          'Authorization': 'Bearer $token',
+        },
+      );
+      
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('Failed to verify payment');
+      }
+    } catch (e) {
+      throw Exception('Payment verification error: $e');
     }
   }
 }
