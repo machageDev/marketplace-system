@@ -45,5 +45,6 @@ urlpatterns = [
    # path('wallet/<int:user_id>/', views.get_wallet_balance, name='get_wallet_balance'),
    # path('wallet/<int:user_id>/withdraw/', views.withdraw_funds, name='withdraw_funds'),
     #path('wallet/<int:user_id>/topup/', views.top_up_wallet, name='top_up_wallet'),
-
+    path('verify-payment/<str:reference>/', views.verify_payment, name='verify_payment'),
+    path('transactions/', views.transaction_history, name='transaction_history'),
 ] 
