@@ -1068,4 +1068,35 @@ def initialize_payment(request):
 
         return JsonResponse(response.json(), safe=False)
 
+@api_view(['GET'])
+def verify_payment(request, reference):
+    url = f"https://api.paystack.co/transaction/verify/{reference}"
+    headers = {
+        "Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}",
+    }
+    
+    response = requests.get(url, headers=headers)
+    
+    if response.status_code == 200:
+        response_data = response.json()
+        
+        try:
+            transaction = Transaction.objects.get(reference=reference)
+            transaction.status = response_data['data']['status']
+            transaction.save()
+            
+            return Response({
+                'status': transaction.status,
+                'message': response_data['message'],
+                'data': TransactionSerializer(transaction).data
+            })
+        except Transaction.DoesNotExist:
+            return Response({'error': 'Transaction not found'}, status=404)
+    
+    return Response(response.json(), status=response.status_code)
 
+@api_view(['GET'])
+def transaction_history(request):
+    transactions = transaction.objects.filter(user=request.user).order_by('-created_at')
+    serializer = TransactionSerializer(transactions, many=True)
+    return Response(serializer.data)
