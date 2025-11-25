@@ -106,17 +106,15 @@ class Task(models.Model):
     def has_assigned_freelancer(self):
         return self.assigned_user is not None
 
-
-# Task completion / payout
 class TaskCompletion(models.Model):
     completion_id = models.AutoField(primary_key=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    task = models.ForeignKey(Task, on_delete=models.CASCADE)  # Removed null=True, blank=True
+    task = models.ForeignKey(Task, on_delete=models.CASCADE)
+    submission = models.OneToOneField('Submission', on_delete=models.CASCADE, null=True, blank=True)  # ADD THIS LINE
     amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     completed_at = models.DateTimeField(auto_now_add=True)
     paid = models.BooleanField(default=False)
     
-    # ADDED: Status field to track completion workflow
     STATUS_CHOICES = [
         ('pending_review', 'Pending Review'),
         ('approved', 'Approved'),
@@ -124,28 +122,23 @@ class TaskCompletion(models.Model):
     ]
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending_review')
     
-    # ADDED: Completion notes/feedback
     employer_notes = models.TextField(blank=True, null=True)
     freelancer_notes = models.TextField(blank=True, null=True)
     
-    # ADDED: Payment tracking
     payment_date = models.DateTimeField(blank=True, null=True)
     payment_reference = models.CharField(max_length=255, blank=True, null=True)
 
     def __str__(self):
         return f"{self.user.username} - {self.task.title} - {'Paid' if self.paid else 'Unpaid'}"
 
-    # ADDED: Property to check if completion is approved
     @property
     def is_approved(self):
         return self.status == 'approved'
     
-    # ADDED: Property to check if completion is pending
     @property
     def is_pending(self):
         return self.status == 'pending_review'
     
-    # ADDED: Method to mark as paid
     def mark_as_paid(self, reference=None):
         self.paid = True
         self.payment_date = timezone.now()
@@ -153,14 +146,12 @@ class TaskCompletion(models.Model):
             self.payment_reference = reference
         self.save()
     
-    # ADDED: Method to approve completion
     def approve_completion(self, notes=None):
         self.status = 'approved'
         if notes:
             self.employer_notes = notes
         self.save()
     
-    # ADDED: Method to reject completion
     def reject_completion(self, notes=None):
         self.status = 'rejected'
         if notes:
@@ -178,25 +169,6 @@ class PayrollReport(models.Model):
 
     def __str__(self):
         return f"Payroll Report {self.month} by {self.employer.username}"
-
-
-
-class EmployerRating(models.Model):
-    task = models.ForeignKey(Task, on_delete=models.CASCADE)
-    freelancer = models.ForeignKey(User, on_delete=models.CASCADE)
-    employer = models.ForeignKey(Employer, on_delete=models.CASCADE)
-    score = models.IntegerField(choices=[(i, i) for i in range(1, 6)])
-    review = models.TextField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-
-class FreelancerRating(models.Model):
-    task = models.ForeignKey(Task, on_delete=models.CASCADE)
-    freelancer = models.ForeignKey(User, on_delete=models.CASCADE)
-    employer = models.ForeignKey(Employer, on_delete=models.CASCADE)
-    score = models.IntegerField(choices=[(i, i) for i in range(1, 6)])
-    review = models.TextField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
 
 
 class UserProfile(models.Model):
@@ -274,7 +246,17 @@ class Contract(models.Model):
             self.save()
 
 
-
+class Transaction(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    email = models.EmailField()
+    reference = models.CharField(max_length=100, unique=True)
+    status = models.CharField(max_length=20, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"{self.reference} - {self.amount}"
 
 
 class PaymentRecord(models.Model):
@@ -298,3 +280,120 @@ class Wallet(models.Model):
 
     def __str__(self):
         return f"{self.user.name}'s Wallet - Balance: {self.balance}"  
+
+
+class Submission(models.Model):
+    submission_id = models.AutoField(primary_key=True)
+    task = models.ForeignKey(Task, on_delete=models.CASCADE)
+    freelancer = models.ForeignKey(User, on_delete=models.CASCADE)
+    contract = models.ForeignKey(Contract, on_delete=models.CASCADE)
+    
+    
+    title = models.CharField(max_length=200)
+    description = models.TextField()
+    submitted_at = models.DateTimeField(auto_now_add=True)
+    
+   
+    repo_url = models.URLField(blank=True, null=True)
+    commit_hash = models.CharField(max_length=100, blank=True, null=True)
+    staging_url = models.URLField(blank=True, null=True)
+    live_demo_url = models.URLField(blank=True, null=True)
+    apk_download_url = models.URLField(blank=True, null=True)  
+    testflight_link = models.URLField(blank=True, null=True)  
+    
+    
+    admin_username = models.CharField(max_length=100, blank=True, null=True)
+    admin_password = models.CharField(max_length=100, blank=True, null=True)
+    access_instructions = models.TextField(blank=True, null=True)
+    
+    
+    STATUS_CHOICES = [
+        ('submitted', 'Submitted'),
+        ('under_review', 'Under Review'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+        ('revisions_requested', 'Revisions Requested'),
+    ]
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='submitted')
+    
+    # Files storage
+    def submission_files_path(instance, filename):
+        return f'submissions/task_{instance.task.id}/{filename}'
+    
+    zip_file = models.FileField(upload_to=submission_files_path, blank=True, null=True)
+    screenshots = models.FileField(upload_to=submission_files_path, blank=True, null=True)
+    video_demo = models.FileField(upload_to=submission_files_path, blank=True, null=True)
+    
+    # Additional info
+    deployment_instructions = models.TextField(blank=True, null=True)
+    test_instructions = models.TextField(blank=True, null=True)
+    release_notes = models.TextField(blank=True, null=True)
+    
+    # Acceptance checklist (freelancer self-verification)
+    checklist_tests_passing = models.BooleanField(default=False)
+    checklist_deployed_staging = models.BooleanField(default=False)
+    checklist_documentation = models.BooleanField(default=False)
+    checklist_no_critical_bugs = models.BooleanField(default=False)
+    
+    # Revision tracking
+    revision_notes = models.TextField(blank=True, null=True)
+    resubmitted_at = models.DateTimeField(blank=True, null=True)
+    
+    def __str__(self):
+        return f"Submission for {self.task.title} by {self.freelancer.username}"
+    
+    @property
+    def is_approved(self):
+        return self.status == 'approved'
+    
+    @property
+    def needs_revision(self):
+        return self.status == 'revisions_requested'
+    
+    def approve(self):
+        self.status = 'approved'
+        self.save()
+        
+    def request_revision(self, notes):
+        self.status = 'revisions_requested'
+        self.revision_notes = notes
+        self.save()
+    
+    def mark_under_review(self):
+        self.status = 'under_review'
+        self.save()    
+
+
+class Rating(models.Model):
+    RATING_TYPES = [
+        ('employer_to_freelancer', 'Employer to Freelancer'),
+        ('freelancer_to_employer', 'Freelancer to Employer'),
+    ]
+    
+    rating_id = models.AutoField(primary_key=True)
+    task = models.ForeignKey(Task, on_delete=models.CASCADE)
+    submission = models.ForeignKey(Submission, on_delete=models.CASCADE, null=True, blank=True)
+    
+   
+    rater = models.ForeignKey(User, related_name='ratings_given', on_delete=models.CASCADE)
+    
+    rated_user = models.ForeignKey(User, related_name='ratings_received', on_delete=models.CASCADE)
+    
+    rating_type = models.CharField(max_length=25, choices=RATING_TYPES)
+    score = models.IntegerField(choices=[(i, i) for i in range(1, 6)])
+    review = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        unique_together = ['task', 'rater', 'rated_user']
+    
+    def __str__(self):
+        return f"{self.rater.username} → {self.rated_user.username}: {self.score}/5"
+    
+    def save(self, *args, **kwargs):
+        
+        if hasattr(self.rater, 'employer') and hasattr(self.rated_user, 'freelancer'):
+            self.rating_type = 'employer_to_freelancer'
+        elif hasattr(self.rated_user, 'employer') and hasattr(self.rater, 'freelancer'):
+            self.rating_type = 'freelancer_to_employer'
+        super().save(*args, **kwargs)        

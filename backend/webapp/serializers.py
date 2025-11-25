@@ -1,11 +1,11 @@
 from datetime import timezone
 from rest_framework import serializers 
-
-
-from .models import Contract, Proposal, TaskCompletion, User, UserProfile, Wallet
+from rest_framework import serializers
+from .models import Submission, TaskCompletion, Rating, Contract, Task
+from .models import Contract, Proposal, TaskCompletion, Transaction, User, UserProfile, Wallet
 from .models import Employer, User
 from .models import Task
-from .models import EmployerRating, FreelancerRating
+
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -82,16 +82,7 @@ class LoginSerializer(serializers.ModelSerializer):
 
 
 
-class EmployerRatingSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = EmployerRating
-        fields = ['id', 'task', 'freelancer', 'employer', 'score', 'review', 'created_at']
 
-
-class FreelancerRatingSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = FreelancerRating
-        fields = ['id', 'task', 'freelancer', 'employer', 'score', 'review', 'created_at']
 
 
 
@@ -170,7 +161,7 @@ class EmployerSerializer(serializers.ModelSerializer):
         employer = Employer.objects.create(**validated_data)
         
         if password:
-            employer.password = password  # You might want to hash this
+            employer.password = password 
             employer.save()
         
         if profile_data:
@@ -187,11 +178,11 @@ class EmployerSerializer(serializers.ModelSerializer):
             setattr(instance, attr, value)
         
         if password:
-            instance.password = password  # Hash password if needed
+            instance.password = password 
         
         instance.save()
         
-        # Update or create profile
+        
         if profile_data:
             profile, created = EmployerProfile.objects.get_or_create(
                 employer=instance,
@@ -222,7 +213,7 @@ class TaskCreateSerializer(serializers.ModelSerializer):
             'employer', 'title', 'description', 'category', 
             'budget', 'deadline', 'required_skills', 'is_urgent'
         ]
-        read_only_fields = ['employer']  # Make employer read-only since we set it automatically
+        read_only_fields = ['employer']  
 
 class TaskSerializer(serializers.ModelSerializer):
     employer_name = serializers.CharField(source='employer.company_name', read_only=True)
@@ -238,34 +229,102 @@ class TaskSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['task_id', 'status', 'is_approved', 'is_active', 'assigned_user', 'created_at']       
 
-class FreelancerRatingSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = FreelancerRating
-        fields = '__all__'        
+   
 
-
-class TaskCompletionSerializer(serializers.ModelSerializer):
-    user_username = serializers.CharField(source='user.username', read_only=True)
-    task_title = serializers.CharField(source='task.title', read_only=True)
-    status_display = serializers.CharField(source='get_status_display', read_only=True)
-    
-    class Meta:
-        model = TaskCompletion
-        fields = [
-            'completion_id',
-            'user', 'user_username',
-            'task', 'task_title',
-            'amount',
-            'completed_at',
-            'paid',
-            'status', 'status_display',
-            'employer_notes',
-            'freelancer_notes',
-            'payment_date',
-            'payment_reference',
-        ]
-        read_only_fields = ['completion_id', 'completed_at']
 class WalletSerializer(serializers.ModelSerializer):
     class Meta:
         model = Wallet
         fields = ['id', 'balance', 'updated_at']        
+
+class TransactionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Transaction
+        fields = '__all__'        
+
+
+
+class SubmissionSerializer(serializers.ModelSerializer):
+    freelancer_name = serializers.CharField(source='freelancer.get_full_name', read_only=True)
+    task_title = serializers.CharField(source='task.title', read_only=True)
+    employer_name = serializers.CharField(source='contract.employer.user.get_full_name', read_only=True)
+    
+    class Meta:
+        model = Submission
+        fields = [
+            'submission_id', 'task', 'contract', 'freelancer', 'freelancer_name',
+            'title', 'description', 'submitted_at', 'repo_url', 'commit_hash',
+            'staging_url', 'live_demo_url', 'apk_download_url', 'testflight_link',
+            'admin_username', 'admin_password', 'access_instructions', 'status',
+            'zip_file', 'screenshots', 'video_demo', 'deployment_instructions',
+            'test_instructions', 'release_notes', 'checklist_tests_passing',
+            'checklist_deployed_staging', 'checklist_documentation',
+            'checklist_no_critical_bugs', 'revision_notes', 'resubmitted_at',
+            'task_title', 'employer_name'
+        ]
+        read_only_fields = ['submission_id', 'freelancer', 'contract', 'submitted_at', 'resubmitted_at']
+    
+    def validate(self, data):
+        
+        if not any([
+            data.get('repo_url'),
+            data.get('staging_url'), 
+            data.get('live_demo_url'),
+            data.get('apk_download_url'),
+            data.get('zip_file')
+        ]):
+            raise serializers.ValidationError(
+                "Please provide at least one of: repository URL, staging URL, live demo URL, APK download, or zip file."
+            )
+        return data
+
+class TaskCompletionSerializer(serializers.ModelSerializer):
+    submission_details = SubmissionSerializer(source='submission', read_only=True)
+    task_title = serializers.CharField(source='task.title', read_only=True)
+    user_name = serializers.CharField(source='user.get_full_name', read_only=True)
+    
+    class Meta:
+        model = TaskCompletion
+        fields = [
+            'completion_id', 'user', 'user_name', 'task', 'task_title', 'submission',
+            'submission_details', 'amount', 'completed_at', 'paid', 'status',
+            'employer_notes', 'freelancer_notes', 'payment_date', 'payment_reference'
+        ]
+        read_only_fields = ['completion_id', 'completed_at', 'payment_date']
+
+class RatingSerializer(serializers.ModelSerializer):
+    rater_name = serializers.CharField(source='rater.get_full_name', read_only=True)
+    rated_user_name = serializers.CharField(source='rated_user.get_full_name', read_only=True)
+    task_title = serializers.CharField(source='task.title', read_only=True)
+    
+    class Meta:
+        model = Rating
+        fields = [
+            'rating_id', 'task', 'task_title', 'submission', 'rater', 'rater_name',
+            'rated_user', 'rated_user_name', 'rating_type', 'score', 'review',
+            'created_at'
+        ]
+        read_only_fields = ['rating_id', 'created_at', 'rating_type']
+    
+    def validate(self, data):
+       
+        if data['rater'] == data['rated_user']:
+            raise serializers.ValidationError("You cannot rate yourself.")
+        
+       
+        task = data['task']
+        if not TaskCompletion.objects.filter(task=task, status='approved').exists():
+            raise serializers.ValidationError("You can only rate completed tasks.")
+        
+        return data
+
+class SimpleSubmissionSerializer(serializers.ModelSerializer):
+    """Simplified serializer for lists"""
+    freelancer_name = serializers.CharField(source='freelancer.get_full_name', read_only=True)
+    task_title = serializers.CharField(source='task.title', read_only=True)
+    
+    class Meta:
+        model = Submission
+        fields = [
+            'submission_id', 'task', 'task_title', 'freelancer_name', 'title',
+            'status', 'submitted_at', 'staging_url', 'repo_url'
+        ]        

@@ -140,13 +140,8 @@ STATIC_URL = 'static/'
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "fallback-secret-key")
-PAYSTACK_SECRET_KEY = os.getenv("PAYSTACK_SECRET_KEY")
-PAYSTACK_PUBLIC_KEY = os.getenv("PAYSTACK_PUBLIC_KEY")
 
 
-print("Loaded Paystack Secret:", PAYSTACK_SECRET_KEY)
-print("Loaded Paystack Public:", PAYSTACK_PUBLIC_KEY)
+
+
 

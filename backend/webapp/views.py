@@ -21,7 +21,7 @@ from rest_framework.response import Response
 from django.db import  transaction
 from rest_framework import status
 from django.core.mail import send_mail
-from .models import Contract, Employer, EmployerProfile, EmployerRating, EmployerToken, Proposal, Task, TaskCompletion, UserProfile, Wallet
+from .models import Contract, Employer, EmployerProfile, EmployerToken, Proposal, Rating, Submission, Task, TaskCompletion, Transaction, UserProfile, Wallet
 from .models import  User
 from rest_framework.permissions import IsAuthenticated
 from django.views.decorators.csrf import csrf_exempt
@@ -29,7 +29,7 @@ from rest_framework.decorators import authentication_classes, permission_classes
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from webapp.serializers import ContractSerializer, EmployerProfileSerializer, EmployerRatingSerializer, EmployerRegisterSerializer, EmployerSerializer, FreelancerRatingSerializer, LoginSerializer, ProposalSerializer, RegisterSerializer, TaskCompletionSerializer, TaskCreateSerializer, TaskSerializer, UserProfileSerializer, WalletSerializer
+from webapp.serializers import ContractSerializer, EmployerProfileSerializer,  EmployerRegisterSerializer, EmployerSerializer, LoginSerializer, ProposalSerializer, RatingSerializer, RegisterSerializer, SubmissionSerializer, TaskCompletionSerializer, TaskCreateSerializer, TaskSerializer, TransactionSerializer, UserProfileSerializer, WalletSerializer
 from .authentication import CustomTokenAuthentication, EmployerTokenAuthentication
 from .permissions import IsAuthenticated  
 from .models import UserProfile
@@ -147,102 +147,6 @@ def apiregister(request):
         )
 
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-@csrf_exempt
-@require_http_methods(["GET", "POST"])
-@authentication_classes([CustomTokenAuthentication])
-@permission_classes([IsAuthenticated])
-def employer_ratings_list(request):
-   
-    try:
-        if request.method == 'GET':
-            ratings = EmployerRating.objects.all()
-            serializer = EmployerRatingSerializer(ratings, many=True)
-            return JsonResponse(serializer.data, safe=False)
-            
-        elif request.method == 'POST':
-            # For POST requests with JSON data
-            import json
-            data = json.loads(request.body)
-            
-            # Add the employer from the authenticated user
-            data['employer'] = request.user
-            
-            serializer = EmployerRatingSerializer(data=data)
-            if serializer.is_valid():
-                serializer.save()
-                return JsonResponse(serializer.data, status=201)
-            return JsonResponse(serializer.errors, status=400)
-            
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
-
-@csrf_exempt
-@require_http_methods(["GET", "PUT", "DELETE"])
-@authentication_classes([CustomTokenAuthentication])
-@permission_classes([IsAuthenticated])
-def employer_rating_detail(request):
-   
-    try:
-        rating = EmployerRating.objects.get()
-        
-        if request.method == 'GET':
-            serializer = EmployerRatingSerializer(rating)
-            return JsonResponse(serializer.data)
-            
-        elif request.method == 'PUT':
-            # Check if user owns this rating
-            if rating.employer != request.user:
-                return JsonResponse({"error": "Not authorized"}, status=403)
-                
-            import json
-            data = json.loads(request.body)
-            serializer = EmployerRatingSerializer(rating, data=data, partial=True)
-            if serializer.is_valid():
-                serializer.save()
-                return JsonResponse(serializer.data)
-            return JsonResponse(serializer.errors, status=400)
-            
-        elif request.method == 'DELETE':
-            # Check if user owns this rating
-            if rating.employer != request.user:
-                return JsonResponse({"error": "Not authorized"}, status=403)
-                
-            rating.delete()
-            return JsonResponse({"message": "Rating deleted successfully"}, status=204)
-            
-    except EmployerRating.DoesNotExist:
-        return JsonResponse({"error": "Rating not found"}, status=404)
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
-
-@csrf_exempt
-@require_http_methods(["GET"])
-@authentication_classes([CustomTokenAuthentication])
-@permission_classes([IsAuthenticated])
-def my_employer_ratings(request):
-   
-    try:
-        ratings = EmployerRating.objects.filter(employer=request.user)
-        serializer = EmployerRatingSerializer(ratings, many=True)
-        return JsonResponse(serializer.data, safe=False)
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
-
-@csrf_exempt
-@require_http_methods(["GET"])
-@authentication_classes([CustomTokenAuthentication])
-@permission_classes([IsAuthenticated])
-def freelancer_ratings(request, freelancer_id):
-    
-    try:
-        ratings = EmployerRating.objects.filter(freelancer_id=freelancer_id)
-        serializer = EmployerRatingSerializer(ratings, many=True)
-        return JsonResponse(serializer.data, safe=False)
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
-
 
    
 from .models import User, UserToken
@@ -924,75 +828,6 @@ def update_employer_profile(request, employer_id):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view(['GET'])
-@authentication_classes([EmployerTokenAuthentication])
-@permission_classes([IsAuthenticated])
-def tasks_to_rate(request, employer_id):
-    """Get completed tasks for rating"""
-    tasks = Task.objects.filter(employer_id=employer_id, status='completed', assigned_user__isnull=False)
-    data = [
-        {
-            'task_id': task.id,
-            'title': task.title,
-            'description': task.description,
-            'assigned_user': {
-                'id': task.assigned_user.id,
-                'username': task.assigned_user.username
-            }
-        }
-        for task in tasks
-    ]
-    return Response(data)
-
-@api_view(['POST'])
-@authentication_classes([EmployerTokenAuthentication])
-@permission_classes([IsAuthenticated])
-def rate_freelancer(request):
-    """Submit a rating for freelancer"""
-    serializer = FreelancerRatingSerializer(data=request.data)
-    if serializer.is_valid():
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-
-# views.py
-@api_view(['GET'])
-@authentication_classes([EmployerTokenAuthentication])
-@permission_classes([IsAuthenticated])
-def employer_ratings(request):
-    try:
-        
-        employer = get_object_or_404(Employer, username=request.user.username)
-        
-        ratings = EmployerRating.objects.filter(employer=employer).select_related('freelancer', 'task')
-
-        if not ratings.exists():
-            return Response({
-                "employer": getattr(employer, 'company_name', employer.username),
-                "average_score": None,
-                "total_reviews": 0,
-                "ratings": []
-            }, status=status.HTTP_200_OK)
-
-        serializer = EmployerRatingSerializer(ratings, many=True)
-        avg_score = round(sum(r.score for r in ratings) / ratings.count(), 2)
-
-        return Response({
-            "employer": getattr(employer, 'company_name', employer.username),
-            "average_score": avg_score,
-            "total_reviews": ratings.count(),
-            "ratings": serializer.data
-        }, status=status.HTTP_200_OK)
-        
-    except Employer.DoesNotExist:
-        return Response({
-            "error": "Employer profile not found"
-        }, status=status.HTTP_404_NOT_FOUND)
-
-
-
 @api_view(['GET', 'POST'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -1033,70 +868,286 @@ def task_completion_detail(request, pk):
         completion.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)        
 
-import json
-import requests
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-from django.conf import settings
-
-
-@csrf_exempt
-def initialize_payment(request):
+# Submission Views
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_submission(request):
+    if not hasattr(request.user, 'freelancer'):
+        return Response(
+            {"error": "Only freelancers can create submissions"}, 
+            status=status.HTTP_403_FORBIDDEN
+        )
     
+    try:
+        data = request.data
+        task_id = data.get('task')
+        task = get_object_or_404(Task, id=task_id)
+        contract = get_object_or_404(Contract, task=task)
+        
+        # Verify freelancer is assigned to this task
+        if contract.freelancer != request.user:
+            return Response(
+                {"error": "You are not assigned to this task"}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        serializer = SubmissionSerializer(data=data)
+        if serializer.is_valid():
+            with transaction.atomic():
+                submission = serializer.save(
+                    freelancer=request.user,
+                    contract=contract,
+                    task=task
+                )
+                
+                # Create or update TaskCompletion
+                completion, created = TaskCompletion.objects.get_or_create(
+                    user=request.user,
+                    task=task,
+                    defaults={
+                        'submission': submission, 
+                        'amount': task.budget,
+                        'status': 'pending_review'
+                    }
+                )
+                
+                if not created:
+                    completion.submission = submission
+                    completion.status = 'pending_review'
+                    completion.save()
+            
+            return Response(
+                {"message": "Submission created successfully", "submission_id": submission.submission_id},
+                status=status.HTTP_201_CREATED
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
-    if request.method == "POST":
-        data = json.loads(request.body)
-
-        email = data.get("email")
-        amount = int(data.get("amount")) * 100  # Paystack uses *100
-
-        headers = {
-            "Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}",
-            "Content-Type": "application/json",
-        }
-
-        payload = {
-            "email": email,
-            "amount": amount,
-        }
-
-        response = requests.post(
-            "https://api.paystack.co/transaction/initialize",
-            headers=headers,
-            json=payload
+    except Exception as e:
+        return Response(
+            {"error": str(e)}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
-        return JsonResponse(response.json(), safe=False)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_submission_detail(request, submission_id):
+    submission = get_object_or_404(Submission, submission_id=submission_id)
+    
+    # Check permissions
+    user = request.user
+    if not (user.is_staff or submission.freelancer == user or submission.contract.employer.user == user):
+        return Response(
+            {"error": "You don't have permission to view this submission"}, 
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    serializer = SubmissionSerializer(submission)
+    return Response(serializer.data)
 
 @api_view(['GET'])
-def verify_payment(request, reference):
-    url = f"https://api.paystack.co/transaction/verify/{reference}"
-    headers = {
-        "Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}",
-    }
+
+def get_my_submissions(request):
+    """Get submissions for freelancer"""
+    if not hasattr(request.user, 'freelancer'):
+        return Response(
+            {"error": "Only freelancers can view their submissions"}, 
+            status=status.HTTP_403_FORBIDDEN
+        )
     
-    response = requests.get(url, headers=headers)
+    submissions = Submission.objects.filter(freelancer=request.user).order_by('-submitted_at')
+    serializer = SubmissionSerializer(submissions, many=True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_employer_submissions(request):
+    """Get submissions for employer's tasks"""
+    if not hasattr(request.user, 'employer'):
+        return Response(
+            {"error": "Only employers can view their task submissions"}, 
+            status=status.HTTP_403_FORBIDDEN
+        )
     
-    if response.status_code == 200:
-        response_data = response.json()
+    employer = request.user.employer
+    submissions = Submission.objects.filter(contract__employer=employer).order_by('-submitted_at')
+    serializer = SubmissionSerializer(submissions, many=True)
+    return Response(serializer.data)
+
+@api_view(['POST'])
+
+def approve_submission(request, submission_id):
+    if not hasattr(request.user, 'employer'):
+        return Response(
+            {"error": "Only employers can approve submissions"}, 
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    submission = get_object_or_404(Submission, submission_id=submission_id)
+    
+    # Verify employer owns this submission
+    if submission.contract.employer.user != request.user:
+        return Response(
+            {"error": "You can only approve submissions for your own tasks"}, 
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    try:
+        with transaction.atomic():
+            submission.approve()
+            submission.status = 'approved'
+            submission.save()
+            
+            # Update TaskCompletion
+            completion = get_object_or_404(TaskCompletion, submission=submission)
+            completion.approve_completion()
         
-        try:
-            transaction = Transaction.objects.get(reference=reference)
-            transaction.status = response_data['data']['status']
-            transaction.save()
+        return Response({
+            "message": "Submission approved successfully",
+            "submission_id": submission.submission_id,
+            "status": submission.status
+        })
+    
+    except Exception as e:
+        return Response(
+            {"error": str(e)}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def request_revision(request, submission_id):
+    if not hasattr(request.user, 'employer'):
+        return Response(
+            {"error": "Only employers can request revisions"}, 
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    submission = get_object_or_404(Submission, submission_id=submission_id)
+    
+    # Verify employer owns this submission
+    if submission.contract.employer.user != request.user:
+        return Response(
+            {"error": "You can only request revisions for your own tasks"}, 
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    revision_notes = request.data.get('revision_notes', '')
+    if not revision_notes:
+        return Response(
+            {"error": "Revision notes are required"}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        submission.request_revision(revision_notes)
+        return Response({
+            "message": "Revision requested successfully",
+            "submission_id": submission.submission_id,
+            "status": submission.status
+        })
+    
+    except Exception as e:
+        return Response(
+            {"error": str(e)}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+# Rating Views
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_rating(request):
+    try:
+        data = request.data.copy()
+        data['rater'] = request.user.id
+        
+        # Validate that user doesn't rate themselves
+        if data.get('rated_user') == request.user.id:
+            return Response(
+                {"error": "You cannot rate yourself"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        serializer = RatingSerializer(data=data)
+        if serializer.is_valid():
+            rating = serializer.save()
+            return Response(
+                {"message": "Rating created successfully", "rating_id": rating.rating_id},
+                status=status.HTTP_201_CREATED
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    except Exception as e:
+        return Response(
+            {"error": str(e)}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_user_ratings(request, user_id):
+    ratings = Rating.objects.filter(rated_user_id=user_id).order_by('-created_at')
+    serializer = RatingSerializer(ratings, many=True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+
+def get_task_ratings(request, task_id):
+    task = get_object_or_404(Task, id=task_id)
+    
+    # Check permissions
+    user = request.user
+    if not (user == task.employer.user or user == task.contract.freelancer or user.is_staff):
+        return Response(
+            {"error": "You don't have permission to view ratings for this task"}, 
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    ratings = Rating.objects.filter(task=task).order_by('-created_at')
+    serializer = RatingSerializer(ratings, many=True)
+    return Response(serializer.data)
+
+# Dashboard Stats
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def submission_stats(request):
+    user = request.user
+    
+    try:
+        if hasattr(user, 'employer'):
+            # Employer stats
+            employer = user.employer
+            total_submissions = Submission.objects.filter(contract__employer=employer).count()
+            pending_review = Submission.objects.filter(
+                contract__employer=employer, 
+                status__in=['submitted', 'under_review']
+            ).count()
+            approved = Submission.objects.filter(contract__employer=employer, status='approved').count()
             
             return Response({
-                'status': transaction.status,
-                'message': response_data['message'],
-                'data': TransactionSerializer(transaction).data
+                'total_submissions': total_submissions,
+                'pending_review': pending_review,
+                'approved': approved
             })
-        except Transaction.DoesNotExist:
-            return Response({'error': 'Transaction not found'}, status=404)
+        
+        elif hasattr(user, 'freelancer'):
+            # Freelancer stats
+            total_submissions = Submission.objects.filter(freelancer=user).count()
+            approved = Submission.objects.filter(freelancer=user, status='approved').count()
+            pending = Submission.objects.filter(
+                freelancer=user, 
+                status__in=['submitted', 'under_review']
+            ).count()
+            
+            return Response({
+                'total_submissions': total_submissions,
+                'approved': approved,
+                'pending_review': pending
+            })
+        
+        return Response({'error': 'User role not recognized'}, status=400)
     
-    return Response(response.json(), status=response.status_code)
-
-@api_view(['GET'])
-def transaction_history(request):
-    transactions = transaction.objects.filter(user=request.user).order_by('-created_at')
-    serializer = TransactionSerializer(transactions, many=True)
-    return Response(serializer.data)
+    except Exception as e:
+        return Response(
+            {"error": str(e)}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
