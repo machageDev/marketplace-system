@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:helawork/clients/home/client_proposal_screen.dart';
+import 'package:helawork/clients/home/client_rating_screen.dart';
 import 'package:helawork/clients/home/client_task_screen.dart';
-import 'package:helawork/clients/home/employer_raiting_screen.dart';
-import 'package:helawork/clients/home/flutterwave_payment_screen.dart';
+
+
 import 'package:helawork/clients/screens/client_profile_screen.dart';
 import 'package:helawork/clients/provider/client_proposal_provider.dart' as client_proposal;
 import 'package:helawork/clients/provider/dashboard_provider.dart' as client_dashboard;
@@ -28,9 +29,8 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
     _pages = [
       const DashboardTab(),
       const TasksScreen(),
-      const ClientProposalsScreen(),
-      const PaymentScreen(paymentUrl: null,),
-      const EmployerRatingsScreen(token: '', employerId: 0), 
+      const ClientProposalsScreen(),     
+      const ClientRatingScreen(employerId: 0), 
     ];
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -92,10 +92,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
               icon: Icon(Icons.message_outlined),
               label: 'Proposals',
             ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.payment_outlined),
-              label: 'Payments',
-            ),
+            
             BottomNavigationBarItem(
               icon: Icon(Icons.star_outline),
               label: 'Ratings',
@@ -183,10 +180,10 @@ class DashboardContent extends StatelessWidget {
           const SizedBox(height: 20),
           _buildStatsGrid(),
           const SizedBox(height: 24),
-          SectionCard(
+          const SectionCard(
             title: 'Contracts',
             icon: Icons.assignment_turned_in_outlined,
-            child: const Center(
+            child: Center(
               child: Text(
                 'No contracts yet',
                 style: TextStyle(color: Colors.grey),
@@ -220,7 +217,7 @@ class DashboardContent extends StatelessWidget {
                   context,
                   MaterialPageRoute(
                     builder: (_) =>
-                        ClientProfileScreen(employerId:0),
+                        const ClientProfileScreen(employerId:0),
                   ),
                 );
               },

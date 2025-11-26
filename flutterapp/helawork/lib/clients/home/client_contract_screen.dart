@@ -113,8 +113,8 @@ class _ClientContractScreenState extends State<ClientContractScreen> {
                           color: Colors.blue.shade50,
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: Row(
-                          children: const [
+                        child: const Row(
+                          children: [
                             Icon(Icons.info_outline, color: Colors.blue),
                             SizedBox(width: 10),
                             Expanded(

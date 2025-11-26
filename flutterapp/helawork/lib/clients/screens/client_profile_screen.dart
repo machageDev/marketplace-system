@@ -24,8 +24,8 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<ClientProfileProvider>(context);
-    final themeBlue = const Color(0xFF1976D2); // your Helawork blue
-    final themeWhite = Colors.white;
+    const themeBlue = Color(0xFF1976D2); // your Helawork blue
+    const themeWhite = Colors.white;
 
     return Scaffold(
       backgroundColor: themeWhite,

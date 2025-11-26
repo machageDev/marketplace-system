@@ -244,10 +244,10 @@ class _TasksScreenState extends State<TasksScreen> {
         padding: const EdgeInsets.all(20),
         child: Row(
           children: [
-            Expanded(
+            const Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
+                children: [
                   Text('Task Management', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
                   SizedBox(height: 4),
                   Text('Manage and track all your posted tasks', style: TextStyle(color: Colors.white70, fontSize: 14)),

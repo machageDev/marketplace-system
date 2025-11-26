@@ -300,7 +300,7 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
                   border: OutlineInputBorder(),
                   prefixText: '\$ ',
                 ),
-                keyboardType: TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 validator: (val) {
                   if (val == null || val.isEmpty) {
                     return 'Please enter a bid amount';
@@ -501,7 +501,7 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
                   // Show PDF file name for cover letter
                   Row(
                     children: [
-                      Icon(Icons.picture_as_pdf, color: Colors.red, size: 16),
+                      const Icon(Icons.picture_as_pdf, color: Colors.red, size: 16),
                       const SizedBox(width: 4),
                       Text(
                         "Cover Letter: ${proposal.pdfFileName ?? 'PDF Document'}",

@@ -45,8 +45,9 @@ class _SubmitRatingScreenState extends State<SubmitRatingScreen> {
         freelancerId: widget.freelancerId,
         employerId: int.parse(widget.employerId),
         score: _selectedRating,
-        review: _reviewController.text,
+        review: _reviewController.text, ratedUserId: int.parse(widget.employerId,),
       );
+      
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Rating submitted successfully!')),

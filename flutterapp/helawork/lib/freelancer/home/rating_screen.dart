@@ -25,7 +25,7 @@ class _RatingsScreenState extends State<RatingsScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => SubmitRatingScreen(
+        builder: (context) => const SubmitRatingScreen(
           taskId: 'task-123', // Replace with actual task ID
           employerId: 'employer-456', // Replace with actual employer ID
           clientName: 'Client Name', // Replace with actual client name

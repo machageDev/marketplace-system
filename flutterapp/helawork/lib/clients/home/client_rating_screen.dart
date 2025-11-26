@@ -19,7 +19,10 @@ class _ClientRatingScreenState extends State<ClientRatingScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<ClientRatingProvider>(context, listen: false)
-          .fetchCompletedTasks(widget.employerId);
+          .fetchEmployerRateableTasks()
+          .then((_) {
+        Provider.of<ClientRatingProvider>(context, listen: false);
+      });
     });
   }
 
@@ -51,6 +54,9 @@ class _ClientRatingScreenState extends State<ClientRatingScreen> {
       ),
       body: Consumer<ClientRatingProvider>(
         builder: (context, provider, child) {
+          final tasks = provider.tasksForRating;
+          final taskCount = tasks.length;
+
           if (provider.isLoading) {
             return const Center(
               child: Column(
@@ -67,7 +73,7 @@ class _ClientRatingScreenState extends State<ClientRatingScreen> {
             );
           }
 
-          if (provider.errorMessage != null) {
+          if (provider.error != null) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -80,7 +86,7 @@ class _ClientRatingScreenState extends State<ClientRatingScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    provider.errorMessage!,
+                    provider.error!,
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: Colors.grey),
                   ),
@@ -89,7 +95,7 @@ class _ClientRatingScreenState extends State<ClientRatingScreen> {
                     style: ElevatedButton.styleFrom(backgroundColor: blue),
                     onPressed: () {
                       Provider.of<ClientRatingProvider>(context, listen: false)
-                          .fetchCompletedTasks(widget.employerId);
+                          .fetchEmployerRateableTasks();
                     },
                     child: const Text("Try Again", style: TextStyle(color: Colors.white)),
                   ),
@@ -98,7 +104,7 @@ class _ClientRatingScreenState extends State<ClientRatingScreen> {
             );
           }
 
-          if (provider.completedTasks.isEmpty) {
+          if (taskCount == 0) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -159,9 +165,18 @@ class _ClientRatingScreenState extends State<ClientRatingScreen> {
               Expanded(
                 child: ListView.builder(
                   padding: const EdgeInsets.all(16),
-                  itemCount: provider.completedTasks.length,
+                  itemCount: taskCount,
                   itemBuilder: (context, index) {
-                    final task = provider.completedTasks[index];
+                    if (index < 0 || index >= taskCount) {
+                      return _buildErrorCard("Invalid task data at index $index");
+                    }
+                    
+                    final task = tasks[index];
+                    
+                    if (task == null) {
+                      return _buildErrorCard("Task data is null at index $index");
+                    }
+                    
                     return _buildTaskCard(task);
                   },
                 ),
@@ -174,7 +189,10 @@ class _ClientRatingScreenState extends State<ClientRatingScreen> {
   }
 
   Widget _buildTaskCard(dynamic task) {
-    final freelancerName = task['assigned_user']?['username'] ?? 'Unknown Freelancer';
+    final freelancerName = task['freelancer']?['username'] ?? 
+                          task['assigned_user']?['username'] ?? 
+                          task['contract']?['freelancer']?['username'] ?? 
+                          'Unknown Freelancer';
     
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -237,6 +255,28 @@ class _ClientRatingScreenState extends State<ClientRatingScreen> {
       ),
     );
   }
+
+  Widget _buildErrorCard(String message) {
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.orange),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(color: Colors.grey),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _RatingDialogContent extends StatefulWidget {
@@ -263,7 +303,14 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
 
   @override
   Widget build(BuildContext context) {
-    final freelancerName = widget.task['assigned_user']?['username'] ?? 'the freelancer';
+    final freelancerName = widget.task['freelancer']?['username'] ?? 
+                          widget.task['assigned_user']?['username'] ?? 
+                          widget.task['contract']?['freelancer']?['username'] ?? 
+                          'the freelancer';
+    final freelancerId = widget.task['freelancer']?['id'] ?? 
+                        widget.task['assigned_user']?['id'] ?? 
+                        widget.task['contract']?['freelancer']?['id'];
+    final taskId = widget.task['id'] ?? widget.task['task_id'];
     
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
@@ -347,7 +394,7 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
         ),
         ElevatedButton(
           style: ElevatedButton.styleFrom(backgroundColor: widget.blue),
-          onPressed: isSubmitting ? null : _submitRating,
+          onPressed: isSubmitting ? null : () => _submitRating(freelancerId, taskId),
           child: Text(
             isSubmitting ? "Submitting..." : "Submit Rating",
             style: const TextStyle(color: Colors.white),
@@ -357,46 +404,45 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
     );
   }
 
-  Future<void> _submitRating() async {
+  Future<void> _submitRating(int? freelancerId, int? taskId) async {
+    if (freelancerId == null || taskId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Error: Could not identify freelancer or task"),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     setState(() {
       isSubmitting = true;
     });
 
     try {
-      final success = await widget.ratingProvider.submitFreelancerRating(
-        taskId: widget.task['task_id'],
-        freelancerId: widget.task['assigned_user']?['id'],
-        employerId: widget.employerId,
+      await widget.ratingProvider.submitEmployerRating(
+        taskId: taskId,
+        freelancerId: freelancerId,
         score: selectedRating,
         review: reviewController.text,
       );
 
       if (mounted) {
         Navigator.pop(context);
-        if (success) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Rating submitted successfully!"),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 3),
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text("Failed to submit rating: ${widget.ratingProvider.errorMessage}"),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 4),
-            ),
-          );
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Rating submitted successfully!"),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Error: $e"),
+            content: Text("Failed to submit rating: $e"),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 4),
           ),

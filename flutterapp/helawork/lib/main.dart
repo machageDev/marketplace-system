@@ -4,7 +4,7 @@ import 'package:helawork/clients/provider/client_profile_provider.dart';
 import 'package:helawork/clients/provider/client_proposal_provider.dart' as client_proposal;
 import 'package:helawork/clients/provider/contract_provider.dart';
 import 'package:helawork/clients/provider/dashboard_provider.dart' as client_dashboard;
-import 'package:helawork/clients/provider/employer_rating_provider.dart';
+//import 'package:helawork/clients/provider/employer_rating_provider.dart';
 import 'package:helawork/clients/provider/rating_provider.dart' as client_rating;
 import 'package:helawork/clients/provider/task_provider.dart' as client_task;
 import 'package:helawork/freelancer/provider/auth_provider.dart' as freelancer_auth;
@@ -43,7 +43,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => client_proposal.ProposalsProvider(apiService: ApiService())), 
         ChangeNotifierProvider(create: (_) => ClientProfileProvider()),
         ChangeNotifierProvider(create: (_) => ClientContractProvider()),
-        ChangeNotifierProvider(create: (_) => EmployerRatingProvider()),
+        //ChangeNotifierProvider(create: (_) => EmployerRatingProvider()),
         ChangeNotifierProvider(create: (_) => client_rating.ClientRatingProvider()),
       ],
       child: const MyApp(),

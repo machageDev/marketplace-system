@@ -71,8 +71,8 @@ class _ProposalViewScreenState extends State<ProposalViewScreen> {
                         ),
                       ),
                       const SizedBox(height: 6),
-                      Row(
-                        children: const [
+                      const Row(
+                        children: [
                           Icon(Icons.star, color: Colors.amber, size: 18),
                           Icon(Icons.star, color: Colors.amber, size: 18),
                           Icon(Icons.star, color: Colors.amber, size: 18),

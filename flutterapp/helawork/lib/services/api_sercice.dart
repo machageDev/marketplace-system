@@ -21,7 +21,7 @@ class ApiService{
   static const String  updateUserProfileUrl = '$baseUrl/apiuserprofile';
   static const String ProposalUrl = '$baseUrl/apiproposal';
   static const String proposalsUrl = '$baseUrl/apiproposal';
-  static const String ratingsUrl = '$baseUrl/ratings';
+  
   static const String apiloginUrl = '$baseUrl/login';
   static const String apiregisterUrl = '$baseUrl/register';
   static const String dashboardUrl = '$baseUrl/dashboard';
@@ -165,7 +165,68 @@ Future<Map<String, dynamic>> login(String name, String password) async {
     };
   }
 }
+// Add this helper method to your ApiService class
+Future<int> _getCurrentUserId() async {
+  try {
+    // Method 1: Get from user profile
+    final userProfile = await getUserProfile();
+    if (userProfile != null && userProfile['user_id'] != null) {
+      return userProfile['user_id'] as int;
+    }
+    
+    // Method 2: Get from token or auth system
+    final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getInt('user_id');
+    if (userId != null) {
+      return userId;
+    }
+    
+    // Method 3: If you have user info in token
+    final String? token = await _getUserToken();
+    if (token != null) {
+      // You might need to decode JWT token to get user ID
+      // This is a simple example - adjust based on your auth system
+      return 1; // Temporary fallback
+    }
+    
+    throw Exception('Could not determine current user ID');
+  } catch (e) {
+    print('Error getting current user ID: $e');
+    throw Exception('Please log in again');
+  }
+}
 
+Future<List<dynamic>> getEmployerRateableTasks() async {
+  try {
+    final String? token = await _getUserToken();
+    
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
+
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/tasks/employer/rateable/'),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token", 
+      },
+    );
+
+    print('Employer Rateable Tasks API Response:');
+    print('URL: $baseUrl/api/tasks/employer/rateable/');
+    print('Status: ${response.statusCode}');
+    print('Body: ${response.body}');
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception("Failed to load employer rateable tasks: ${response.statusCode}");
+    }
+  } catch (e) {
+    print('Error in getEmployerRateableTasks: $e');
+    rethrow;
+  }
+}
 
   Future<Map<String, dynamic>> getActiveSession() async {
     final response = await http.get(Uri.parse(active_sessionUrl));
@@ -179,7 +240,7 @@ Future<Map<String, dynamic>> login(String name, String password) async {
  static Future<List<Map<String, dynamic>>> fetchTasks() async {
   try {
     // Get the token from storage
-    final storage = FlutterSecureStorage();
+    const storage = FlutterSecureStorage();
     final String? token = await storage.read(key: 'auth_token');
     
     // Check if token exists
@@ -245,7 +306,7 @@ Future<Map<String, dynamic>> login(String name, String password) async {
  Future<Map<String, dynamic>> updateUserProfile(
     Map<String, dynamic> profile, String token, String userId) async {
   try {
-    final String url = "$baseUrl/apiuserprofile";
+    const String url = "$baseUrl/apiuserprofile";
 
     var request = http.MultipartRequest("PUT", Uri.parse(url));
 
@@ -1448,35 +1509,7 @@ Future<List<dynamic>> getCompletedTasksForRating(int employerId) async {
     rethrow;
   }
 }
-// Add this method to your ApiService class
-Future<bool> submitFreelancerRating(Map<String, dynamic> data) async {
-  try {
-    final String? token = await _getUserToken();
-    
-    if (token == null) {
-      throw Exception('No authentication token found');
-    }
 
-    final response = await http.post(
-      Uri.parse(freelancerrateUrl),
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer $token", 
-      },
-      body: jsonEncode(data),
-    );
-
-    print('Submit Freelancer Rating API Response:');
-    print('URL: $freelancerrateUrl');
-    print('Status: ${response.statusCode}');
-    print('Body: ${response.body}');
-
-    return response.statusCode == 201;
-  } catch (e) {
-    print('Error in submitFreelancerRating: $e');
-    rethrow;
-  }
-}
   //  Employer accepts contract
   Future<void> acceptContractapi() async {
     final response = await http.post(
@@ -1493,9 +1526,62 @@ Future<bool> submitFreelancerRating(Map<String, dynamic> data) async {
   }
 
 
-  Future<List<dynamic>> fetchEmployerRatings() async {
+Future<Map<String, dynamic>> createRating({
+  required int taskId,
+  required int ratedUserId,
+  required int score,
+  String review = '',
+}) async {
   try {
+    final String? token = await _getUserToken();
     
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/ratings/create/'),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+      body: jsonEncode({
+        'task': taskId,
+        'rated_user': ratedUserId,
+        'score': score,
+        'review': review,
+        // 'rater' is automatically set by backend from request.user
+      }),
+    );
+
+    print('Create Rating API Response:');
+    print('URL: $baseUrl/api/ratings/create/');
+    print('Status: ${response.statusCode}');
+    print('Body: ${response.body}');
+
+    if (response.statusCode == 201) {
+      final responseData = jsonDecode(response.body);
+      return {
+        'success': true,
+        'message': responseData['message'] ?? 'Rating created successfully',
+        'rating_id': responseData['rating_id'],
+        'data': responseData
+      };
+    } else if (response.statusCode == 400) {
+      final errorData = jsonDecode(response.body);
+      throw Exception(errorData['error'] ?? 'Failed to create rating');
+    } else {
+      throw Exception('Failed to create rating: ${response.statusCode}');
+    }
+  } catch (e) {
+    print('Error in createRating: $e');
+    rethrow;
+  }
+}
+
+// Get ratings for a specific user (matches your get_user_ratings endpoint)
+Future<List<dynamic>> getUserRatings(int userId) async {
+  try {
     final String? token = await _getUserToken();
     
     if (token == null) {
@@ -1503,35 +1589,146 @@ Future<bool> submitFreelancerRating(Map<String, dynamic> data) async {
     }
 
     final response = await http.get(
-      Uri.parse(employerratingsUrl),
+      Uri.parse('$baseUrl/api/users/$userId/ratings/'),
       headers: {
         "Content-Type": "application/json",
         "Authorization": "Bearer $token",
       },
     );
 
-    print('Employer Ratings API Response:');
-    print('URL: $employerratingsUrl');
+    print('User Ratings API Response:');
+    print('URL: $baseUrl/api/users/$userId/ratings/');
     print('Status: ${response.statusCode}');
     print('Body: ${response.body}');
 
     if (response.statusCode == 200) {
-      final responseData = jsonDecode(response.body);
-      
-      //  MAGIC: Handle the new API response structure
-      if (responseData is Map && responseData.containsKey('ratings')) {
-        return responseData['ratings']; // Return just the ratings array
-      } else {
-        return responseData; // Fallback for old structure
-      }
+      return jsonDecode(response.body);
     } else {
-      throw Exception('Failed to fetch ratings: ${response.statusCode}');
+      throw Exception('Failed to fetch user ratings: ${response.statusCode}');
     }
   } catch (e) {
-    print('Error in fetchEmployerRatings: $e');
+    print('Error in getUserRatings: $e');
     rethrow;
   }
 }
+
+// Get ratings for a specific task (matches your get_task_ratings endpoint)
+Future<List<dynamic>> getTaskRatings(int taskId) async {
+  try {
+    final String? token = await _getUserToken();
+    
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
+
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/tasks/$taskId/ratings/'),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+    );
+
+    print('Task Ratings API Response:');
+    print('URL: $baseUrl/api/tasks/$taskId/ratings/');
+    print('Status: ${response.statusCode}');
+    print('Body: ${response.body}');
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else if (response.statusCode == 403) {
+      throw Exception('You don\'t have permission to view ratings for this task');
+    } else {
+      throw Exception('Failed to fetch task ratings: ${response.statusCode}');
+    }
+  } catch (e) {
+    print('Error in getTaskRatings: $e');
+    rethrow;
+  }
+}
+
+// Get submission stats (matches your submission_stats endpoint)
+Future<Map<String, dynamic>> getSubmissionStats() async {
+  try {
+    final String? token = await _getUserToken();
+    
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
+
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/submissions/stats/'),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+    );
+
+    print('Submission Stats API Response:');
+    print('URL: $baseUrl/api/submissions/stats/');
+    print('Status: ${response.statusCode}');
+    print('Body: ${response.body}');
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to fetch submission stats: ${response.statusCode}');
+    }
+  } catch (e) {
+    print('Error in getSubmissionStats: $e');
+    rethrow;
+  }
+}
+
+// ========== CONVENIENCE METHODS ==========
+
+// Employer rates Freelancer
+Future<Map<String, dynamic>> submitEmployerRating({
+  required int taskId,
+  required int freelancerId,
+  required int score,
+  String review = '',
+}) async {
+  return await createRating(
+    taskId: taskId,
+    ratedUserId: freelancerId,
+    score: score,
+    review: review,
+  );
+}
+
+// Freelancer rates Employer
+Future<Map<String, dynamic>> submitFreelancerRating({
+  required int taskId,
+  required int employerId,
+  required int score,
+  String review = '',
+}) async {
+  return await createRating(
+    taskId: taskId,
+    ratedUserId: employerId,
+    score: score,
+    review: review,
+  );
+}
+
+// Get current user's received ratings
+Future<List<dynamic>> getMyReceivedRatings() async {
+  final currentUserId = await _getCurrentUserId();
+  return await getUserRatings(currentUserId);
+}
+
+// Get employer's received ratings
+Future<List<dynamic>> getEmployerReceivedRatings(int employerId) async {
+  return await getUserRatings(employerId);
+}
+
+// Get freelancer's received ratings
+Future<List<dynamic>> getFreelancerReceivedRatings(int freelancerId) async {
+  return await getUserRatings(freelancerId);
+}
+ 
+  
 
  Future<String?> initializePayment(double amount) async {
     var url = Uri.parse("$baseUrl/payment/initialize/");
