@@ -22,25 +22,35 @@ class ClientRatingProvider with ChangeNotifier {
     
     try {
       _tasksForRating = await ApiService().getEmployerRateableTasks();
-      print("✅ Loaded ${_tasksForRating.length} tasks for employer rating");
+      print("Loaded ${_tasksForRating.length} tasks for employer rating");
     } catch (e) {
       _error = "Failed to load completed tasks: $e";
-      print("❌ Error fetching employer tasks: $e");
+      print("Error fetching employer tasks: $e");
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
-  // Add this to your ClientRatingProvider class
-void debugTasks() {
-  print("=== CLIENT RATING PROVIDER DEBUG ===");
-  print("tasksForRating: $tasksForRating");
-  print("tasksForRating length: ${tasksForRating.length}");
-  for (int i = 0; i < tasksForRating.length; i++) {
-    print("Task $i: ${tasksForRating[i]}");
+
+  // Get employer ratings from freelancers
+  Future<List<dynamic>> getEmployerRatings(int employerId) async {
+    try {
+      return await ApiService().getEmployerRatings(employerId);
+    } catch (e) {
+      print("Error fetching employer ratings: $e");
+      return [];
+    }
   }
-  print("=====================================");
-}
+
+  void debugTasks() {
+    print("=== CLIENT RATING PROVIDER DEBUG ===");
+    print("tasksForRating: $tasksForRating");
+    print("tasksForRating length: ${tasksForRating.length}");
+    for (int i = 0; i < tasksForRating.length; i++) {
+      print("Task $i: ${tasksForRating[i]}");
+    }
+    print("=====================================");
+  }
 
   // Employer rates Freelancer
   Future<bool> submitEmployerRating({
@@ -62,8 +72,7 @@ void debugTasks() {
       );
       
       if (result['success'] == true) {
-        print("✅ Employer rating submitted successfully");
-        // Remove the rated task from the list
+        print("Employer rating submitted successfully");
         _tasksForRating.removeWhere((task) => task['id'] == taskId || task['task_id'] == taskId);
         return true;
       } else {
@@ -73,7 +82,7 @@ void debugTasks() {
       
     } catch (e) {
       _error = "Failed to submit rating: $e";
-      print("❌ Error submitting rating: $e");
+      print("Error submitting rating: $e");
       return false;
     } finally {
       _isLoading = false;
@@ -101,7 +110,7 @@ void debugTasks() {
       );
       
       if (result['success'] == true) {
-        print("✅ Rating created successfully: ${result['rating_id']}");
+        print("Rating created successfully: ${result['rating_id']}");
         await fetchUserRatings(ratedUserId);
         return true;
       } else {
@@ -111,7 +120,7 @@ void debugTasks() {
       
     } catch (e) {
       _error = "Failed to create rating: $e";
-      print("❌ Error creating rating: $e");
+      print("Error creating rating: $e");
       return false;
     } finally {
       _isLoading = false;
@@ -127,10 +136,10 @@ void debugTasks() {
     
     try {
       _ratings = await ApiService().getUserRatings(userId);
-      print("✅ Loaded ${_ratings.length} ratings for user $userId");
+      print("Loaded ${_ratings.length} ratings for user $userId");
     } catch (e) {
       _error = "Failed to load user ratings: $e";
-      print("❌ Error fetching user ratings: $e");
+      print("Error fetching user ratings: $e");
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -145,10 +154,10 @@ void debugTasks() {
     
     try {
       _ratings = await ApiService().getTaskRatings(taskId);
-      print("✅ Loaded ${_ratings.length} ratings for task $taskId");
+      print("Loaded ${_ratings.length} ratings for task $taskId");
     } catch (e) {
       _error = "Failed to load task ratings: $e";
-      print("❌ Error fetching task ratings: $e");
+      print("Error fetching task ratings: $e");
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -204,9 +213,6 @@ void debugTasks() {
 
   // Helper method to get current user ID
   int _getCurrentUserId() {
-    // TODO: Implement based on your auth system
-    // This should return the actual logged-in user ID
-    // Example: return AuthService.currentUser.id;
-    return 1; // Replace with actual implementation
+    return 1;
   }
 }

@@ -227,7 +227,38 @@ Future<List<dynamic>> getEmployerRateableTasks() async {
     rethrow;
   }
 }
+// Add this to your ApiService class
+Future<List<dynamic>> getEmployerRatings(int employerId) async {
+  try {
+    final String? token = await _getUserToken();
+    
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
 
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/employers/$employerId/ratings/'),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token", 
+      },
+    );
+
+    print('Employer Ratings API Response:');
+    print('URL: $baseUrl/api/employers/$employerId/ratings/');
+    print('Status: ${response.statusCode}');
+    print('Body: ${response.body}');
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception("Failed to load employer ratings: ${response.statusCode}");
+    }
+  } catch (e) {
+    print('Error in getEmployerRatings: $e');
+    rethrow;
+  }
+}
   Future<Map<String, dynamic>> getActiveSession() async {
     final response = await http.get(Uri.parse(active_sessionUrl));
     return json.decode(response.body);

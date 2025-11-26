@@ -19,10 +19,7 @@ class _ClientRatingScreenState extends State<ClientRatingScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<ClientRatingProvider>(context, listen: false)
-          .fetchEmployerRateableTasks()
-          .then((_) {
-        Provider.of<ClientRatingProvider>(context, listen: false);
-      });
+          .fetchEmployerRateableTasks();
     });
   }
 
@@ -39,6 +36,144 @@ class _ClientRatingScreenState extends State<ClientRatingScreen> {
           blue: blue,
         );
       },
+    );
+  }
+
+  void _showEmployerRatings(BuildContext context, dynamic task) {
+    final employer = task['employer'];
+    if (employer == null) return;
+    
+    final employerId = employer['id'];
+    
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text("How Freelancers Rated Me", style: TextStyle(color: blue)),
+        content: FutureBuilder(
+          future: Provider.of<ClientRatingProvider>(context, listen: false)
+              .getEmployerRatings(employerId),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            
+            if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isEmpty) {
+              return Text("No ratings received yet", style: TextStyle(color: Colors.grey));
+            }
+            
+            final ratings = snapshot.data!;
+            return _buildEmployerRatingsList(ratings);
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Close"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmployerRatingsList(List<dynamic> ratings) {
+    double averageRating = 0;
+    if (ratings.isNotEmpty) {
+      final total = ratings.fold<int>(0, (sum, rating) => sum + (rating['score'] as int));
+      averageRating = total / ratings.length;
+    }
+
+    return SizedBox(
+      height: 400,
+      width: 400,
+      child: Column(
+        children: [
+          Card(
+            color: blue.withOpacity(0.1),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  Text(
+                    "Average Rating",
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: blue),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        averageRating.toStringAsFixed(1),
+                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(width: 8),
+                      ...List.generate(5, (starIndex) => Icon(
+                        Icons.star,
+                        size: 20,
+                        color: starIndex < averageRating.round() ? Colors.amber : Colors.grey,
+                      )),
+                    ],
+                  ),
+                  Text(
+                    "Based on ${ratings.length} rating${ratings.length == 1 ? '' : 's'}",
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: ListView.builder(
+              itemCount: ratings.length,
+              itemBuilder: (context, index) {
+                final rating = ratings[index];
+                return Card(
+                  margin: const EdgeInsets.symmetric(vertical: 4),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            ...List.generate(5, (starIndex) => Icon(
+                              Icons.star,
+                              size: 16,
+                              color: starIndex < (rating['score'] as int) ? Colors.amber : Colors.grey,
+                            )),
+                            const Spacer(),
+                            Text(
+                              "${rating['score']}/5",
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          "Task: ${rating['task']?['title'] ?? 'Unknown Task'}",
+                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "From: ${rating['freelancer']?['name'] ?? 'Freelancer'}",
+                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        ),
+                        if (rating['review'] != null && rating['review'].isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            rating['review'],
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -231,21 +366,35 @@ class _ClientRatingScreenState extends State<ClientRatingScreen> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  "Completed by: $freelancerName",
-                  style: const TextStyle(fontSize: 13, color: Colors.grey),
+                Expanded(
+                  child: Text(
+                    "Completed by: $freelancerName",
+                    style: const TextStyle(fontSize: 13, color: Colors.grey),
+                  ),
                 ),
-                const Spacer(),
+                const SizedBox(width: 8),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: blue,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   ),
                   onPressed: () => _showRatingDialog(context, task),
                   child: const Text(
                     "Rate Work",
                     style: TextStyle(color: Colors.white, fontSize: 12),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: blue),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  onPressed: () => _showEmployerRatings(context, task),
+                  child: Text(
+                    "My Ratings",
+                    style: TextStyle(color: blue, fontSize: 11),
                   ),
                 ),
               ],
