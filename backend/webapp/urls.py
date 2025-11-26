@@ -47,7 +47,7 @@ urlpatterns = [
  
     path('completetask', views.task_completion_list, name='task-completion-list'),
     path('task-completions/<int:pk>/', views.task_completion_detail, name='task-completion-detail'),
-    
+    path('api/tasks/employer/rateable/', views.employer_rateable_tasks, name='employer-rateable-tasks'),
     
    
    # path('payment/callback/', views.payment_callback, name='payment_callback'),

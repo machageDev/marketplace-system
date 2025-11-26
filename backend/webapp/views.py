@@ -1151,3 +1151,50 @@ def submission_stats(request):
             {"error": str(e)}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+@api_view(['GET'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def employer_rateable_tasks(request):
+    if request.method == 'GET':
+        try:
+            
+            employer = Employer.objects.filter(contact_email=request.user.email).first()
+            
+            if not employer:
+                return JsonResponse([], safe=False)
+            
+            # Get completed tasks with assigned freelancers
+            completed_tasks = Task.objects.filter(
+                employer=employer,
+                assigned_user__isnull=False,
+                status='completed'
+            ).select_related('assigned_user')
+
+            tasks_data = []
+            for task in completed_tasks:
+                # Check if already rated
+                already_rated = Rating.objects.filter(
+                    task=task,
+                    rater=request.user,  # This is User model
+                    rated_user=task.assigned_user  # This is also User model
+                ).exists()
+                
+                if not already_rated:
+                    tasks_data.append({
+                        'id': task.task_id,
+                        'title': task.title,
+                        'description': task.description,
+                        'freelancer': {
+                            'id': task.assigned_user.user_id,
+                            'username': task.assigned_user.name,
+                        }
+                    })
+
+            return JsonResponse(tasks_data, safe=False)
+            
+        except Exception as e:
+            print(f"Error: {e}")
+            return JsonResponse([], safe=False)
+    
+    return JsonResponse([], safe=False)      
