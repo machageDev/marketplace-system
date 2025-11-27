@@ -141,206 +141,312 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: const Text('Create New Task'),
         backgroundColor: Colors.blueAccent,
         foregroundColor: Colors.white,
-        elevation: 2,
+        elevation: 0,
         centerTitle: true,
       ),
       body: Consumer<TaskProvider>(
         builder: (context, taskProvider, _) {
           return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(20),
             child: Form(
               key: _formKey,
               child: Column(
                 children: [
                   // Header Card with Blue Gradient
-                  Card(
-                    elevation: 6,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Colors.blueAccent, Colors.lightBlueAccent],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Colors.blueAccent, Colors.lightBlueAccent],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.blueAccent.withOpacity(0.3),
+                          blurRadius: 15,
+                          offset: const Offset(0, 5),
                         ),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      padding: const EdgeInsets.all(20),
-                      child: const Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Create New Task',
-                            style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
+                      ],
+                    ),
+                    child: const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Create New Task',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
                           ),
-                          SizedBox(height: 4),
-                          Text(
-                            'This task will be visible to all freelancers',
-                            style: TextStyle(color: Colors.white70),
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          'This task will be visible to all freelancers',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 24),
 
-                  // Form Card with Blue Accent Border
-                  Card(
-                    elevation: 4,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: const BorderSide(color: Colors.blueAccent, width: 2),
+                  // Form Card with Blue Background
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Colors.blueAccent, Colors.lightBlueAccent],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.blueAccent.withOpacity(0.3),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
                     child: Padding(
-                      padding: const EdgeInsets.all(20),
+                      padding: const EdgeInsets.all(24),
                       child: Column(
                         children: [
-                          TextFormField(
-                            controller: _titleController,
-                            decoration: const InputDecoration(
-                              labelText: 'Task Title *',
-                              border: OutlineInputBorder(),
-                              focusedBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(color: Colors.blueAccent, width: 2)),
-                              hintText: 'Enter a clear task title',
+                          // Title Field
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                            validator: _validateTitle,
-                          ),
-                          const SizedBox(height: 16),
-                          TextFormField(
-                            controller: _descriptionController,
-                            maxLines: 5,
-                            decoration: const InputDecoration(
-                              labelText: 'Description *',
-                              border: OutlineInputBorder(),
-                              focusedBorder: OutlineInputBorder(
-                                  borderSide: BorderSide(color: Colors.lightBlueAccent, width: 2)),
-                              hintText: 'Describe your task in detail',
-                            ),
-                            validator: _validateDescription,
-                          ),
-                          const SizedBox(height: 16),
-                          DropdownButtonFormField<String>(
-                            value: _selectedCategory,
-                            decoration: const InputDecoration(
-                              labelText: 'Category *',
-                              border: OutlineInputBorder(),
-                              hintText: 'Select a category',
-                            ),
-                            items: [
-                              const DropdownMenuItem(
-                                value: null,
-                                child: Text('Select a category', style: TextStyle(color: Colors.grey)),
-                              ),
-                              ..._categories
-                                  .map((cat) => DropdownMenuItem(
-                                        value: cat['value'],
-                                        child: Text(cat['label']!),
-                                      ))
-                                  ,
-                            ],
-                            onChanged: (val) => setState(() => _selectedCategory = val),
-                            validator: _validateCategory,
-                          ),
-                          const SizedBox(height: 16),
-                          TextFormField(
-                            controller: _budgetController,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Budget (Ksh)',
-                              border: OutlineInputBorder(),
-                              prefixText: 'Ksh ',
-                              hintText: 'Optional',
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          InkWell(
-                            onTap: () => _selectDate(context),
-                            child: InputDecorator(
+                            child: TextFormField(
+                              controller: _titleController,
                               decoration: const InputDecoration(
-                                labelText: 'Deadline',
-                                border: OutlineInputBorder(),
+                                labelText: 'Task Title *',
+                                border: InputBorder.none,
+                                contentPadding: EdgeInsets.all(16),
+                                hintText: 'Enter a clear task title',
                               ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    _selectedDeadline == null
-                                        ? 'Select date (optional)'
-                                        : "${_selectedDeadline!.toLocal()}".split(' ')[0],
-                                    style: TextStyle(
-                                      color: _selectedDeadline == null ? Colors.grey : Colors.black,
-                                    ),
+                              validator: _validateTitle,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Description Field
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: TextFormField(
+                              controller: _descriptionController,
+                              maxLines: 5,
+                              decoration: const InputDecoration(
+                                labelText: 'Description *',
+                                border: InputBorder.none,
+                                contentPadding: EdgeInsets.all(16),
+                                hintText: 'Describe your task in detail',
+                              ),
+                              validator: _validateDescription,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Category Field
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              child: DropdownButtonFormField<String>(
+                                value: _selectedCategory,
+                                decoration: const InputDecoration(
+                                  labelText: 'Category *',
+                                  border: InputBorder.none,
+                                ),
+                                items: [
+                                  const DropdownMenuItem(
+                                    value: null,
+                                    child: Text('Select a category', style: TextStyle(color: Colors.grey)),
                                   ),
-                                  const Icon(Icons.calendar_today, color: Colors.blueAccent),
+                                  ..._categories
+                                      .map((cat) => DropdownMenuItem(
+                                            value: cat['value'],
+                                            child: Text(cat['label']!),
+                                          )),
                                 ],
+                                onChanged: (val) => setState(() => _selectedCategory = val),
+                                validator: _validateCategory,
                               ),
                             ),
                           ),
                           const SizedBox(height: 16),
-                          TextFormField(
-                            controller: _skillsController,
-                            decoration: const InputDecoration(
-                              labelText: 'Required Skills',
-                              border: OutlineInputBorder(),
-                              hintText: 'e.g., Flutter, Django, UI/UX (optional)',
+
+                          // Budget Field
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: TextFormField(
+                              controller: _budgetController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                labelText: 'Budget (Ksh)',
+                                border: InputBorder.none,
+                                contentPadding: EdgeInsets.all(16),
+                                prefixText: 'Ksh ',
+                                hintText: 'Optional',
+                              ),
                             ),
                           ),
                           const SizedBox(height: 16),
-                          SwitchListTile(
-                            title: const Text('Mark as Urgent'),
-                            subtitle: const Text('Highlight this task to freelancers'),
-                            value: _isUrgent,
-                            activeColor: Colors.blueAccent,
-                            onChanged: (v) => setState(() => _isUrgent = v),
+
+                          // Deadline Field
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: InkWell(
+                              onTap: () => _selectDate(context),
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      _selectedDeadline == null
+                                          ? 'Select deadline (optional)'
+                                          : "${_selectedDeadline!.toLocal()}".split(' ')[0],
+                                      style: TextStyle(
+                                        color: _selectedDeadline == null ? Colors.grey : Colors.black,
+                                      ),
+                                    ),
+                                    const Icon(Icons.calendar_today, color: Colors.blueAccent),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Skills Field
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: TextFormField(
+                              controller: _skillsController,
+                              decoration: const InputDecoration(
+                                labelText: 'Required Skills',
+                                border: InputBorder.none,
+                                contentPadding: EdgeInsets.all(16),
+                                hintText: 'e.g., Flutter, Django, UI/UX (optional)',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Urgent Switch
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: SwitchListTile(
+                              title: const Text('Mark as Urgent'),
+                              subtitle: const Text('Highlight this task to freelancers'),
+                              value: _isUrgent,
+                              activeColor: Colors.blueAccent,
+                              onChanged: (v) => setState(() => _isUrgent = v),
+                            ),
                           ),
                           const SizedBox(height: 24),
+
+                          // Buttons
                           Column(
                             children: [
-                              ElevatedButton(
-                                onPressed: taskProvider.isLoading ? null : _createTask,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blueAccent,
-                                  foregroundColor: Colors.white,
-                                  minimumSize: const Size(double.infinity, 50),
+                              Container(
+                                width: double.infinity,
+                                height: 54,
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(12),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.1),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
                                 ),
-                                child: taskProvider.isLoading
-                                    ? const SizedBox(
-                                        height: 20,
-                                        width: 20,
-                                        child: CircularProgressIndicator(
-                                          color: Colors.white,
-                                          strokeWidth: 2,
+                                child: ElevatedButton(
+                                  onPressed: taskProvider.isLoading ? null : _createTask,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.blueAccent,
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  child: taskProvider.isLoading
+                                      ? const SizedBox(
+                                          height: 20,
+                                          width: 20,
+                                          child: CircularProgressIndicator(
+                                            color: Colors.white,
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Text(
+                                          'Create Task',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 16,
+                                          ),
                                         ),
-                                      )
-                                    : const Text('Create Task'),
+                                ),
                               ),
                               const SizedBox(height: 12),
-                              OutlinedButton(
-                                onPressed: taskProvider.isLoading
-                                    ? null
-                                    : () {
-                                        Navigator.pushReplacement(
-                                          context,
-                                          MaterialPageRoute(builder: (_) => const TasksScreen()),
-                                        );
-                                      },
-                                style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(color: Colors.lightBlueAccent, width: 2),
-                                  minimumSize: const Size(double.infinity, 50),
+                              SizedBox(
+                                width: double.infinity,
+                                height: 54,
+                                child: OutlinedButton(
+                                  onPressed: taskProvider.isLoading
+                                      ? null
+                                      : () {
+                                          Navigator.pushReplacement(
+                                            context,
+                                            MaterialPageRoute(builder: (_) => const TasksScreen()),
+                                          );
+                                        },
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.white,
+                                    side: const BorderSide(color: Colors.white, width: 2),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    'Cancel',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 16,
+                                    ),
+                                  ),
                                 ),
-                                child: const Text('Cancel'),
                               ),
                             ],
                           ),
