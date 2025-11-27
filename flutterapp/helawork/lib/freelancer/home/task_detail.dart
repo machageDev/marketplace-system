@@ -1,6 +1,7 @@
 // In TaskDetailScreen.dart
 import 'package:flutter/material.dart';
 import 'package:helawork/clients/provider/client_profile_provider.dart';
+import 'package:helawork/freelancer/home/proposal_screen.dart';
 import 'package:provider/provider.dart';
 
 class TaskDetailScreen extends StatefulWidget {
@@ -36,21 +37,34 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     }
   }
 
+  void _navigateToProposalScreen() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ProposalsScreen(
+          taskId: widget.taskId,
+          task: widget.task,
+          employer: widget.employer,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F111A), // Dark background from login
+      backgroundColor: const Color(0xFF0F111A),
       appBar: AppBar(
         title: const Text(
           'Task Details',
           style: TextStyle(
             fontWeight: FontWeight.bold,
-            color: Colors.white, // White text like login screen
+            color: Colors.white,
           ),
         ),
-        backgroundColor: const Color(0xFF1E1E2C), // Input field color from login
+        backgroundColor: const Color(0xFF1E1E2C),
         elevation: 1,
-        iconTheme: const IconThemeData(color: Colors.white), // White icons
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Consumer<ClientProfileProvider>(
         builder: (context, clientProvider, _) {
@@ -86,7 +100,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   Widget _buildMainTaskCard() {
     return Card(
       elevation: 2,
-      color: const Color(0xFF1E1E2C), // Input field color from login
+      color: const Color(0xFF1E1E2C),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
       ),
@@ -104,14 +118,14 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
-                      color: Colors.white, // White text
+                      color: Colors.white,
                     ),
                   ),
                 ),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.2), // Darker green background
+                    color: Colors.green.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(4),
                     border: Border.all(color: Colors.green),
                   ),
@@ -119,7 +133,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                     'Available',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.green[300], // Lighter green text
+                      color: Colors.green[300],
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -134,7 +148,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: Colors.grey[400], // Lighter grey for better contrast
+                color: Colors.grey[400],
                 fontSize: 14,
               ),
             ),
@@ -145,30 +159,30 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0F111A).withOpacity(0.5), // Darker background
+                  color: const Color(0xFF0F111A).withOpacity(0.5),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Row(
                   children: [
                     if (widget.task['budget'] != null) ...[
-                      Icon(Icons.attach_money, size: 16, color: Colors.green[400]), // Green money icon
+                      Icon(Icons.attach_money, size: 16, color: Colors.green[400]),
                       const SizedBox(width: 4),
                       Text(
                         '\$${widget.task['budget']}',
                         style: const TextStyle(
                           fontWeight: FontWeight.w600,
-                          color: Colors.white, // White text
+                          color: Colors.white,
                         ),
                       ),
                       const SizedBox(width: 16),
                     ],
                     if (widget.task['deadline'] != null) ...[
-                      Icon(Icons.calendar_today, size: 16, color: Colors.orange[400]), // Orange calendar icon
+                      Icon(Icons.calendar_today, size: 16, color: Colors.orange[400]),
                       const SizedBox(width: 4),
                       Text(
                         widget.task['deadline'],
                         style: TextStyle(
-                          color: Colors.grey[300], // Lighter grey
+                          color: Colors.grey[300],
                         ),
                       ),
                     ],
@@ -184,7 +198,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   Widget _buildDescriptionCard() {
     return Card(
       elevation: 2,
-      color: const Color(0xFF1E1E2C), // Input field color from login
+      color: const Color(0xFF1E1E2C),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
       ),
@@ -198,7 +212,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: Colors.white, // White text
+                color: Colors.white,
               ),
             ),
             const SizedBox(height: 8),
@@ -207,7 +221,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               style: TextStyle(
                 fontSize: 14,
                 height: 1.5,
-                color: Colors.grey[300], // Lighter grey for better readability
+                color: Colors.grey[300],
               ),
             ),
           ],
@@ -219,7 +233,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   Widget _buildTaskDetailsCard() {
     return Card(
       elevation: 2,
-      color: const Color(0xFF1E1E2C), // Input field color from login
+      color: const Color(0xFF1E1E2C),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
       ),
@@ -233,7 +247,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: Colors.white, // White text
+                color: Colors.white,
               ),
             ),
             const SizedBox(height: 12),
@@ -265,7 +279,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               '$label:',
               style: TextStyle(
                 fontWeight: FontWeight.w500,
-                color: Colors.grey[400], // Medium grey for labels
+                color: Colors.grey[400],
               ),
             ),
           ),
@@ -273,7 +287,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
             child: Text(
               value,
               style: const TextStyle(
-                color: Colors.white, // White text for values
+                color: Colors.white,
               ),
             ),
           ),
@@ -287,7 +301,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     
     return Card(
       elevation: 2,
-      color: const Color(0xFF1E1E2C), // Input field color from login
+      color: const Color(0xFF1E1E2C),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
       ),
@@ -301,17 +315,17 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: Colors.white, // White text
+                color: Colors.white,
               ),
             ),
             const SizedBox(height: 12),
             
             if (clientProvider.isLoading)
-              const Center(child: CircularProgressIndicator(color: Colors.orange)), // Orange loading like login
+              const Center(child: CircularProgressIndicator(color: Colors.orange)),
             
             if (clientProvider.errorMessage != null)
               Text('Error loading client profile', 
-                   style: TextStyle(color: Colors.red[300])), // Lighter red for dark theme
+                   style: TextStyle(color: Colors.red[300])),
 
             if (!clientProvider.isLoading)
               _buildClientProfile(profileData),
@@ -332,7 +346,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F111A).withOpacity(0.5), // Darker background
+        color: const Color(0xFF0F111A).withOpacity(0.5),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Column(
@@ -344,12 +358,12 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.2), // Orange accent like login
+                  color: Colors.orange.withOpacity(0.2),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
                   Icons.person,
-                  color: Colors.orange, // Orange icon like login
+                  color: Colors.orange,
                   size: 20,
                 ),
               ),
@@ -362,7 +376,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                       'Posted by:',
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.grey[400], // Medium grey
+                        color: Colors.grey[400],
                       ),
                     ),
                     Text(
@@ -370,7 +384,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
-                        color: Colors.white, // White text
+                        color: Colors.white,
                       ),
                     ),
                     if (email != null) ...[
@@ -383,7 +397,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                             email,
                             style: TextStyle(
                               fontSize: 11,
-                              color: Colors.grey[400], // Medium grey
+                              color: Colors.grey[400],
                             ),
                           ),
                         ],
@@ -418,7 +432,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               '$label:',
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.grey[400], // Medium grey
+                color: Colors.grey[400],
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -428,7 +442,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               value,
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.grey[300], // Lighter grey
+                color: Colors.grey[300],
               ),
             ),
           ),
@@ -447,16 +461,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Apply for task functionality coming soon!'),
-                    backgroundColor: Colors.orange, // Orange like login
-                  ),
-                );
-              },
+              onPressed: _navigateToProposalScreen, // UPDATED: Now navigates to ProposalScreen
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange, // Orange button like login
+                backgroundColor: Colors.orange,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 shape: RoundedRectangleBorder(
@@ -484,12 +491,12 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(6),
               ),
-              side: BorderSide(color: Colors.grey[600]!), // Darker border for dark theme
+              side: BorderSide(color: Colors.grey[600]!),
             ),
             child: Text(
               'Back to Tasks',
               style: TextStyle(
-                color: Colors.grey[300], // Light grey text
+                color: Colors.grey[300],
               ),
             ),
           ),

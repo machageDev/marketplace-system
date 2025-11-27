@@ -7,7 +7,7 @@ import '../models/proposal.dart';
 
 
 class ProposalsScreen extends StatefulWidget {
-  const ProposalsScreen({super.key});
+  const ProposalsScreen({super.key, required int taskId, required Map<String, dynamic> task, required Map<String, dynamic> employer});
 
   @override
   State<ProposalsScreen> createState() => _ProposalsScreenState();

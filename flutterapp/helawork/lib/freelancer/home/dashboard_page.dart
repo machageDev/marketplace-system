@@ -23,7 +23,7 @@ class _DashboardPageState extends State<DashboardPage> {
     const SizedBox(), 
     const TaskPage(), 
     const WalletScreen(token: '',),
-    const ProposalsScreen(), 
+    const ProposalsScreen(taskId: 0, task: {}, employer: {},), 
     const SubmitTaskScreen(taskId:0), 
   ];
 
