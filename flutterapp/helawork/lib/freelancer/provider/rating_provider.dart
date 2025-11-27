@@ -10,71 +10,32 @@ class RatingProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
 
-  // Fetch ratings for current user (both given and received)
-  Future<void> fetchMyRatings() async {
+  // Fetch ratings for a specific client (for profile pages)
+  Future<void> fetchClientRatings(int clientId) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
     
     try {
-      // Get current user ID from your auth system
-      final currentUserId = await _getCurrentUserId();
-      final data = await ApiService.getData('/users/$currentUserId/ratings/');
+      final data = await ApiService.getData('/users/$clientId/ratings/');
       _ratings = data;
-      print(" Loaded ${_ratings.length} ratings for user $currentUserId");
+      print(" Loaded ${_ratings.length} ratings for client $clientId");
     } catch (e) {
-      _error = "Failed to load ratings: $e";
-      print(" Error fetching ratings: $e");
+      _error = "Failed to load client ratings: $e";
+      print(" Error fetching client ratings: $e");
     }
     
     _isLoading = false;
     notifyListeners();
   }
 
-  // Fetch ratings for a specific user (for profile pages)
-  Future<void> fetchUserRatings(int userId) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
-    
-    try {
-      final data = await ApiService.getData('/users/$userId/ratings/');
-      _ratings = data;
-      print("✅ Loaded ${_ratings.length} ratings for user $userId");
-    } catch (e) {
-      _error = "Failed to load user ratings: $e";
-      print("❌ Error fetching user ratings: $e");
-    }
-    
-    _isLoading = false;
-    notifyListeners();
-  }
-
-  // Fetch ratings for a specific task
-  Future<void> fetchTaskRatings(int taskId) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
-    
-    try {
-      final data = await ApiService.getData('/tasks/$taskId/ratings/');
-      _ratings = data;
-      print("✅ Loaded ${_ratings.length} ratings for task $taskId");
-    } catch (e) {
-      _error = "Failed to load task ratings: $e";
-      print("❌ Error fetching task ratings: $e");
-    }
-    
-    _isLoading = false;
-    notifyListeners();
-  }
-
-  // Submit a new rating (unified for both employer→freelancer and freelancer→employer)
-  Future<void> submitRating({
+  // Submit a rating for a client (freelancer rates client)
+  Future<void> rateClient({
     required int taskId,
-    required int ratedUserId, // The user being rated
+    required int clientId, // The client being rated
+    required int freelancerId, // The freelancer giving the rating
     required int score,
-    String review = '', required int freelancerId, required int employerId,
+    String review = '',
   }) async {
     _isLoading = true;
     notifyListeners();
@@ -82,19 +43,21 @@ class RatingProvider with ChangeNotifier {
     try {
       await ApiService.postData('/ratings/create/', {
         'task': taskId,
-        'rated_user': ratedUserId,
+        'rated_user': clientId, // The client receiving the rating
+        'rater_user': freelancerId, // The freelancer giving the rating
         'score': score,
         'review': review,
+        'rating_type': 'client_rating', // Specify this is a client rating
       });
       
-      print("✅ Rating submitted successfully for user $ratedUserId");
+      print(" Client rating submitted successfully for client $clientId");
       
-      // Refresh ratings after submission
-      await fetchMyRatings();
+      // Refresh client ratings after submission
+      await fetchClientRatings(clientId);
       
     } catch (e) {
-      _error = "Failed to submit rating: $e";
-      print("❌ Error submitting rating: $e");
+      _error = "Failed to submit client rating: $e";
+      print(" Error submitting client rating: $e");
       rethrow;
     } finally {
       _isLoading = false;
@@ -102,7 +65,94 @@ class RatingProvider with ChangeNotifier {
     }
   }
 
-  // Get average rating for a user
+  // Get client's average rating
+  double getClientAverageRating() {
+    if (_ratings.isEmpty) return 0.0;
+    
+    final clientRatings = _ratings.where((rating) => 
+        rating['rating_type'] == 'client_rating' || 
+        rating['rated_user_type'] == 'client').toList();
+    
+    if (clientRatings.isEmpty) return 0.0;
+    
+    final total = clientRatings.fold(0, (sum, rating) => sum + (rating['score'] as int));
+    return total / clientRatings.length;
+  }
+
+  // Get client rating statistics
+  Map<int, int> getClientRatingStats() {
+    final stats = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0};
+    
+    final clientRatings = _ratings.where((rating) => 
+        rating['rating_type'] == 'client_rating' || 
+        rating['rated_user_type'] == 'client').toList();
+    
+    for (final rating in clientRatings) {
+      final score = rating['score'] as int;
+      if (stats.containsKey(score)) {
+        stats[score] = stats[score]! + 1;
+      }
+    }
+    
+    return stats;
+  }
+
+  // Get all client reviews with details
+  List<Map<String, dynamic>> getClientReviews() {
+    final clientRatings = _ratings.where((rating) => 
+        rating['rating_type'] == 'client_rating' || 
+        rating['rated_user_type'] == 'client').toList();
+    
+    return clientRatings.map((rating) {
+      return {
+        'id': rating['id'],
+        'score': rating['score'],
+        'review': rating['review'] ?? '',
+        'created_at': rating['created_at'],
+        'rater_name': rating['rater_user']?['username'] ?? 'Anonymous',
+        'rater_avatar': rating['rater_user']?['profile_picture'],
+        'task_title': rating['task']?['title'] ?? 'Completed Task',
+      };
+    }).toList();
+  }
+
+  // Get total number of client ratings
+  int getClientRatingCount() {
+    return _ratings.where((rating) => 
+        rating['rating_type'] == 'client_rating' || 
+        rating['rated_user_type'] == 'client').length;
+  }
+
+  // Check if current freelancer has already rated this client for a specific task
+  bool hasRatedClient(int clientId, int freelancerId, int taskId) {
+    return _ratings.any((rating) =>
+        rating['rated_user'] == clientId &&
+        rating['rater_user'] == freelancerId &&
+        rating['task'] == taskId &&
+        (rating['rating_type'] == 'client_rating' || rating['rated_user_type'] == 'client'));
+  }
+
+  // Fetch ratings for current user (both given and received)
+  Future<void> fetchMyRatings() async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+    
+    try {
+      final currentUserId = await _getCurrentUserId();
+      final data = await ApiService.getData('/users/$currentUserId/ratings/');
+      _ratings = data;
+      print("✅ Loaded ${_ratings.length} ratings for user $currentUserId");
+    } catch (e) {
+      _error = "Failed to load ratings: $e";
+      print("❌ Error fetching ratings: $e");
+    }
+    
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  // Get average rating for any user
   double getAverageRating(List<dynamic> userRatings) {
     if (userRatings.isEmpty) return 0.0;
     
@@ -110,7 +160,7 @@ class RatingProvider with ChangeNotifier {
     return total / userRatings.length;
   }
 
-  // Get rating statistics
+  // Get general rating statistics
   Map<int, int> getRatingStats(List<dynamic> userRatings) {
     final stats = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0};
     
