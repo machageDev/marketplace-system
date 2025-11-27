@@ -13,6 +13,7 @@ import 'package:helawork/freelancer/provider/dashbaord_provider.dart' as freelan
 import 'package:helawork/freelancer/provider/forgot_password_provider.dart';
 import 'package:helawork/freelancer/provider/proposal_provider.dart';
 import 'package:helawork/freelancer/provider/rating_provider.dart' as freelancer_rating;
+import 'package:helawork/freelancer/provider/submission_provider.dart';
 import 'package:helawork/freelancer/provider/task_provider.dart';
 import 'package:helawork/freelancer/provider/user_profile_provider.dart';
 import 'package:helawork/freelancer/screens/login_screen.dart'; 
@@ -35,6 +36,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => ProposalProvider()),
         ChangeNotifierProvider(create: (_) => ContractProvider()..fetchContracts()),
         ChangeNotifierProvider(create: (_) => freelancer_rating.RatingProvider()),
+        ChangeNotifierProvider(create: (_) => SubmissionProvider()),
         
         // Client Providers
         ChangeNotifierProvider(create: (_) => client_dashboard.DashboardProvider(apiService: ApiService())),

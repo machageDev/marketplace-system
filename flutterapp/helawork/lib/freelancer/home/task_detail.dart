@@ -39,11 +39,18 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[900], 
+      backgroundColor: const Color(0xFF0F111A), // Dark background from login
       appBar: AppBar(
-        title: const Text('Task Details'),
-        backgroundColor: Theme.of(context).colorScheme.primary, 
-        elevation: 0,
+        title: const Text(
+          'Task Details',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.white, // White text like login screen
+          ),
+        ),
+        backgroundColor: const Color(0xFF1E1E2C), // Input field color from login
+        elevation: 1,
+        iconTheme: const IconThemeData(color: Colors.white), // White icons
       ),
       body: Consumer<ClientProfileProvider>(
         builder: (context, clientProvider, _) {
@@ -51,13 +58,22 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                // Task details section
-                _buildTaskDetails(),
+                // Main Task Card
+                _buildMainTaskCard(),
+                const SizedBox(height: 16),
 
-                // Client Section with API data
+                // Description Section
+                _buildDescriptionCard(),
+                const SizedBox(height: 16),
+
+                // Task Details Section
+                _buildTaskDetailsCard(),
+                const SizedBox(height: 16),
+
+                // Client Information
                 _buildClientSection(context, clientProvider),
                 
-                // Action buttons
+                // Action Buttons
                 _buildActionButtons(context),
               ],
             ),
@@ -67,143 +83,173 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     );
   }
 
-  Widget _buildTaskDetails() {
+  Widget _buildMainTaskCard() {
     return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 2,
+      color: const Color(0xFF1E1E2C), // Input field color from login
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Task Title
+            // Title and Status
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.task['title'] ?? 'Untitled Task',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: Colors.white, // White text
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.2), // Darker green background
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: Colors.green),
+                  ),
+                  child: Text(
+                    'Available',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.green[300], // Lighter green text
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            // Description preview
             Text(
-              widget.task['title'] ?? 'Untitled Task',
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.black,
+              widget.task['description'] ?? 'No description provided',
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: Colors.grey[400], // Lighter grey for better contrast
+                fontSize: 14,
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
 
-            // Task Status
-            _buildTaskStatus(widget.task),
-            const SizedBox(height: 20),
-
-            // Task Description
-            _buildDetailSectionText(
-              'Description',
-              widget.task['description'] ?? 'No description provided',
-            ),
-            const SizedBox(height: 20),
-
-            // Task Details
-            _buildTaskDetailsSection(),
+            // Budget and Deadline
+            if (widget.task['budget'] != null || widget.task['deadline'] != null)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F111A).withOpacity(0.5), // Darker background
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  children: [
+                    if (widget.task['budget'] != null) ...[
+                      Icon(Icons.attach_money, size: 16, color: Colors.green[400]), // Green money icon
+                      const SizedBox(width: 4),
+                      Text(
+                        '\$${widget.task['budget']}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white, // White text
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                    ],
+                    if (widget.task['deadline'] != null) ...[
+                      Icon(Icons.calendar_today, size: 16, color: Colors.orange[400]), // Orange calendar icon
+                      const SizedBox(width: 4),
+                      Text(
+                        widget.task['deadline'],
+                        style: TextStyle(
+                          color: Colors.grey[300], // Lighter grey
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildTaskStatus(Map<String, dynamic> task) {
-    final isApproved = task['is_approved'] ?? false;
-    final isAssigned = task['assigned_user'] != null;
-    
-    Color statusColor = Colors.orange;
-    String statusText = 'Available';
-    String statusDescription = 'This task is available for application';
-
-    if (isAssigned && !isApproved) {
-      statusColor = Colors.blue;
-      statusText = 'Assigned';
-      statusDescription = 'This task has been assigned to a freelancer';
-    } else if (isApproved) {
-      statusColor = Colors.green;
-      statusText = 'Approved';
-      statusDescription = 'This task has been completed and approved';
-    }
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: statusColor.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: statusColor.withOpacity(0.3)),
+  Widget _buildDescriptionCard() {
+    return Card(
+      elevation: 2,
+      color: const Color(0xFF1E1E2C), // Input field color from login
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
       ),
-      child: Column(
-        children: [
-          Text(
-            statusText,
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: statusColor,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Description',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.white, // White text
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            statusDescription,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: statusColor.withOpacity(0.8),
+            const SizedBox(height: 8),
+            Text(
+              widget.task['description'] ?? 'No description provided',
+              style: TextStyle(
+                fontSize: 14,
+                height: 1.5,
+                color: Colors.grey[300], // Lighter grey for better readability
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildDetailSectionText(String title, String content) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: Colors.black,
-          ),
+  Widget _buildTaskDetailsCard() {
+    return Card(
+      elevation: 2,
+      color: const Color(0xFF1E1E2C), // Input field color from login
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Task Details',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.white, // White text
+              ),
+            ),
+            const SizedBox(height: 12),
+            Column(
+              children: [
+                if (widget.task['category'] != null)
+                  _buildDetailItem('Category', widget.task['category']),
+                if (widget.task['skills'] != null)
+                  _buildDetailItem('Required Skills', widget.task['skills']),
+                if (widget.task['created_at'] != null)
+                  _buildDetailItem('Posted On', widget.task['created_at']),
+              ],
+            ),
+          ],
         ),
-        const SizedBox(height: 8),
-        Text(
-          content,
-          style: TextStyle(
-            fontSize: 16, 
-            height: 1.5, 
-            color: Colors.grey[700]
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTaskDetailsSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Task Details',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: Colors.black,
-          ),
-        ),
-        const SizedBox(height: 12),
-        if (widget.task['budget'] != null)
-          _buildDetailItem('Budget', '\$${widget.task['budget']}'),
-        if (widget.task['deadline'] != null)
-          _buildDetailItem('Deadline', widget.task['deadline']),
-        if (widget.task['category'] != null)
-          _buildDetailItem('Category', widget.task['category']),
-        if (widget.task['skills'] != null)
-          _buildDetailItem('Required Skills', widget.task['skills']),
-        if (widget.task['created_at'] != null)
-          _buildDetailItem('Posted On', widget.task['created_at']),
-      ],
+      ),
     );
   }
 
@@ -217,36 +263,57 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
             width: 120,
             child: Text(
               '$label:',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.black,
+              style: TextStyle(
+                fontWeight: FontWeight.w500,
+                color: Colors.grey[400], // Medium grey for labels
               ),
             ),
           ),
-          Expanded(child: Text(value, style: const TextStyle(color: Colors.black))),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                color: Colors.white, // White text for values
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
   Widget _buildClientSection(BuildContext context, ClientProfileProvider clientProvider) {
-    // Use API data if available, otherwise fallback to task data
     final profileData = clientProvider.profile ?? widget.employer;
     
     return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 2,
+      color: const Color(0xFF1E1E2C), // Input field color from login
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const Text(
+              'Client Information',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.white, // White text
+              ),
+            ),
+            const SizedBox(height: 12),
+            
             if (clientProvider.isLoading)
-              const CircularProgressIndicator(),
+              const Center(child: CircularProgressIndicator(color: Colors.orange)), // Orange loading like login
             
             if (clientProvider.errorMessage != null)
-              Text('Error: ${clientProvider.errorMessage}', style: const TextStyle(color: Colors.red)),
+              Text('Error loading client profile', 
+                   style: TextStyle(color: Colors.red[300])), // Lighter red for dark theme
 
-            if (!clientProvider.isLoading && clientProvider.profile != null)
+            if (!clientProvider.isLoading)
               _buildClientProfile(profileData),
           ],
         ),
@@ -255,57 +322,114 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   }
 
   Widget _buildClientProfile(Map<String, dynamic> profile) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Client Information',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: Colors.black,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.grey[50],
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Column(
+    final companyName = profile['company_name'];
+    final username = profile['username'];
+    final email = profile['email'] ?? profile['contact_email'];
+    final phone = profile['phone'];
+    
+    String displayName = companyName ?? username ?? 'Client';
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F111A).withOpacity(0.5), // Darker background
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Column(
+        children: [
+          // Client header
+          Row(
             children: [
-              _buildProfileDetail('Company', profile['company_name'] ?? 'No company'),
-              _buildProfileDetail('Email', profile['email'] ?? 'No email'),
-              _buildProfileDetail('Bio', profile['bio'] ?? 'No bio'),
-              // Add more profile fields from API
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.2), // Orange accent like login
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.person,
+                  color: Colors.orange, // Orange icon like login
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Posted by:',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[400], // Medium grey
+                      ),
+                    ),
+                    Text(
+                      displayName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: Colors.white, // White text
+                      ),
+                    ),
+                    if (email != null) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Icon(Icons.email, size: 12, color: Colors.grey[400]),
+                          const SizedBox(width: 4),
+                          Text(
+                            email,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey[400], // Medium grey
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ],
           ),
-        ),
-      ],
+          const SizedBox(height: 8),
+
+          // Additional client info
+          if (phone != null)
+            _buildClientDetailRow('Phone', phone),
+          if (profile['bio'] != null)
+            _buildClientDetailRow('Bio', profile['bio']!),
+        ],
+      ),
     );
   }
 
-  Widget _buildProfileDetail(String label, String value) {
+  Widget _buildClientDetailRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 80,
+            width: 60,
             child: Text(
               '$label:',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.black,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[400], // Medium grey
+                fontWeight: FontWeight.w500,
               ),
             ),
           ),
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(color: Colors.black),
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[300], // Lighter grey
+              ),
             ),
           ),
         ],
@@ -317,46 +441,60 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     final isApproved = widget.task['is_approved'] ?? false;
     final isAssigned = widget.task['assigned_user'] != null;
 
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            if (!isAssigned && !isApproved) ...[
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    // TODO: Implement apply for task functionality
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Apply for task functionality coming soon!')),
-                    );
-                  },
-                  icon: const Icon(Icons.send),
-                  label: const Text('Apply for Task'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 15),
+    return Column(
+      children: [
+        if (!isAssigned && !isApproved)
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Apply for task functionality coming soon!'),
+                    backgroundColor: Colors.orange, // Orange like login
                   ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange, // Orange button like login
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6),
                 ),
+                elevation: 0,
               ),
-              const SizedBox(width: 12),
-            ],
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.arrow_back),
-                label: const Text('Back to Tasks'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 15),
+              child: const Text(
+                'Apply for Task',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
-          ],
+          ),
+        
+        const SizedBox(height: 8),
+        
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton(
+            onPressed: () => Navigator.pop(context),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(6),
+              ),
+              side: BorderSide(color: Colors.grey[600]!), // Darker border for dark theme
+            ),
+            child: Text(
+              'Back to Tasks',
+              style: TextStyle(
+                color: Colors.grey[300], // Light grey text
+              ),
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
 }

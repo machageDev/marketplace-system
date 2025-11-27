@@ -1778,6 +1778,98 @@ Future<List<dynamic>> getFreelancerReceivedRatings(int freelancerId) async {
       return null;
     }
   }
+    Future<Map<String, dynamic>> submitTask({
+    required int taskId,
+    String? repoUrl,
+    String? commitHash,
+    String? stagingUrl,
+    String? liveDemoUrl,
+    String? apkUrl,
+    String? testflightLink,
+    String? adminUsername,
+    String? adminPassword,
+    String? accessInstructions,
+    String? deploymentInstructions,
+    String? testInstructions,
+    String? releaseNotes,
+    String? revisionNotes,
+    required bool checklistTestsPassing,
+    required bool checklistDeployedStaging,
+    required bool checklistDocumentation,
+    required bool checklistNoCriticalBugs,
+    PlatformFile? zipFile,
+    PlatformFile? screenshots,
+    PlatformFile? videoDemo,
+  }) async {
+    try {
+      var uri = Uri.parse("$baseUrl/submissions/");
+      var request = http.MultipartRequest("POST", uri);
+
+      // Form fields
+      request.fields['task_id'] = taskId.toString();
+      if (repoUrl != null) request.fields['repo_url'] = repoUrl;
+      if (commitHash != null) request.fields['commit_hash'] = commitHash;
+      if (stagingUrl != null) request.fields['staging_url'] = stagingUrl;
+      if (liveDemoUrl != null) request.fields['live_demo_url'] = liveDemoUrl;
+      if (apkUrl != null) request.fields['apk_download_url'] = apkUrl;
+      if (testflightLink != null) request.fields['testflight_link'] = testflightLink;
+      if (adminUsername != null) request.fields['admin_username'] = adminUsername;
+      if (adminPassword != null) request.fields['admin_password'] = adminPassword;
+      if (accessInstructions != null) request.fields['access_instructions'] = accessInstructions;
+      if (deploymentInstructions != null) request.fields['deployment_instructions'] = deploymentInstructions;
+      if (testInstructions != null) request.fields['test_instructions'] = testInstructions;
+      if (releaseNotes != null) request.fields['release_notes'] = releaseNotes;
+      if (revisionNotes != null) request.fields['revision_notes'] = revisionNotes;
+
+      // Checklist
+      request.fields['checklist_tests_passing'] = checklistTestsPassing.toString();
+      request.fields['checklist_deployed_staging'] = checklistDeployedStaging.toString();
+      request.fields['checklist_documentation'] = checklistDocumentation.toString();
+      request.fields['checklist_no_critical_bugs'] = checklistNoCriticalBugs.toString();
+
+      // Files
+      if (zipFile != null) {
+        request.files.add(await http.MultipartFile.fromPath('zip_file', zipFile.path!));
+      }
+      if (screenshots != null) {
+        request.files.add(await http.MultipartFile.fromPath('screenshots', screenshots.path!));
+      }
+      if (videoDemo != null) {
+        request.files.add(await http.MultipartFile.fromPath('video_demo', videoDemo.path!));
+      }
+
+      request.headers['Authorization'] = 'Token $token';
+
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('Failed to submit task: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('An error occurred: $e');
+    }
+  }
+
+  /// Fetch submissions
+  Future<List<Map<String, dynamic>>> fetchSubmissions() async {
+    try {
+      final uri = Uri.parse("$baseUrl/submissions/");
+      final response = await http.get(uri, headers: {
+        'Authorization': 'Token $token',
+      });
+
+      if (response.statusCode == 200) {
+        return List<Map<String, dynamic>>.from(json.decode(response.body));
+      } else {
+        throw Exception('Failed to fetch submissions');
+      }
+    } catch (e) {
+      throw Exception('An error occurred: $e');
+    }
+  }
 
  
 }  

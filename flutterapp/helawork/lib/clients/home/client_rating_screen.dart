@@ -58,7 +58,7 @@ class _ClientRatingScreenState extends State<ClientRatingScreen> {
             }
             
             if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isEmpty) {
-              return Text("No ratings received yet", style: TextStyle(color: Colors.grey));
+              return const Text("No ratings received yet", style: TextStyle(color: Colors.grey));
             }
             
             final ratings = snapshot.data!;

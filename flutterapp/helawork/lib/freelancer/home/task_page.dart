@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:helawork/clients/home/client_task_detail_screen.dart';
+import 'package:helawork/freelancer/home/task_detail.dart';
+
 import 'package:helawork/freelancer/provider/task_provider.dart';
 import 'package:provider/provider.dart';
 
@@ -100,7 +101,7 @@ class _TaskPageState extends State<TaskPage> {
                                     context,
                                     MaterialPageRoute(
                                       builder: (context) => TaskDetailScreen(
-                                        taskId: task['task_id'] ?? task['id'] ?? 0, // ADDED THIS
+                                        taskId: task['task_id'] ?? task['id'] ?? 0, 
                                         task: task,
                                         employer: employer,
                                       ),

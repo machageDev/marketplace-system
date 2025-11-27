@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:helawork/freelancer/home/contract_screen.dart';
 import 'package:helawork/freelancer/home/proposal_screen.dart';
 import 'package:helawork/freelancer/home/rating_screen.dart';
+import 'package:helawork/freelancer/home/submitting_task.dart';
 import 'package:helawork/freelancer/home/task_page.dart';
 import 'package:helawork/freelancer/home/user_profile_screen.dart';
 import 'package:helawork/freelancer/home/wallet_screen.dart';
@@ -22,8 +23,8 @@ class _DashboardPageState extends State<DashboardPage> {
     const SizedBox(), 
     const TaskPage(), 
     const WalletScreen(token: '',),
-    const ProposalsScreen(), // Proposals (index 3)
-    const Center(child: Text("Completed Tasks", style: TextStyle(color: Colors.white))), 
+    const ProposalsScreen(), 
+    const SubmitTaskScreen(taskId:0), 
   ];
 
   @override
@@ -583,7 +584,7 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
               BottomNavigationBarItem(
                 icon: Icon(Icons.check_circle_outline),
-                label: "completed Task",
+                label: "SubmitTask",
               )
             ],
           ),
