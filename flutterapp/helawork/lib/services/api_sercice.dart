@@ -1711,7 +1711,7 @@ Future<Map<String, dynamic>> getSubmissionStats() async {
   }
 }
 
-// ========== CONVENIENCE METHODS ==========
+
 
 // Employer rates Freelancer
 Future<Map<String, dynamic>> submitEmployerRating({
@@ -1744,7 +1744,7 @@ Future<Map<String, dynamic>> submitFreelancerRating({
 }
 
 // Get current user's received ratings
-Future<List<dynamic>> getMyReceivedRatings() async {
+ Future<List<dynamic>> getMyReceivedRatings() async {
   final currentUserId = await _getCurrentUserId();
   return await getUserRatings(currentUserId);
 }
