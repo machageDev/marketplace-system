@@ -115,7 +115,7 @@ class TaskDetailScreen extends StatelessWidget {
                         ),
                         child: Text(
                           _getStatusText(status),
-                          style: TextStyle(
+                          style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w700,
                             fontSize: 12,

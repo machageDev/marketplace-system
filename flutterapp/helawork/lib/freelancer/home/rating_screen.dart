@@ -13,7 +13,7 @@ class RatingsScreen extends StatefulWidget {
 
 class _RatingsScreenState extends State<RatingsScreen> {
   bool _hasFetched = false;
-  int _selectedTab = 0; // 0: Received, 1: Given
+  int _selectedTab = 0;
 
   @override
   void initState() {
@@ -21,32 +21,98 @@ class _RatingsScreenState extends State<RatingsScreen> {
     _hasFetched = false;
   }
 
-  void _navigateToSubmitRating() {
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (context) => SubmitRatingScreen( // Remove 'const' keyword
-        taskId: 123, // Change from 'task-123' to actual integer
-        employerId: 456, // Change from '' to actual integer
-        clientName: 'Client Name', 
-        freelancerId: 123,
+  void _navigateToClientSelection() {
+    final provider = Provider.of<RatingProvider>(context, listen: false);
+    
+    if (provider.clients.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No clients available to rate. Complete some tasks first.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => _buildClientSelectionSheet(provider.clients),
+    );
+  }
+
+  Widget _buildClientSelectionSheet(List<dynamic> clients) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'Select a Client to Rate',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: clients.length,
+              itemBuilder: (context, index) {
+                final client = clients[index];
+                return ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.blueAccent,
+                    child: Text(
+                      (client['username']?[0] ?? 'C').toUpperCase(),
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                  ),
+                  title: Text(client['username'] ?? 'Unknown Client'),
+                  subtitle: Text(client['email'] ?? ''),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _navigateToSubmitRating(client);
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
-    ),
-  );
-}
+    );
+  }
+
+  void _navigateToSubmitRating(Map<String, dynamic> client) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SubmitRatingScreen(
+          taskId: 0, // You'll need to get this from task data
+          employerId: client['id'] ?? 0,
+          clientName: client['username'] ?? 'Client',
+          freelancerId: _getCurrentFreelancerId(),
+        ),
+      ),
+    );
+  }
+
+  int _getCurrentFreelancerId() {
+    // Replace with your actual user ID retrieval
+    // Example: return Provider.of<AuthProvider>(context).user?.id ?? 0;
+    return 1; // Temporary
+  }
 
   // Filter ratings based on selected tab
   List<dynamic> _getFilteredRatings(List<dynamic> allRatings) {
-    final currentUserId = 1; // Replace with actual current user ID
+    final currentUserId = _getCurrentFreelancerId();
     
     if (_selectedTab == 0) {
-      // Ratings received by current user (if they're a client)
       return allRatings.where((rating) => 
           rating['rated_user'] == currentUserId && 
           (rating['rating_type'] == 'client_rating' || rating['rated_user_type'] == 'client')
       ).toList();
     } else {
-      // Ratings given by current user (to clients)
       return allRatings.where((rating) => 
           rating['rater_user'] == currentUserId && 
           (rating['rating_type'] == 'client_rating' || rating['rated_user_type'] == 'client')
@@ -62,6 +128,7 @@ class _RatingsScreenState extends State<RatingsScreen> {
       _hasFetched = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         provider.fetchMyRatings();
+        provider.fetchClientsFromCompletedTasks(); // NEW: Fetch clients
       });
     }
 
@@ -70,12 +137,12 @@ class _RatingsScreenState extends State<RatingsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Client Ratings"),
-        backgroundColor: Colors.blueAccent,
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.grey[900],
+        foregroundColor: Colors.white,  
         actions: [
           IconButton(
             icon: const Icon(Icons.add),
-            onPressed: _navigateToSubmitRating,
+            onPressed: _navigateToClientSelection, // UPDATED: Now opens client selection
             tooltip: 'Rate a Client',
           ),
         ],
@@ -96,8 +163,8 @@ class _RatingsScreenState extends State<RatingsScreen> {
                   child: TextButton(
                     onPressed: () => setState(() => _selectedTab = 0),
                     style: TextButton.styleFrom(
-                      backgroundColor: _selectedTab == 0 ? Colors.blueAccent : Colors.transparent,
-                      foregroundColor: _selectedTab == 0 ? Colors.white : Colors.blueAccent,
+                      backgroundColor: _selectedTab == 0 ? Colors.grey[900] : Colors.transparent,
+                      foregroundColor: _selectedTab == 0 ? Colors.white : Colors.grey[900],
                       padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
                     child: const Text('Ratings Received'),
@@ -107,8 +174,8 @@ class _RatingsScreenState extends State<RatingsScreen> {
                   child: TextButton(
                     onPressed: () => setState(() => _selectedTab = 1),
                     style: TextButton.styleFrom(
-                      backgroundColor: _selectedTab == 1 ? Colors.blueAccent : Colors.transparent,
-                      foregroundColor: _selectedTab == 1 ? Colors.white : Colors.blueAccent,
+                      backgroundColor: _selectedTab == 1 ? Colors.grey[900] : Colors.transparent,
+                      foregroundColor: _selectedTab == 1 ? Colors.white : Colors.grey[900],
                       padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
                     child: const Text('Ratings Given'),
@@ -117,6 +184,31 @@ class _RatingsScreenState extends State<RatingsScreen> {
               ],
             ),
           ),
+
+          // Client Info (NEW)
+          if (_selectedTab == 1 && provider.clients.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.blueAccent.withOpacity(0.05),
+                border: Border(
+                  bottom: BorderSide(color: Colors.grey[300]!),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.people, color: Colors.blueAccent),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${provider.clients.length} clients available to rate',
+                    style: const TextStyle(
+                      color: Colors.blueAccent,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           // Rating Statistics
           if (filteredRatings.isNotEmpty) _buildRatingStats(provider, filteredRatings),
@@ -158,9 +250,9 @@ class _RatingsScreenState extends State<RatingsScreen> {
                             const SizedBox(height: 20),
                             if (_selectedTab == 1)
                               ElevatedButton(
-                                onPressed: _navigateToSubmitRating,
+                                onPressed: _navigateToClientSelection,
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blueAccent,
+                                  backgroundColor: Colors.orange,
                                   foregroundColor: Colors.white,
                                 ),
                                 child: const Text("Rate a Client"),
