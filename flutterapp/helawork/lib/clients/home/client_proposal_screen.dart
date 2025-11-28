@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:helawork/clients/home/client_proposal_view_screen.dart';
 import 'package:helawork/clients/models/client_proposal.dart';
 import 'package:helawork/clients/provider/client_proposal_provider.dart';
 import 'package:provider/provider.dart';
@@ -143,7 +144,7 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
             ),
             const SizedBox(height: 12),
 
-            // Cover Letter
+            // Cover Letter Preview
             if (proposal.coverLetter.isNotEmpty)
               Container(
                 padding: const EdgeInsets.all(12),
@@ -152,11 +153,25 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: Colors.blue.shade100),
                 ),
-                child: Text(
-                  proposal.coverLetter,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.black87, height: 1.5),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Cover Letter:',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.blue,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      proposal.coverLetter,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.black87, height: 1.5),
+                    ),
+                  ],
                 ),
               ),
 
@@ -166,24 +181,29 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.blue,
-                    side: const BorderSide(color: Colors.blue),
+                // View Details Button
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   ),
                   onPressed: () => _viewProposalDetails(context, proposal),
-                  icon: const Icon(Icons.visibility),
-                  label: const Text('View'),
+                  icon: const Icon(Icons.visibility, size: 18),
+                  label: const Text('View Details'),
                 ),
                 const SizedBox(width: 10),
+                
+                // Accept Button (only for pending proposals)
                 if (proposal.status.toLowerCase() == 'pending')
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
+                      backgroundColor: Colors.green,
                       foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     ),
                     onPressed: () => _showAcceptConfirmation(context, proposal),
-                    icon: const Icon(Icons.check_circle_outline),
+                    icon: const Icon(Icons.check_circle_outline, size: 18),
                     label: const Text('Accept'),
                   ),
               ],
@@ -260,15 +280,14 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Accept Proposal'),
-        content: const Text(
-            'Are you sure you want to accept this proposal?'),
+        content: const Text('Are you sure you want to accept this proposal?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
             onPressed: () async {
               Navigator.pop(context);
               final success = await context.read<ProposalsProvider>().acceptProposal(proposal.id);
@@ -286,9 +305,11 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
   }
 
   void _viewProposalDetails(BuildContext context, Proposal proposal) {
-    // Navigate to detailed proposal screen (future screen)
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Viewing proposal from ${proposal.freelancer.name}')),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ProposalViewScreen(proposal: proposal),
+      ),
     );
   }
 }

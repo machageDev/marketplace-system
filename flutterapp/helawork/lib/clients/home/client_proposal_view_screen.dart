@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:helawork/clients/models/client_proposal.dart';
 import 'package:helawork/clients/provider/client_proposal_provider.dart' as client_proposal;
+import 'package:flutter/services.dart'; 
+import 'package:url_launcher/url_launcher.dart'; 
 
 class ProposalViewScreen extends StatefulWidget {
   final Proposal proposal;
@@ -15,6 +17,169 @@ class ProposalViewScreen extends StatefulWidget {
 class _ProposalViewScreenState extends State<ProposalViewScreen> {
   bool _isProcessing = false;
 
+  // Download/Copy cover letter functionality
+  void _downloadCoverLetter() {
+    // Show options for downloading/copying
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Download Cover Letter',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.blue,
+              ),
+            ),
+            const SizedBox(height: 16),
+            
+            // Copy to Clipboard
+            ListTile(
+              leading: const Icon(Icons.copy, color: Colors.blue),
+              title: const Text('Copy to Clipboard'),
+              subtitle: const Text('Copy the cover letter text'),
+              onTap: () {
+                Navigator.pop(context);
+                _copyToClipboard();
+              },
+            ),
+            
+            // Save as Text File
+            ListTile(
+              leading: const Icon(Icons.save_alt, color: Colors.green),
+              title: const Text('Save as Text File'),
+              subtitle: const Text('Download as .txt file'),
+              onTap: () {
+                Navigator.pop(context);
+                _saveAsTextFile();
+              },
+            ),
+            
+            // Share
+            ListTile(
+              leading: const Icon(Icons.share, color: Colors.orange),
+              title: const Text('Share'),
+              subtitle: const Text('Share via other apps'),
+              onTap: () {
+                Navigator.pop(context);
+                _shareCoverLetter();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _copyToClipboard() async {
+    try {
+      await Clipboard.setData(ClipboardData(text: widget.proposal.coverLetter));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cover letter copied to clipboard!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to copy: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _saveAsTextFile() async {
+    try {
+      // Create file content with proposal details
+      final fileContent = '''
+PROPOSAL COVER LETTER
+=====================
+
+Task: ${widget.proposal.task.title}
+Freelancer: ${widget.proposal.freelancer.name}
+Proposed Amount: Ksh ${widget.proposal.bidAmount.toStringAsFixed(2)}
+Estimated Days: ${widget.proposal.estimatedDays} days
+Submitted: ${widget.proposal.submittedDate}
+
+COVER LETTER:
+${widget.proposal.coverLetter}
+
+---
+Generated from HelaWork App
+''';
+
+      // Show save dialog or use file_saver package in real implementation
+      // For now, copy to clipboard as fallback
+      await Clipboard.setData(ClipboardData(text: fileContent));
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cover letter prepared for download! Copied to clipboard.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to prepare download: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _shareCoverLetter() async {
+    final shareText = '''
+Check out this proposal from ${widget.proposal.freelancer.name}:
+
+Task: ${widget.proposal.task.title}
+Amount: Ksh ${widget.proposal.bidAmount.toStringAsFixed(2)}
+Timeline: ${widget.proposal.estimatedDays} days
+
+Cover Letter:
+${widget.proposal.coverLetter.length > 200 ? 
+  '${widget.proposal.coverLetter.substring(0, 200)}...' : 
+  widget.proposal.coverLetter}
+''';
+
+    try {
+      // For web/mobile sharing
+      final Uri emailUri = Uri(
+        scheme: 'mailto',
+        queryParameters: {
+          'subject': 'Proposal from ${widget.proposal.freelancer.name} - ${widget.proposal.task.title}',
+          'body': shareText,
+        },
+      );
+
+      if (await canLaunchUrl(emailUri)) {
+        await launchUrl(emailUri);
+      } else {
+        // Fallback to clipboard
+        await Clipboard.setData(ClipboardData(text: shareText));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Share content copied to clipboard!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to share: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -23,6 +188,14 @@ class _ProposalViewScreenState extends State<ProposalViewScreen> {
         title: const Text('Proposal Details'),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
+        actions: [
+          // Download button in app bar
+          IconButton(
+            icon: const Icon(Icons.download),
+            onPressed: _downloadCoverLetter,
+            tooltip: 'Download Cover Letter',
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -107,32 +280,80 @@ class _ProposalViewScreenState extends State<ProposalViewScreen> {
             ),
             const SizedBox(height: 20),
 
-            // Cover Letter
-            const Text(
-              'Cover Letter',
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 18,
-                color: Colors.black87,
-              ),
+            // Cover Letter Section with Download Button
+            Row(
+              children: [
+                const Text(
+                  'Cover Letter',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 18,
+                    color: Colors.black87,
+                  ),
+                ),
+                const Spacer(),
+                // Download button
+                ElevatedButton.icon(
+                  onPressed: _downloadCoverLetter,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  icon: const Icon(Icons.download, size: 16),
+                  label: const Text('Download'),
+                ),
+              ],
             ),
             const SizedBox(height: 10),
+            
+            // Cover Letter Content
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Colors.blue[50],
                 borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue[100]!),
               ),
-              child: Text(
-                widget.proposal.coverLetter.isNotEmpty
-                    ? widget.proposal.coverLetter
-                    : "No cover letter provided.",
-                style: const TextStyle(
-                  color: Colors.black87,
-                  fontSize: 15,
-                  height: 1.5,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Quick actions
+                  if (widget.proposal.coverLetter.isNotEmpty)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.copy, size: 18),
+                          onPressed: _copyToClipboard,
+                          tooltip: 'Copy to clipboard',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.share, size: 18),
+                          onPressed: _shareCoverLetter,
+                          tooltip: 'Share',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ],
+                    ),
+                  
+                  // Cover letter text
+                  Text(
+                    widget.proposal.coverLetter.isNotEmpty
+                        ? widget.proposal.coverLetter
+                        : "No cover letter provided.",
+                    style: const TextStyle(
+                      color: Colors.black87,
+                      fontSize: 15,
+                      height: 1.5,
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 30),
@@ -205,8 +426,7 @@ class _ProposalViewScreenState extends State<ProposalViewScreen> {
           ),
         );
         
-        // Navigate back or update UI
-        Navigator.pop(context, true); // Return true to indicate success
+        Navigator.pop(context, true);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -230,7 +450,6 @@ class _ProposalViewScreenState extends State<ProposalViewScreen> {
   }
 
   Future<void> _handleRejectProposal(BuildContext context) async {
-    // Show confirmation dialog
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -272,7 +491,7 @@ class _ProposalViewScreenState extends State<ProposalViewScreen> {
           ),
         );
         
-        Navigator.pop(context, true); // Return true to indicate success
+        Navigator.pop(context, true);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
