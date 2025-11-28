@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:helawork/clients/home/client_proposal_screen.dart';
 import 'package:helawork/clients/home/client_rating_screen.dart';
 import 'package:helawork/clients/home/client_task_screen.dart';
+import 'package:helawork/clients/home/payment_screen.dart';
 
 
 import 'package:helawork/clients/screens/client_profile_screen.dart';
@@ -29,7 +30,8 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
     _pages = [
       const DashboardTab(),
       const TasksScreen(),
-      const ClientProposalsScreen(),     
+      const ClientProposalsScreen(),  
+      const PaymentScreen(orderId: '', amount: 0, email: '', freelancerName: '', serviceDescription: '', freelancerPhotoUrl: '',),   
       const ClientRatingScreen(employerId: 0), 
     ];
 
@@ -92,6 +94,10 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
               icon: Icon(Icons.message_outlined),
               label: 'Proposals',
             ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.payment_rounded),
+              label: 'Payment', 
+              ),
             
             BottomNavigationBarItem(
               icon: Icon(Icons.star_outline),

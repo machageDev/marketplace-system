@@ -561,15 +561,15 @@
     },
     {
       "name": "webview_flutter",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/webview_flutter-4.13.0",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/webview_flutter-4.9.0",
       "packageUri": "lib/",
-      "languageVersion": "3.6"
+      "languageVersion": "3.5"
     },
     {
       "name": "webview_flutter_android",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/webview_flutter_android-4.10.1",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/webview_flutter_android-3.16.9",
       "packageUri": "lib/",
-      "languageVersion": "3.7"
+      "languageVersion": "3.5"
     },
     {
       "name": "webview_flutter_platform_interface",
@@ -614,7 +614,7 @@
       "languageVersion": "3.7"
     }
   ],
-  "generated": "2025-11-28T07:08:26.268134Z",
+  "generated": "2025-11-28T08:22:15.071794Z",
   "generator": "pub",
   "generatorVersion": "3.7.2",
   "flutterRoot": "file:///C:/flutter",

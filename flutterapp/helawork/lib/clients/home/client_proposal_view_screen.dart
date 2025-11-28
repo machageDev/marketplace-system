@@ -189,7 +189,7 @@ ${widget.proposal.coverLetter.length > 200 ?
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         actions: [
-          // Download button in app bar
+          
           IconButton(
             icon: const Icon(Icons.download),
             onPressed: _downloadCoverLetter,
