@@ -140,7 +140,13 @@ STATIC_URL = 'static/'
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
+# Paystack Configuration
+PAYSTACK_PUBLIC_KEY = 'pk_test_5a2cefd171ac7fe5c789d6b460a17b4dab2b7e32'
+PAYSTACK_SECRET_KEY = 'sk_test_a8f7126609cc45319d0a682d4b4764fbd6413db8'
+PAYSTACK_CALLBACK_URL = 'http://192.168.100.188:8000/payment/verify/'
 
+# Django settings
+ALLOWED_HOSTS = ['192.168.100.188', 'localhost', '127.0.0.1']
 
 
 

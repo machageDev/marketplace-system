@@ -1198,3 +1198,49 @@ def employer_rateable_tasks(request):
             return JsonResponse([], safe=False)
     
     return JsonResponse([], safe=False)      
+
+@api_view(['GET'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def employer_ratings(request, employer_id):
+    """Get all ratings for an employer (from freelancers)"""
+    try:
+        # Get the employer
+        employer = Employer.objects.filter(employer_id=employer_id).first()
+        if not employer:
+            return Response([], status=status.HTTP_200_OK)
+        
+        # Get ratings where:
+        # - rating_type is freelancer_to_employer  
+        # - AND the rated_user's email matches employer's contact_email
+        # - OR find another way to link User to Employer
+        ratings = Rating.objects.filter(
+            rating_type='freelancer_to_employer'
+        ).filter(
+            rated_user__email=employer.contact_email
+        ).select_related('rater', 'task')
+        
+        ratings_data = []
+        for rating in ratings:
+            ratings_data.append({
+                'id': rating.rating_id,
+                'score': rating.score,
+                'review': rating.review,
+                'created_at': rating.created_at.isoformat(),
+                'freelancer': {
+                    'name': rating.rater.name,
+                    'id': rating.rater.user_id,
+                },
+                'task': {
+                    'title': rating.task.title,
+                    'id': rating.task.task_id,
+                }
+            })
+        
+        return Response(ratings_data, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        return Response(
+            {'error': str(e)}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
