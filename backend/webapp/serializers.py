@@ -1,7 +1,7 @@
 from datetime import timezone
 from rest_framework import serializers 
 from rest_framework import serializers
-from .models import Submission, TaskCompletion, Rating, Contract, Task
+from .models import Order, Submission, TaskCompletion, Rating, Contract, Task
 from .models import Contract, Proposal, TaskCompletion, Transaction, User, UserProfile, Wallet
 from .models import Employer, User
 from .models import Task
@@ -318,7 +318,7 @@ class RatingSerializer(serializers.ModelSerializer):
         return data
 
 class SimpleSubmissionSerializer(serializers.ModelSerializer):
-    """Simplified serializer for lists"""
+   
     freelancer_name = serializers.CharField(source='freelancer.get_full_name', read_only=True)
     task_title = serializers.CharField(source='task.title', read_only=True)
     
@@ -328,3 +328,24 @@ class SimpleSubmissionSerializer(serializers.ModelSerializer):
             'submission_id', 'task', 'task_title', 'freelancer_name', 'title',
             'status', 'submitted_at', 'staging_url', 'repo_url'
         ]        
+        
+class OrderSerializer(serializers.ModelSerializer):
+    freelancer_name = serializers.CharField(source='service.freelancer.user.get_full_name', read_only=True)
+    service_title = serializers.CharField(source='service.title', read_only=True)
+    
+    class Meta:
+        model = Order
+        fields = ['order_id', 'client', 'service', 'amount', 'status', 'created_at', 'freelancer_name', 'service_title']        
+class PaymentInitializeSerializer(serializers.Serializer):
+    order_id = serializers.CharField(max_length=50)
+    email = serializers.EmailField()
+    
+    def validate_order_id(self, value):
+        try:
+            Order.objects.get(order_id=value)
+        except Order.DoesNotExist:
+            raise serializers.ValidationError("Order does not exist")
+        return value
+
+class PaymentVerificationSerializer(serializers.Serializer):
+    reference = serializers.CharField(max_length=100)        

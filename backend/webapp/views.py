@@ -1,4 +1,5 @@
 from decimal import Decimal
+import secrets
 from django.conf import settings
 from django.http import JsonResponse
 import json
@@ -21,7 +22,9 @@ from rest_framework.response import Response
 from django.db import  transaction
 from rest_framework import status
 from django.core.mail import send_mail
-from .models import Contract, Employer, EmployerProfile, EmployerToken, Proposal, Rating, Submission, Task, TaskCompletion, Transaction, UserProfile, Wallet
+
+from webapp.paystack_service import PaystackService
+from .models import Contract, Employer, EmployerProfile, EmployerToken, Order, Proposal, Rating, Service, Submission, Task, TaskCompletion, Transaction, UserProfile, Wallet
 from .models import  User
 from rest_framework.permissions import IsAuthenticated
 from django.views.decorators.csrf import csrf_exempt
@@ -29,7 +32,7 @@ from rest_framework.decorators import authentication_classes, permission_classes
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from webapp.serializers import ContractSerializer, EmployerProfileSerializer,  EmployerRegisterSerializer, EmployerSerializer, LoginSerializer, ProposalSerializer, RatingSerializer, RegisterSerializer, SubmissionSerializer, TaskCompletionSerializer, TaskCreateSerializer, TaskSerializer, TransactionSerializer, UserProfileSerializer, WalletSerializer
+from webapp.serializers import ContractSerializer, EmployerProfileSerializer,  EmployerRegisterSerializer, EmployerSerializer, LoginSerializer, OrderSerializer, PaymentInitializeSerializer, ProposalSerializer, RatingSerializer, RegisterSerializer, SubmissionSerializer, TaskCompletionSerializer, TaskCreateSerializer, TaskSerializer, TransactionSerializer, UserProfileSerializer, WalletSerializer
 from .authentication import CustomTokenAuthentication, EmployerTokenAuthentication
 from .permissions import IsAuthenticated  
 from .models import UserProfile
@@ -1203,7 +1206,6 @@ def employer_rateable_tasks(request):
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def employer_ratings(request, employer_id):
-    """Get all ratings for an employer (from freelancers)"""
     try:
         # Get the employer
         employer = Employer.objects.filter(employer_id=employer_id).first()
@@ -1244,3 +1246,268 @@ def employer_ratings(request, employer_id):
             {'error': str(e)}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+@api_view(['GET'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def payment_order_details(request, order_id):
+   
+    try:
+        order = get_object_or_404(Order, order_id=order_id)
+        
+        # Get parameters from query string
+        email = request.GET.get('email', '')
+        amount = request.GET.get('amount', order.amount)
+        
+        data = {
+            'order_id': order.order_id,
+            'amount': float(amount),
+            'email': email,
+            'freelancer_name': order.service.freelancer.user.get_full_name() or order.service.freelancer.user.username,
+            'service_description': order.service.title,
+            'paystack_public_key': settings.PAYSTACK_PUBLIC_KEY,
+        }
+        
+        return Response({
+            'status': True,
+            'data': data
+        })
+        
+    except Exception as e:
+        return Response({
+            'status': False,
+            'message': str(e)
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def initialize_payment_api(request):
+   
+    serializer = PaymentInitializeSerializer(data=request.data)
+    
+    if not serializer.is_valid():
+        return Response({
+            'status': False,
+            'message': 'Invalid data',
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        order_id = serializer.validated_data['order_id']
+        email = serializer.validated_data['email']
+        
+        order = get_object_or_404(Order, order_id=order_id)
+        
+        # Calculate split amounts
+        total_amount = float(order.amount)
+        platform_commission = total_amount * 0.10  # 10%
+        freelancer_share = total_amount * 0.90     # 90%
+        
+        # Generate unique reference
+        reference = f"HW_{order_id}_{secrets.token_hex(5)}"
+        
+        # Prepare subaccounts for split payment
+        subaccounts = [
+            {
+                'subaccount': order.service.freelancer.paystack_subaccount_code,
+                'share': int(freelancer_share * 100),  # Convert to kobo
+                'bearer': 'subaccount'
+            }
+        ]
+        
+        paystack = PaystackService()
+        
+        # Initialize split payment
+        response = paystack.initialize_split_payment(
+            email=email,
+            amount=total_amount,
+            reference=reference,
+            subaccounts=subaccounts,
+            callback_url=f"{settings.PAYSTACK_CALLBACK_URL}{reference}/"
+        )
+        
+        if response and response.get('status'):
+            # Create transaction record
+            transaction = Transaction.objects.create(
+                order=order,
+                paystack_reference=reference,
+                amount=total_amount,
+                platform_commission=platform_commission,
+                freelancer_share=freelancer_share,
+                status='pending'
+            )
+            
+            return Response({
+                'status': True,
+                'message': 'Payment initialized successfully',
+                'data': {
+                    'authorization_url': response['data']['authorization_url'],
+                    'reference': reference,
+                    'transaction_id': transaction.id
+                }
+            })
+        else:
+            return Response({
+                'status': False,
+                'message': 'Failed to initialize payment with Paystack'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+    except Exception as e:
+        return Response({
+            'status': False,
+            'message': f'Error: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def verify_payment_api(request, reference):
+
+    try:
+        paystack = PaystackService()
+        verification = paystack.verify_transaction(reference)
+        
+        if verification and verification.get('status'):
+            transaction_data = verification['data']
+            
+            # Find transaction
+            transaction = Transaction.objects.get(paystack_reference=reference)
+            
+            if transaction_data['status'] == 'success':
+                # Update transaction status
+                transaction.status = 'success'
+                transaction.save()
+                
+                # Update order status
+                order = transaction.order
+                order.status = 'paid'
+                order.save()
+                
+                # Serialize response data
+                transaction_serializer = TransactionSerializer(transaction)
+                order_serializer = OrderSerializer(order)
+                
+                return Response({
+                    'status': True,
+                    'message': 'Payment verified successfully',
+                    'data': {
+                        'transaction': transaction_serializer.data,
+                        'order': order_serializer.data,
+                        'payment_status': 'success'
+                    }
+                })
+            else:
+                # Payment failed
+                transaction.status = 'failed'
+                transaction.save()
+                
+                return Response({
+                    'status': False,
+                    'message': 'Payment failed or was cancelled',
+                    'data': {
+                        'payment_status': 'failed',
+                        'reference': reference
+                    }
+                })
+        else:
+            return Response({
+                'status': False,
+                'message': 'Payment verification failed',
+                'data': {
+                    'payment_status': 'failed',
+                    'reference': reference
+                }
+            })
+            
+    except Transaction.DoesNotExist:
+        return Response({
+            'status': False,
+            'message': 'Transaction not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({
+            'status': False,
+            'message': f'Error: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def payment_webhook_api(request):
+    
+    if request.method == 'POST':
+        try:
+            payload = request.data
+            event = payload.get('event')
+            
+            if event == 'charge.success':
+                data = payload.get('data')
+                reference = data.get('reference')
+                
+                # Verify the transaction
+                paystack = PaystackService()
+                verification = paystack.verify_transaction(reference)
+                
+                if verification and verification.get('status'):
+                    transaction_data = verification['data']
+                    
+                    if transaction_data['status'] == 'success':
+                        # Update transaction and order
+                        transaction = Transaction.objects.get(paystack_reference=reference)
+                        transaction.status = 'success'
+                        transaction.save()
+                        
+                        order = transaction.order
+                        order.status = 'paid'
+                        order.save()
+                        
+                       
+                        
+            return Response({'status': 'success'})
+            
+        except Exception as e:
+            return Response(
+                {'status': 'error', 'message': str(e)}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+    
+    return Response(
+        {'status': 'error', 'message': 'Method not allowed'}, 
+        status=status.HTTP_405_METHOD_NOT_ALLOWED
+    )
+
+@api_view(['GET'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def transaction_history(request):
+   
+    try:
+        if hasattr(request.user, 'client'):
+            # User is a client - get their orders' transactions
+            client_orders = Order.objects.filter(client__user=request.user)
+            transactions = Transaction.objects.filter(order__in=client_orders)
+        elif hasattr(request.user, 'freelancer'):
+            # User is a freelancer - get transactions for their services
+            freelancer_services = Service.objects.filter(freelancer__user=request.user)
+            freelancer_orders = Order.objects.filter(service__in=freelancer_services)
+            transactions = Transaction.objects.filter(order__in=freelancer_orders)
+        else:
+            return Response({
+                'status': False,
+                'message': 'User type not recognized'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        serializer = TransactionSerializer(transactions.order_by('-created_at'), many=True)
+        
+        return Response({
+            'status': True,
+            'data': serializer.data
+        })
+        
+    except Exception as e:
+        return Response({
+            'status': False,
+            'message': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)        
