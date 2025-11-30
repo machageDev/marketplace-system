@@ -1870,6 +1870,109 @@ Future<List<dynamic>> getFreelancerReceivedRatings(int freelancerId) async {
       throw Exception('An error occurred: $e');
     }
   }
+// Add these methods to your ApiService class
 
+// Get orders that need payment
+Future<List<dynamic>> getOrdersForPayment() async {
+  try {
+    final String? token = await _getUserToken();
+    
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
+
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/orders/pending-payment/'),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+    );
+
+    print('Orders for Payment API Response:');
+    print('URL: $baseUrl/api/orders/pending-payment/');
+    print('Status: ${response.statusCode}');
+    print('Body: ${response.body}');
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      if (data is List) {
+        return data;
+      } else if (data is Map && data.containsKey('orders')) {
+        return data['orders'];
+      } else {
+        return [];
+      }
+    } else {
+      throw Exception("Failed to load orders: ${response.statusCode}");
+    }
+  } catch (e) {
+    print('Error in getOrdersForPayment: $e');
+    rethrow;
+  }
+}
+
+// Get order details by ID
+Future<Map<String, dynamic>> getOrderDetails(String orderId) async {
+  try {
+    final String? token = await _getUserToken();
+    
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
+
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/orders/$orderId/'),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception("Failed to load order details: ${response.statusCode}");
+    }
+  } catch (e) {
+    print('Error in getOrderDetails: $e');
+    rethrow;
+  }
+}
+
+// Get current user's orders
+Future<List<dynamic>> getUserOrders() async {
+  try {
+    final String? token = await _getUserToken();
+    
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
+
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/user/orders/'),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      if (data is List) {
+        return data;
+      } else if (data is Map && data.containsKey('orders')) {
+        return data['orders'];
+      } else {
+        return [];
+      }
+    } else {
+      throw Exception("Failed to load user orders: ${response.statusCode}");
+    }
+  } catch (e) {
+    print('Error in getUserOrders: $e');
+    rethrow;
+  }
+}
  
 }  

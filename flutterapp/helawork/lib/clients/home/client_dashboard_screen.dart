@@ -3,14 +3,13 @@ import 'package:helawork/clients/home/client_proposal_screen.dart';
 import 'package:helawork/clients/home/client_rating_screen.dart';
 import 'package:helawork/clients/home/client_task_screen.dart';
 import 'package:helawork/clients/home/payment_screen.dart';
-
-
 import 'package:helawork/clients/screens/client_profile_screen.dart';
 import 'package:helawork/clients/provider/client_proposal_provider.dart' as client_proposal;
 import 'package:helawork/clients/provider/dashboard_provider.dart' as client_dashboard;
 import 'package:helawork/clients/provider/auth_provider.dart' as client_auth;
 import 'package:helawork/clients/provider/task_provider.dart' as client_task;
 import 'package:helawork/services/api_sercice.dart';
+import 'package:helawork/services/payment_service.dart';
 import 'package:provider/provider.dart';
 
 class ClientDashboardScreen extends StatefulWidget {
@@ -31,7 +30,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
       const DashboardTab(),
       const TasksScreen(),
       const ClientProposalsScreen(),  
-      const PaymentScreen(orderId: '', amount: 0, email: '', freelancerName: '', serviceDescription: '', freelancerPhotoUrl: '',),   
+      _buildPaymentPlaceholder(),
       const ClientRatingScreen(employerId: 0), 
     ];
 
@@ -39,6 +38,128 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
       Provider.of<client_dashboard.DashboardProvider>(context, listen: false)
           .loadDashboard();
     });
+  }
+
+  Widget _buildPaymentPlaceholder() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.payment, size: 64, color: Colors.grey),
+          SizedBox(height: 16),
+          Text(
+            'Payment',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          SizedBox(height: 8),
+          Text(
+            'Select an order to make payment',
+            style: TextStyle(color: Colors.grey),
+            textAlign: TextAlign.center,
+          ),
+          SizedBox(height: 20),
+          ElevatedButton(
+            onPressed: _handlePaymentNavigation,
+            child: Text('Make Payment'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _handlePaymentNavigation() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Payment'),
+        content: Text('Please select an order with pending payment to proceed.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _navigateToPaymentWithOrder();
+            },
+            child: Text('Select Order'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _navigateToPaymentWithOrder() async {
+    final orderData = await _getOrderDataForPayment();
+    
+    if (orderData != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => PaymentScreen(
+            orderId: orderData['id'],
+            amount: orderData['amount'],
+            email: orderData['email'],
+            freelancerName: orderData['freelancerName'],
+            serviceDescription: orderData['serviceDescription'],
+            freelancerPhotoUrl: orderData['freelancerPhotoUrl'],
+            paymentService: PaymentService(authToken: ''), authToken: '',
+          ),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No orders available for payment')),
+      );
+    }
+  }
+
+  // THIS METHOD SHOULD BE HERE IN _ClientDashboardScreenState
+  Future<Map<String, dynamic>?> _getOrderDataForPayment() async {
+    try {
+      // Get actual orders from API
+      final orders = await ApiService().getOrdersForPayment();
+      
+      if (orders.isNotEmpty) {
+        // Use the first order that needs payment
+        final order = orders.first;
+        
+        // Map the API response to your PaymentScreen expected format
+        return {
+          'id': order['order_id'] ?? order['id'] ?? '',
+          'amount': order['amount'] != null ? double.parse(order['amount'].toString()) : 0.0,
+          'email': order['email'] ?? '',
+          'freelancerName': order['freelancer_name'] ?? order['freelancerName'] ?? 'Freelancer',
+          'serviceDescription': order['service_description'] ?? order['serviceDescription'] ?? 'Service',
+          'freelancerPhotoUrl': order['freelancer_photo'] ?? order['freelancerPhotoUrl'] ?? '',
+        };
+      }
+      
+      // If no orders from API, try getting user orders
+      final userOrders = await ApiService().getUserOrders();
+      if (userOrders.isNotEmpty) {
+        final order = userOrders.firstWhere(
+          (order) => order['status'] == 'pending' || order['status'] == 'awaiting_payment',
+          orElse: () => userOrders.first,
+        );
+        
+        return {
+          'id': order['order_id'] ?? order['id'] ?? '',
+          'amount': order['amount'] != null ? double.parse(order['amount'].toString()) : 0.0,
+          'email': order['email'] ?? '',
+          'freelancerName': order['freelancer_name'] ?? order['freelancerName'] ?? 'Freelancer',
+          'serviceDescription': order['service_description'] ?? order['serviceDescription'] ?? 'Service',
+          'freelancerPhotoUrl': order['freelancer_photo'] ?? order['freelancerPhotoUrl'] ?? '',
+        };
+      }
+      
+      return null;
+      
+    } catch (e) {
+      print('Error fetching order data: $e');
+      return null;
+    }
   }
 
   void _onTabTapped(int index) {
@@ -97,8 +218,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
             BottomNavigationBarItem(
               icon: Icon(Icons.payment_rounded),
               label: 'Payment', 
-              ),
-            
+            ),
             BottomNavigationBarItem(
               icon: Icon(Icons.star_outline),
               label: 'Ratings',
@@ -110,8 +230,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
   }
 }
 
-// ------------------ Dashboard Tab ------------------
-
+// ... REST OF YOUR CODE (DashboardTab, DashboardContent, StatCard, SectionCard remain the same) ...
 class DashboardTab extends StatelessWidget {
   const DashboardTab({super.key});
 
@@ -168,8 +287,6 @@ class DashboardTab extends StatelessWidget {
         ),
       );
 }
-
-// ------------------ Dashboard Content ------------------
 
 class DashboardContent extends StatelessWidget {
   final client_dashboard.DashboardProvider provider;
@@ -294,8 +411,6 @@ class DashboardContent extends StatelessWidget {
     );
   }
 }
-
-// ------------------ Reusable Widgets ------------------
 
 class StatCard extends StatelessWidget {
   final String title;

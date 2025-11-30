@@ -98,7 +98,7 @@ class _TasksScreenState extends State<TasksScreen> {
           builder: (_) => TaskDetailScreen(
             taskId: taskId, 
             task: task, 
-            employer: task['employer'] ?? {}, // ✅ FIXED: Correct syntax
+            employer: task['employer'] ?? {}, 
           ),
         ),
       );

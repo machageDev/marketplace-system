@@ -1,4 +1,14 @@
-class ApiConfig {
-  static const String paystackPublicKey = "pk_test_5a2cefd171ac7fe5c789d6b460a17b4dab2b7e32";  
-  static const String baseUrl = "http://192.168.100.188:8000";
+class AppConfig {
+  static const String baseUrl = 'http://192.168.100.188:8000';
+  static const String paystackInitializeEndpoint = '/api/payment/initialize/';
+  
+  // You can add different environments
+  static const String developmentBaseUrl = 'http://192.168.100.188:8000';
+  static const String productionBaseUrl = 'https://your-production-domain.com';
+  
+  static String getBaseUrl() {
+    // You can switch based on environment
+    const bool isProduction = bool.fromEnvironment('dart.vm.product');
+    return isProduction ? productionBaseUrl : developmentBaseUrl;
+  }
 }
