@@ -29,7 +29,6 @@ class PaystackService:
             return None
     
     def initialize_transaction(self, email, amount, reference, callback_url=None):
-        """Initialize a Paystack transaction"""
         data = {
             'email': email,
             'amount': int(amount * 100),  # Convert to kobo
@@ -40,26 +39,12 @@ class PaystackService:
         return self._make_request('POST', '/transaction/initialize', data)
     
     def verify_transaction(self, reference):
-        """Verify a Paystack transaction"""
         return self._make_request('GET', f'/transaction/verify/{reference}')
     
-    def create_subaccount(self, business_name, bank_code, account_number, percentage_charge=10.0):
-        """Create a subaccount for freelancer (for split payments)"""
-        data = {
-            'business_name': business_name,
-            'bank_code': bank_code,
-            'account_number': account_number,
-            'percentage_charge': percentage_charge,
-            'settlement_bank': bank_code,
-        }
-        
-        return self._make_request('POST', '/subaccount', data)
-    
     def initialize_split_payment(self, email, amount, reference, subaccounts, callback_url=None):
-        """Initialize transaction with split payment"""
         data = {
             'email': email,
-            'amount': int(amount * 100),  # Convert to kobo
+            'amount': int(amount * 100),
             'reference': reference,
             'callback_url': callback_url,
             'subaccount': subaccounts,

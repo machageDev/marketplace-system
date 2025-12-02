@@ -446,4 +446,20 @@ class Order(models.Model):
     def __str__(self):
         return f"Order {self.order_id} - {self.client.user.username}"
 
- 
+class PaymentTransaction(models.Model):
+    TRANSACTION_STATUS = [
+        ('pending', 'Pending'),
+        ('success', 'Success'),
+        ('failed', 'Failed'),
+    ]
+    
+    order = models.ForeignKey(Order, on_delete=models.CASCADE)
+    paystack_reference = models.CharField(max_length=100, unique=True)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    platform_commission = models.DecimalField(max_digits=10, decimal_places=2)  # 10%
+    freelancer_share = models.DecimalField(max_digits=10, decimal_places=2)  # 90%
+    status = models.CharField(max_length=20, choices=TRANSACTION_STATUS, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"TX-{self.paystack_reference}"

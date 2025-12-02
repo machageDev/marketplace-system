@@ -5,9 +5,7 @@ from .models import EmployerToken, UserToken
 
 
 class IsAuthenticated(permissions.BasePermission):
-    """
-    Custom permission that works with your User model
-    """
+    
     def has_permission(self, request, view):
         return bool(request.user and getattr(request.user, 'is_authenticated', False))
 
@@ -49,9 +47,7 @@ class CustomTokenAuthentication(BaseAuthentication):
         return 'Bearer'
 
 class EmployerTokenAuthentication(BaseAuthentication):
-    """
-    Custom authentication class for Employer model
-    """
+    
     def authenticate(self, request):
         auth_header = request.META.get('HTTP_AUTHORIZATION', '')
         print(f" RAW Auth header: {auth_header}")
@@ -69,7 +65,7 @@ class EmployerTokenAuthentication(BaseAuthentication):
             employer_token = EmployerToken.objects.get(key=token_key)
             employer = employer_token.employer
 
-            print(f" ✅ SUCCESS: Authenticated employer {employer.username} (ID: {employer.employer_id})")
+            print(f"  SUCCESS: Authenticated employer {employer.username} (ID: {employer.employer_id})")
 
             # Required by DRF for authentication checks
             employer.is_authenticated = True
@@ -78,10 +74,10 @@ class EmployerTokenAuthentication(BaseAuthentication):
             return (employer, employer_token)
 
         except EmployerToken.DoesNotExist:
-            print(f" ❌ Token not found: {token_key}")
+            print(f"  Token not found: {token_key}")
             raise AuthenticationFailed('Invalid token')
         except Exception as e:
-            print(f" ⚠️ Authentication error: {e}")
+            print(f"  Authentication error: {e}")
             raise AuthenticationFailed('Authentication failed')
 
     def authenticate_header(self, request):

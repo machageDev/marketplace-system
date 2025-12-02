@@ -1212,10 +1212,7 @@ def employer_ratings(request, employer_id):
         if not employer:
             return Response([], status=status.HTTP_200_OK)
         
-        # Get ratings where:
-        # - rating_type is freelancer_to_employer  
-        # - AND the rated_user's email matches employer's contact_email
-        # - OR find another way to link User to Employer
+     
         ratings = Rating.objects.filter(
             rating_type='freelancer_to_employer'
         ).filter(

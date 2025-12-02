@@ -49,11 +49,13 @@ urlpatterns = [
     path('task-completions/<int:pk>/', views.task_completion_detail, name='task-completion-detail'),
     path('api/tasks/employer/rateable/', views.employer_rateable_tasks, name='employer-rateable-tasks'),
     path('api/employers/<int:employer_id>/ratings/', views.employer_ratings, name='employer-ratings'),
-   
-   # path('payment/callback/', views.payment_callback, name='payment_callback'),
-   # path('wallet/<int:user_id>/', views.get_wallet_balance, name='get_wallet_balance'),
-   # path('wallet/<int:user_id>/withdraw/', views.withdraw_funds, name='withdraw_funds'),
-    #path('wallet/<int:user_id>/topup/', views.top_up_wallet, name='top_up_wallet'),
+    path('api/payment/order/<str:order_id>/', views.payment_order_details, name='api_payment_order_details'),
+    path('api/payment/initialize/', views.initialize_payment_api, name='api_initialize_payment'),
+    path('api/payment/verify/<str:reference>/', views.verify_payment_api, name='api_verify_payment'),
+    path('api/payment/webhook/', views.payment_webhook_api, name='api_payment_webhook'),
+    path('api/transactions/history/', views.transaction_history, name='api_transaction_history'),
+    
+  
     
    
 ] 

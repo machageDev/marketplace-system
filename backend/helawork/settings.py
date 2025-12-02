@@ -11,9 +11,6 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 import os
 from dotenv import load_dotenv
-
-
-
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -24,12 +21,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-ve@o6bn-j5^xfcu$g!%$k-&%%1o+ga0-fdf*oo727m=lqeirf@'
+# CHANGED: Read from environment variable with fallback for development
+SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-ve@o6bn-j5^xfcu$g!%$k-&%%1o+ga0-fdf*oo727m=lqeirf@")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# CHANGED: Read from environment variable, default to False for production
+DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
 
-ALLOWED_HOSTS = ['*']
+# CHANGED: Read from environment variable for production
+ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "192.168.100.188 localhost 127.0.0.1").split(" ")
 
 
 # Application definition
@@ -42,6 +42,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'webapp',
+    'rest_framework',
+    'corsheaders',
 ]
 
 MIDDLEWARE = [
@@ -77,16 +79,16 @@ WSGI_APPLICATION = 'helawork.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+import dj_database_url
 
+# CHANGED: Use environment variable for database configuration
+# This will automatically use DATABASE_URL on Render, fallback to local for development
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'myprojectdb',       
-        'USER': 'postgres',         
-        'PASSWORD': 'admin',
-        'HOST': 'localhost',
-        'PORT': '5432',
-    }
+    'default': dj_database_url.config(
+        default='postgresql://helawork_user:pxDchEMaIRzIxmtv7Bh1qfySQ0QhgHs1@dpg-d4n7dv24d50c73f8jm80-a.oregon-postgres.render.com/helawork',
+        conn_max_age=600,
+        conn_health_checks=True,
+    )
 }
 
 
@@ -136,18 +138,31 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+# ADD for production on Render:
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
 # Paystack Configuration
-PAYSTACK_PUBLIC_KEY = 'pk_test_5a2cefd171ac7fe5c789d6b460a17b4dab2b7e32'
-PAYSTACK_SECRET_KEY = 'sk_test_a8f7126609cc45319d0a682d4b4764fbd6413db8'
-PAYSTACK_CALLBACK_URL = 'http://192.168.100.188:8000/payment/verify/'
+# CHANGED: Read from environment variables for security
+PAYSTACK_PUBLIC_KEY = os.environ.get('PAYSTACK_PUBLIC_KEY', 'pk_test_5a2cefd171ac7fe5c789d6b460a17b4dab2b7e32')
+PAYSTACK_SECRET_KEY = os.environ.get('PAYSTACK_SECRET_KEY', 'sk_test_a8f7126609cc45319d0a682d4b4764fbd6413db8')
+PAYSTACK_CALLBACK_URL = os.environ.get('PAYSTACK_CALLBACK_URL', 'http://192.168.100.188:8000/payment/verify/')
 
-# Django settings
-ALLOWED_HOSTS = ['192.168.100.188', 'localhost', '127.0.0.1']
+# Add CORS settings for Flutter frontend
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:53589",  # Flutter web debug port
+    "http://192.168.100.188:*",  # Your local network
+    "https://your-flutter-app.onrender.com",  # Your Flutter frontend URL
+]
 
+# Or allow all for development (disable in production)
+CORS_ALLOW_ALL_ORIGINS = True  # Set to False in production
 
-
-
+# Add Whitenoise for static files in production
+MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
