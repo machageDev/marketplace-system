@@ -191,7 +191,7 @@ class _SubmitRatingScreenState extends State<SubmitRatingScreen> {
                             color: Colors.grey[700]!.withOpacity(0.5),
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: Icon(
+                          child: const Icon(
                             Icons.star,
                             size: 20,
                             color: Colors.amber,

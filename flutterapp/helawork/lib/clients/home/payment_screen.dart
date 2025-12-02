@@ -12,7 +12,7 @@ class PaymentScreen extends StatefulWidget {
   final String currency;
   final PaymentService paymentService;
 
-  PaymentScreen({
+  const PaymentScreen({
     Key? key,
     required this.orderId,
     required this.amount,
@@ -300,14 +300,14 @@ class _PaymentScreenState extends State<PaymentScreen> {
                               color: Colors.blueAccent.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: Row(
+                            child: const Row(
                               children: [
                                 Icon(
                                   Icons.security,
                                   color: Colors.blueAccent,
                                   size: 16,
                                 ),
-                                const SizedBox(width: 8),
+                                SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
                                     'You will be redirected to complete payment securely',
@@ -365,7 +365,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                                     _paymentInitialized 
                                         ? 'Processing payment...' 
                                         : 'Initializing payment...',
-                                    style: TextStyle(
+                                    style: const TextStyle(
                                       color: Colors.blueAccent,
                                       fontSize: 14,
                                       fontWeight: FontWeight.w600,
@@ -395,7 +395,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
+            const Icon(
               Icons.error_outline,
               color: Colors.red,
               size: 64,

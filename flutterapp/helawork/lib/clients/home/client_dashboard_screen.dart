@@ -45,22 +45,22 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.payment, size: 64, color: Colors.grey),
-          SizedBox(height: 16),
-          Text(
+          const Icon(Icons.payment, size: 64, color: Colors.grey),
+          const SizedBox(height: 16),
+          const Text(
             'Payment',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
-          SizedBox(height: 8),
-          Text(
+          const SizedBox(height: 8),
+          const Text(
             'Select an order to make payment',
             style: TextStyle(color: Colors.grey),
             textAlign: TextAlign.center,
           ),
-          SizedBox(height: 20),
+          const SizedBox(height: 20),
           ElevatedButton(
             onPressed: _handlePaymentNavigation,
-            child: Text('Make Payment'),
+            child: const Text('Make Payment'),
           ),
         ],
       ),
@@ -71,19 +71,19 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Payment'),
-        content: Text('Please select an order with pending payment to proceed.'),
+        title: const Text('Payment'),
+        content: const Text('Please select an order with pending payment to proceed.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Cancel'),
+            child: const Text('Cancel'),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
               _navigateToPaymentWithOrder();
             },
-            child: Text('Select Order'),
+            child: const Text('Select Order'),
           ),
         ],
       ),
@@ -110,7 +110,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No orders available for payment')),
+        const SnackBar(content: Text('No orders available for payment')),
       );
     }
   }

@@ -8,7 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
 class ApiService{
-  static const String baseUrl = 'http://192.168.100.188:8000';
+  static const String baseUrl = 'http:// 172.16.123.76:8000';
   static const String registerUrl = '$baseUrl/apiregister';
   static const String  loginUrl ='$baseUrl/apilogin';
   static const String paymentsummaryUrl='$baseUrl/apipaymentsummary';
