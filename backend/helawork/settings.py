@@ -161,12 +161,14 @@ PAYSTACK_CALLBACK_URL = os.environ.get('PAYSTACK_CALLBACK_URL', 'http://192.168.
 
 # Add CORS settings for Flutter frontend
 CORS_ALLOWED_ORIGINS = [
+    "https://marketplace-system-1.onrender.com",
     "http://localhost:3000",
-    "http://localhost:53589",  # Flutter web debug port
-    "http://192.168.100.188:*",  # Your local network
-    "https://your-flutter-app.onrender.com",  # Your Flutter frontend URL
+    "http://localhost:53589",
+    # Add your Flutter web URL if deployed
 ]
 
+# Or allow all for development (careful in production)
+CORS_ALLOW_ALL_ORIGINS = True
 # Or allow all for development (disable in production)
 CORS_ALLOW_ALL_ORIGINS = True  # Set to False in production
 
