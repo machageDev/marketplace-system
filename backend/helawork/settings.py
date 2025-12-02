@@ -26,11 +26,16 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-ve@o6bn-j5^xfcu$g!%$k
 
 # SECURITY WARNING: don't run with debug turned on in production!
 # CHANGED: Read from environment variable, default to False for production
-#DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
-DEBUG = True 
+DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
+
 
 # CHANGED: Read from environment variable for production
-ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "marketplace-system-1.onrender.com localhost 127.0.0.1 192.168.100.188").split(" ")
+ALLOWED_HOSTS = [
+    'marketplace-system-1.onrender.com',
+    'localhost',
+    '127.0.0.1', 
+    '192.168.100.188',
+]
 
 
 # Application definition
