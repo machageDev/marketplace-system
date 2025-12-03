@@ -12,123 +12,285 @@ class TaskPage extends StatefulWidget {
 }
 
 class _TaskPageState extends State<TaskPage> {
+  // Add search controller and query
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  List<Map<String, dynamic>> _filteredTasks = [];
+
   @override
   void initState() {
     super.initState();
     Future.microtask(() =>
         Provider.of<TaskProvider>(context, listen: false).fetchTasks(context));
+    
+    // Listen to search controller changes
+    _searchController.addListener(() {
+      setState(() {
+        _searchQuery = _searchController.text.trim();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  // Function to filter tasks based on search query
+  List<Map<String, dynamic>> _filterTasks(List<Map<String, dynamic>> allTasks, String query) {
+    if (query.isEmpty) return allTasks;
+    
+    return allTasks.where((task) {
+      final title = (task['title'] ?? '').toString().toLowerCase();
+      final description = (task['description'] ?? '').toString().toLowerCase();
+      final employer = task['employer'] ?? {};
+      final employerName = (employer['company_name'] ?? employer['username'] ?? '').toString().toLowerCase();
+      final searchLower = query.toLowerCase();
+      
+      return title.contains(searchLower) ||
+             description.contains(searchLower) ||
+             employerName.contains(searchLower);
+    }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
     final taskProvider = Provider.of<TaskProvider>(context);
+    
+    // Filter tasks when provider data changes or search query changes
+    if (taskProvider.tasks.isNotEmpty) {
+      _filteredTasks = _filterTasks(taskProvider.tasks, _searchQuery);
+    }
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Available Tasks'),
         backgroundColor: Theme.of(context).colorScheme.primary,
       ),
-      body: taskProvider.isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : taskProvider.tasks.isEmpty
-              ? Center(
-                  child: Text(
-                    taskProvider.errorMessage.isNotEmpty
-                        ? taskProvider.errorMessage
-                        : 'No tasks available',
-                    style: const TextStyle(fontSize: 18),
+      body: Column(
+        children: [
+          // Search Bar
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.3),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
                   ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: taskProvider.tasks.length,
-                  itemBuilder: (context, index) {
-                    final task = taskProvider.tasks[index];
-                    final employer = task['employer'] ?? {};
-                    
-                    return Card(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 3,
-                      margin: const EdgeInsets.symmetric(vertical: 8),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Task Title and Status
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    task['title'] ?? 'Untitled Task',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 18,
-                                    ),
-                                  ),
-                                ),
-                                _buildTaskStatus(task),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            
-                            // Task Description
-                            Text(
-                              task['description'] ?? '',
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: Colors.grey[700],
-                                fontSize: 14,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            
-                            // Client Information
-                            _buildClientSection(employer),
-                            
-                            const SizedBox(height: 12),
-                            
-                            // View Details Button - FIXED: Added taskId parameter
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton.icon(
-                                onPressed: () {
-                                  // Navigate to Task Detail Screen
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => TaskDetailScreen(
-                                        taskId: task['task_id'] ?? task['id'] ?? 0, 
-                                        task: task,
-                                        employer: employer,
-                                      ),
-                                    ),
-                                  );
-                                },
-                                icon: const Icon(Icons.visibility, size: 18),
-                                label: const Text('View Task Details'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Theme.of(context).colorScheme.primary,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
+                ],
+              ),
+              child: TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'Search tasks by title, description or client...',
+                  prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, color: Colors.grey),
+                          onPressed: () {
+                            _searchController.clear();
+                          },
+                        )
+                      : null,
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                 ),
+                onChanged: (value) {
+                  setState(() {
+                    _searchQuery = value.trim();
+                  });
+                },
+              ),
+            ),
+          ),
+          
+          // Show search results count if searching
+          if (_searchQuery.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Search results: ${_filteredTasks.length}',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      _searchController.clear();
+                    },
+                    child: const Text('Clear Search'),
+                  ),
+                ],
+              ),
+            ),
+          
+          // Tasks List
+          Expanded(
+            child: taskProvider.isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : taskProvider.tasks.isEmpty
+                    ? Center(
+                        child: Text(
+                          taskProvider.errorMessage.isNotEmpty
+                              ? taskProvider.errorMessage
+                              : 'No tasks available',
+                          style: const TextStyle(fontSize: 18),
+                        ),
+                      )
+                    : _filteredTasks.isEmpty && _searchQuery.isNotEmpty
+                        ? _buildNoResults()
+                        : ListView.builder(
+                            padding: const EdgeInsets.all(16),
+                            itemCount: _filteredTasks.length,
+                            itemBuilder: (context, index) {
+                              final task = _filteredTasks[index];
+                              final employer = task['employer'] ?? {};
+                              
+                              return Card(
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                elevation: 3,
+                                margin: const EdgeInsets.symmetric(vertical: 8),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      // Task Title and Status
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              task['title'] ?? 'Untitled Task',
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 18,
+                                              ),
+                                            ),
+                                          ),
+                                          _buildTaskStatus(task),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      
+                                      // Task Description
+                                      Text(
+                                        task['description'] ?? '',
+                                        maxLines: 3,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: Colors.grey[700],
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      
+                                      // Client Information
+                                      _buildClientSection(employer),
+                                      
+                                      const SizedBox(height: 12),
+                                      
+                                      // View Details Button - FIXED: Added taskId parameter
+                                      SizedBox(
+                                        width: double.infinity,
+                                        child: ElevatedButton.icon(
+                                          onPressed: () {
+                                            // Navigate to Task Detail Screen
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) => TaskDetailScreen(
+                                                  taskId: task['task_id'] ?? task['id'] ?? 0, 
+                                                  task: task,
+                                                  employer: employer,
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                          icon: const Icon(Icons.visibility, size: 18),
+                                          label: const Text('View Task Details'),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Theme.of(context).colorScheme.primary,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(vertical: 12),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+          ),
+        ],
+      ),
     );
   }
 
+  // Widget for when no search results found
+  Widget _buildNoResults() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.search_off,
+            size: 80,
+            color: Colors.grey[300],
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'No tasks found',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w500,
+              color: Colors.grey[600],
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Try different keywords',
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.grey[500],
+            ),
+          ),
+          const SizedBox(height: 20),
+          ElevatedButton.icon(
+            onPressed: () {
+              _searchController.clear();
+            },
+            icon: const Icon(Icons.clear_all),
+            label: const Text('Clear Search'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Rest of your existing methods remain the same...
   Widget _buildClientSection(Map<String, dynamic> employer) {
     final companyName = employer['company_name'];
     final username = employer['username'];
