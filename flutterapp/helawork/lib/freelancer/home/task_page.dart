@@ -67,6 +67,7 @@ class _TaskPageState extends State<TaskPage> {
       appBar: AppBar(
         title: const Text('Available Tasks'),
         backgroundColor: Theme.of(context).colorScheme.primary,
+        automaticallyImplyLeading: false, 
       ),
       body: Column(
         children: [
