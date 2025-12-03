@@ -45,6 +45,7 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
       appBar: AppBar(
         title: const Text("Submit Task"),
         backgroundColor: Theme.of(context).colorScheme.primary,
+        automaticallyImplyLeading: false, // This removes the back arrow
       ),
       body: submissionProvider.isLoading
           ? const Center(child: CircularProgressIndicator())
