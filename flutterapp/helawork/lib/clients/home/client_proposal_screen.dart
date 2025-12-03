@@ -33,6 +33,7 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
         foregroundColor: whiteColor,
         centerTitle: true,
         elevation: 1,
+        automaticallyImplyLeading: false, // This removes the back arrow
       ),
       body: Consumer<ProposalsProvider>(
         builder: (context, proposalsProvider, child) {
