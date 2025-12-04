@@ -29,9 +29,7 @@ class _WalletScreenState extends State<WalletScreen> {
         loading = false;
       });
     } catch (e) {
-      setState(() {
-        loading = false;
-      });
+      setState(() => loading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Failed to load balance: $e")),
       );
@@ -53,7 +51,7 @@ class _WalletScreenState extends State<WalletScreen> {
         MaterialPageRoute(
           builder: (_) => CheckoutPage(
             paymentUrl: link,
-            onSuccess: _loadWallet, // Refresh balance after successful payment
+            onSuccess: _loadWallet,
           ),
         ),
       );
@@ -94,7 +92,7 @@ class _WalletScreenState extends State<WalletScreen> {
 
   void _showTopUpDialog() {
     final amountController = TextEditingController();
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -133,7 +131,7 @@ class _WalletScreenState extends State<WalletScreen> {
 
   void _showWithdrawDialog() {
     final amountController = TextEditingController();
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -187,174 +185,179 @@ class _WalletScreenState extends State<WalletScreen> {
           ),
         ],
       ),
+
+      // ======================
+      // BODY (SCROLL FIX APPLIED)
+      // ======================
       body: loading
           ? const Center(
               child: CircularProgressIndicator(color: Colors.blueAccent),
             )
           : Padding(
               padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: [
-                  // Balance Card
-                  Card(
-                    color: const Color(0xFF1A1A1A),
-                    elevation: 8,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // ---------- BALANCE CARD ----------
+                    Card(
+                      color: const Color(0xFF1A1A1A),
+                      elevation: 8,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          children: [
+                            const Text(
+                              'Available Balance',
+                              style: TextStyle(
+                                fontSize: 18,
+                                color: Colors.white70,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 15),
+                            Text(
+                              'KES ${balance.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                fontSize: 40,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blueAccent,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              '≈ \$${(balance / 120).toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: Colors.white54,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
+
+                    const SizedBox(height: 40),
+
+                    // ---------- ACTION BUTTONS ----------
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blueAccent,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 30,
+                              vertical: 16,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          onPressed: _showTopUpDialog,
+                          icon: const Icon(Icons.add_circle_outline),
+                          label: const Text('Top Up', style: TextStyle(fontSize: 16)),
+                        ),
+
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF1A1A1A),
+                            foregroundColor: Colors.blueAccent,
+                            side: const BorderSide(color: Colors.blueAccent),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 30,
+                              vertical: 16,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          onPressed: _showWithdrawDialog,
+                          icon: const Icon(Icons.arrow_circle_down_outlined),
+                          label: const Text('Withdraw', style: TextStyle(fontSize: 16)),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 30),
+
+                    // ---------- QUICK TOP-UP ----------
+                    const Text(
+                      'Quick Top-Up',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.white70,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [500, 1000, 2000, 5000].map((amount) {
+                        return ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF2A2A2A),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          onPressed: () => _topUp(amount.toDouble()),
+                          child: Text('KES $amount'),
+                        );
+                      }).toList(),
+                    ),
+
+                    const SizedBox(height: 30),
+
+                    // ---------- INFO ----------
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1A1A1A),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Available Balance',
+                          Row(
+                            children: [
+                              Icon(Icons.info_outline, size: 16, color: Colors.blueAccent),
+                              SizedBox(width: 8),
+                              Text(
+                                'Wallet Information',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            '• Funds are available instantly after top-up\n'
+                            '• Minimum withdrawal: KES 300\n'
+                            '• Withdrawals processed within 24 hours\n'
+                            '• All transactions are secure',
                             style: TextStyle(
-                              fontSize: 18,
-                              color: Colors.white70,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(height: 15),
-                          Text(
-                            'KES ${balance.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              fontSize: 40,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.blueAccent,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            '≈ \$${(balance / 120).toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              fontSize: 14,
                               color: Colors.white54,
+                              fontSize: 12,
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 40),
-                  
-                  // Action Buttons
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      // Top Up Button
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blueAccent,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 30,
-                            vertical: 16,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: _showTopUpDialog,
-                        icon: const Icon(Icons.add_circle_outline),
-                        label: const Text(
-                          'Top Up',
-                          style: TextStyle(fontSize: 16),
-                        ),
-                      ),
-                      
-                      // Withdraw Button
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF1A1A1A),
-                          foregroundColor: Colors.blueAccent,
-                          side: const BorderSide(color: Colors.blueAccent),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 30,
-                            vertical: 16,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: _showWithdrawDialog,
-                        icon: const Icon(Icons.arrow_circle_down_outlined),
-                        label: const Text(
-                          'Withdraw',
-                          style: TextStyle(fontSize: 16),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 30),
-                  
-                  // Quick Top-Up Options
-                  const Text(
-                    'Quick Top-Up',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.white70,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [500, 1000, 2000, 5000].map((amount) {
-                      return ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF2A2A2A),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                        onPressed: () => _topUp(amount.toDouble()),
-                        child: Text('KES $amount'),
-                      );
-                    }).toList(),
-                  ),
-                  const Spacer(),
-                  
-                  // Additional Info
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1A1A1A),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.info_outline, size: 16, color: Colors.blueAccent),
-                            SizedBox(width: 8),
-                            Text(
-                              'Wallet Information',
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: 8),
-                        Text(
-                          '• Funds are available instantly after top-up\n'
-                          '• Minimum withdrawal: KES 300\n'
-                          '• Withdrawals processed within 24 hours\n'
-                          '• All transactions are secure',
-                          style: TextStyle(
-                            color: Colors.white54,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+
+                    const SizedBox(height: 40),
+                  ],
+                ),
               ),
             ),
     );
@@ -364,6 +367,7 @@ class _WalletScreenState extends State<WalletScreen> {
 class CheckoutPage extends StatefulWidget {
   final String paymentUrl;
   final VoidCallback? onSuccess;
+
   const CheckoutPage({
     super.key,
     required this.paymentUrl,
@@ -390,25 +394,17 @@ class _CheckoutPageState extends State<CheckoutPage> {
           },
           onPageFinished: (url) {
             setState(() => isLoading = false);
-            
-            // Check if payment was successful
+
             if (url.contains('success') || url.contains('completed')) {
               Future.delayed(const Duration(seconds: 1), () {
-                if (widget.onSuccess != null) {
-                  widget.onSuccess!();
-                }
-                if (context.mounted) {
-                  Navigator.pop(context);
-                }
+                widget.onSuccess?.call();
+                if (context.mounted) Navigator.pop(context);
               });
             }
-            
-            // Check if payment was cancelled
+
             if (url.contains('cancel') || url.contains('failed')) {
               Future.delayed(const Duration(seconds: 1), () {
-                if (context.mounted) {
-                  Navigator.pop(context);
-                }
+                if (context.mounted) Navigator.pop(context);
               });
             }
           },
