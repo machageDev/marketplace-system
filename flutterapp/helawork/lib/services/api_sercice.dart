@@ -1975,5 +1975,50 @@ Future<List<dynamic>> getUserOrders() async {
     rethrow;
   }
 }
+
+  Future<double> getBalance() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/freelancer/wallet/'),
+      headers: {'Authorization': 'Token $token'},
+    );
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['balance']?.toDouble() ?? 0.0;
+    } else {
+      throw Exception('Failed to fetch balance');
+    }
+  }
+
+  Future<bool> withdraw(double amount) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/freelancer/withdraw/'),
+      headers: {
+        'Authorization': 'Token $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'amount': amount}),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['status'] == true;
+    } else {
+      return false;
+    }
+  }
+
+  Future<List<dynamic>> getTransactions() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/transactions/'),
+      headers: {'Authorization': 'Token $token'},
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['data'];
+    } else {
+      throw Exception('Failed to fetch transactions');
+    }
+  }
  
 }  

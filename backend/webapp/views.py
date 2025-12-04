@@ -1508,3 +1508,29 @@ def transaction_history(request):
             'status': False,
             'message': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)        
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def freelancer_withdraw(request):
+    amount = request.data.get('amount')
+    freelancer = request.user.freelancer
+
+    if amount > freelancer.wallet_balance:
+        return Response({'status': False, 'message': 'Insufficient balance'})
+    
+    # Option A: Paystack transfer
+    paystack = PaystackService()
+    transfer = paystack.transfer(
+        amount=int(amount*100),
+        recipient=freelancer.paystack_recipient_code,
+        reason='Freelancer withdrawal'
+    )
+
+    if transfer['status']:
+        freelancer.wallet_balance -= amount
+        freelancer.save()
+        return Response({'status': True, 'message': 'Withdrawal successful'})
+    else:
+        return Response({'status': False, 'message': 'Withdrawal failed'})
+        
