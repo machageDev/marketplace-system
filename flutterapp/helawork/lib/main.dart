@@ -7,7 +7,6 @@ import 'package:helawork/clients/provider/dashboard_provider.dart' as client_das
 //import 'package:helawork/clients/provider/employer_rating_provider.dart';
 import 'package:helawork/clients/provider/rating_provider.dart' as client_rating;
 import 'package:helawork/clients/provider/task_provider.dart' as client_task;
-import 'package:helawork/freelancer/home/wallet_screen.dart';
 import 'package:helawork/freelancer/provider/auth_provider.dart' as freelancer_auth;
 import 'package:helawork/freelancer/provider/contract_provider.dart';
 import 'package:helawork/freelancer/provider/dashbaord_provider.dart' as freelancer_dashboard;
@@ -17,17 +16,15 @@ import 'package:helawork/freelancer/provider/rating_provider.dart' as freelancer
 import 'package:helawork/freelancer/provider/submission_provider.dart';
 import 'package:helawork/freelancer/provider/task_provider.dart';
 import 'package:helawork/freelancer/provider/user_profile_provider.dart';
-import 'package:helawork/freelancer/provider/wallet_provider.dart';
 import 'package:helawork/freelancer/screens/login_screen.dart'; 
 import 'package:helawork/clients/screens/client_login_screen.dart'; 
 import 'package:helawork/services/api_sercice.dart';
-import 'package:helawork/services/wallet_service.dart';
 import 'package:provider/provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  var userToken;
+
   runApp(
     MultiProvider(
       providers: [
@@ -42,6 +39,8 @@ void main() async {
         ChangeNotifierProvider(create: (_) => freelancer_rating.RatingProvider()),
         ChangeNotifierProvider(create: (_) => SubmissionProvider()),
         
+
+
         // Client Providers
         ChangeNotifierProvider(create: (_) => client_dashboard.DashboardProvider(apiService: ApiService())),
         ChangeNotifierProvider(create: (_) => client_auth.AuthProvider(apiService: ApiService())), 
@@ -51,7 +50,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => ClientContractProvider()),
         //ChangeNotifierProvider(create: (_) => EmployerRatingProvider()),
         ChangeNotifierProvider(create: (_) => client_rating.ClientRatingProvider()),
-        ChangeNotifierProvider(create: (_) => WalletProvider(walletService: WalletService(), token: userToken, child: const WalletScreen(token: ''))),
+        
       ],
       child: const MyApp(),
     ),
