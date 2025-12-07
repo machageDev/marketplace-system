@@ -19,7 +19,9 @@ import 'package:helawork/freelancer/provider/user_profile_provider.dart';
 import 'package:helawork/freelancer/screens/login_screen.dart'; 
 import 'package:helawork/clients/screens/client_login_screen.dart'; 
 import 'package:helawork/services/api_sercice.dart';
+import 'package:helawork/services/wallet_service.dart';
 import 'package:provider/provider.dart';
+import 'package:helawork/freelancer/provider/wallet_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,6 +31,12 @@ void main() async {
     MultiProvider(
       providers: [
         // Freelancer Providers
+         ChangeNotifierProvider(
+          create: (_) => WalletProvider.create(
+            walletService: WalletService(),  // Create WalletService instance
+            token: '', // You'll need to pass the actual token here or update it later
+          ),
+        ),
         ChangeNotifierProvider(create: (_) => freelancer_auth.AuthProvider()),
         ChangeNotifierProvider(create: (_) => ForgotPasswordProvider()),    
         ChangeNotifierProvider(create: (_) => UserProfileProvider()),  

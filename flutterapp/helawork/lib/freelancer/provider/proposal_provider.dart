@@ -34,17 +34,15 @@ class ProposalProvider with ChangeNotifier {
 Future<void> addProposal(Proposal proposal, {PlatformFile? pdfFile}) async {
   _isLoading = true;
   error = null;
-  notifyListeners(); 
+  notifyListeners();
 
   try {
     print(' Sending proposal to API...');
-    
     
     if (pdfFile != null && pdfFile.bytes == null) {
       throw Exception("PDF file bytes are null - file may be corrupted");
     }
     
-   
     final submittedProposal = await ApiService.submitProposal(
       proposal, 
       pdfFile: pdfFile
@@ -52,15 +50,20 @@ Future<void> addProposal(Proposal proposal, {PlatformFile? pdfFile}) async {
     
     print(' API call successful, adding to local list');
     _proposals.insert(0, submittedProposal);
-    error = null;
+    error = null; // Ensure error is cleared
+    
+    // Show success - you could add a success flag if needed
+    print(' Proposal added successfully');
     
   } catch (e) {
     print(' Error in addProposal: $e');
     error = "Failed to add proposal: $e";
-    rethrow;
+    
+    // Don't rethrow - just notify listeners with the error
+    // Rethrowing might cause the UI to show failure even when succeeded
   } finally {
     _isLoading = false;
-    notifyListeners(); 
+    notifyListeners();
     print(' Loading state set to false');
   }
 }
