@@ -111,6 +111,8 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Proposals"),
+        centerTitle: true,
+        automaticallyImplyLeading: false, // This removes the back arrow
         actions: [
           IconButton(
             icon: Icon(showCreateForm ? Icons.list : Icons.add),
@@ -161,7 +163,7 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
           key: _formKey,
           child: Column(
             children: [
-              // Task Dropdown
+              // Task Dropdown - FIXED for overflow
               DropdownButtonFormField<int>(
                 decoration: const InputDecoration(
                   labelText: "Select Task",
@@ -171,22 +173,36 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
                 items: taskProvider.availableTasks
                     .map((task) => DropdownMenuItem<int>(
                           value: task['id'],
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                task['title'] ?? 'Untitled Task',
-                                style: const TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                              if (task['employer']?['company_name'] != null)
+                          child: Container(
+                            constraints: const BoxConstraints(
+                              minHeight: 48.0, // Increased minimum height
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
                                 Text(
-                                  'Client: ${task['employer']?['company_name']}',
+                                  task['title'] ?? 'Untitled Task',
                                   style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14, // Slightly smaller font
                                   ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                            ],
+                                if (task['employer']?['company_name'] != null)
+                                  Text(
+                                    'Client: ${task['employer']?['company_name']}',
+                                    style: const TextStyle(
+                                      fontSize: 11, // Smaller font
+                                      color: Colors.grey,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                              ],
+                            ),
                           ),
                         ))
                     .toList(),
