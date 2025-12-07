@@ -88,8 +88,12 @@ class WalletScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('My Wallet'),
+        centerTitle: true,  // This centers the title
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
+        // Removed the arrow/back button by not having leading widget
+        automaticallyImplyLeading: false,  // This removes the back arrow
+        // If you want to keep the refresh button in the app bar:
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -99,41 +103,44 @@ class WalletScreen extends StatelessWidget {
       ),
       body: wallet.loading
           ? const Center(child: CircularProgressIndicator(color: Colors.blueAccent))
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  Card(
-                    color: const Color(0xFF1A1A1A),
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        children: [
-                          const Text('Available Balance', style: TextStyle(color: Colors.white70)),
-                          const SizedBox(height: 15),
-                          Text('KES ${wallet.balance.toStringAsFixed(2)}',
-                              style: const TextStyle(fontSize: 40, color: Colors.blueAccent)),
-                        ],
+          : Center(  // Center the entire content
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Card(
+                      color: const Color(0xFF1A1A1A),
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          children: [
+                            const Text('Available Balance', style: TextStyle(color: Colors.white70)),
+                            const SizedBox(height: 15),
+                            Text('KES ${wallet.balance.toStringAsFixed(2)}',
+                                style: const TextStyle(fontSize: 40, color: Colors.blueAccent)),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 40),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      ElevatedButton.icon(
-                        onPressed: _showTopUpDialog,
-                        icon: const Icon(Icons.add_circle_outline),
-                        label: const Text('Top Up'),
-                      ),
-                      ElevatedButton.icon(
-                        onPressed: _showWithdrawDialog,
-                        icon: const Icon(Icons.arrow_circle_down_outlined),
-                        label: const Text('Withdraw'),
-                      ),
-                    ],
-                  ),
-                ],
+                    const SizedBox(height: 40),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: _showTopUpDialog,
+                          icon: const Icon(Icons.add_circle_outline),
+                          label: const Text('Top Up'),
+                        ),
+                        ElevatedButton.icon(
+                          onPressed: _showWithdrawDialog,
+                          icon: const Icon(Icons.arrow_circle_down_outlined),
+                          label: const Text('Withdraw'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
     );
