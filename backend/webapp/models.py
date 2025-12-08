@@ -4,6 +4,7 @@ from django.utils import timezone
 import uuid
 from django.db import models
 
+#freelancer (for workers)
 class User(models.Model):
     user_id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=100, default="Anonymous")
@@ -28,7 +29,7 @@ class UserToken(models.Model):
     created = models.DateTimeField(auto_now_add=True)
 
 # Employer (for clients)
-# models.py
+
 class Employer(models.Model):
     employer_id = models.AutoField(primary_key=True)
     username = models.CharField(max_length=255)

@@ -2,54 +2,96 @@ from typing import List, Dict, Any
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-def freelancer_text(freelancer) -> str:
+
+def freelancer_text(profile) -> str:
+    """
+    Convert UserProfile into a single searchable text string.
+    """
+    # Convert skills string → list safely
+    skills_list = []
+    if profile.skills:
+        skills_list = [s.strip() for s in profile.skills.split(",")]
+
+    # Portfolio items (if any)
+    portfolio_desc = []
+    if hasattr(profile, "portfolio_items"):
+        portfolio_desc = [p.description for p in profile.portfolio_items.all()]
+
     parts = [
-        freelancer.user.get_full_name() or "",
-        freelancer.bio or "",
-        " ".join(freelancer.skills or []),
-        " ".join([p.description for p in getattr(freelancer, "portfolio_items", [])]),
+        profile.user.name or "",
+        profile.bio or "",
+        " ".join(skills_list),
+        " ".join(portfolio_desc),
     ]
+
     return " ".join(parts).lower()
 
+
 def job_text(job) -> str:
+    """
+    Convert Job fields into text for matching.
+    """
+    tags = job.tags if isinstance(job.tags, list) else []
+    req_skills = job.required_skills if isinstance(job.required_skills, list) else []
+
     parts = [
         job.title or "",
         job.description or "",
-        " ".join(job.tags or []),
-        " ".join(job.required_skills or []),
+        " ".join(tags),
+        " ".join(req_skills),
     ]
+
     return " ".join(parts).lower()
 
-def rank_freelancers_for_job(job, freelancers, top_n=10) -> List[Dict[str, Any]]:
-    corpus = [job_text(job)] + [freelancer_text(f) for f in freelancers]
+
+def rank_freelancers_for_job(job, profiles, top_n=10) -> List[Dict[str, Any]]:
+    """
+    Rank freelancer profiles for a job using TF-IDF + skill match + rating + activity.
+    """
+
+    # Build TF-IDF corpus
+    corpus = [job_text(job)] + [freelancer_text(p) for p in profiles]
 
     vectorizer = TfidfVectorizer(stop_words='english', max_features=4000)
     X = vectorizer.fit_transform(corpus)
 
     job_vec = X[0]
-    fr_vecs = X[1:]
-    sims = cosine_similarity(job_vec, fr_vecs).flatten()
+    profile_vecs = X[1:]
+    sims = cosine_similarity(job_vec, profile_vecs).flatten()
 
+    # Prepare job skills
     job_skills = set([s.lower() for s in (job.required_skills or [])])
 
     results = []
-    for idx, f in enumerate(freelancers):
+
+    for idx, profile in enumerate(profiles):
         base = float(sims[idx])
 
-        fr_skills = set([s.lower() for s in (f.skills or [])])
-        skill_overlap = len(job_skills.intersection(fr_skills))
+        # Normalize profile skills
+        profile_skill_list = []
+        if profile.skills:
+            profile_skill_list = [s.strip() for s in profile.skills.split(",")]
+
+        profile_skills = set([s.lower() for s in profile_skill_list])
+        skill_overlap = len(job_skills.intersection(profile_skills))
         skill_bonus = min(0.35, 0.1 * skill_overlap)
 
-        rating_bonus = (getattr(f, 'rating', 0.0) / 5.0) * 0.3
-        activity_bonus = 0.15 if getattr(f, 'is_online', False) else 0.0
+        # Rating bonus (profile.average_rating() recommended)
+        rating = getattr(profile, "rating", 0.0)
+        rating_bonus = (rating / 5.0) * 0.3
 
+        # Online bonus if profile has is_online attribute
+        activity_bonus = 0.15 if getattr(profile, "is_active_now", False) else 0.0
+
+        # Final score
         score = base + skill_bonus + rating_bonus + activity_bonus
 
         results.append({
-            'freelancer_id': f.id,
-            'score': score,
-            'base_similarity': base,
-            'skill_overlap': skill_overlap,
+            "profile_id": profile.profile_id,
+            "user_id": profile.user.user_id,
+            "score": score,
+            "base_similarity": base,
+            "skill_overlap": skill_overlap,
         })
 
-    return sorted(results, key=lambda r: r['score'], reverse=True)[:top_n]
+    return sorted(results, key=lambda r: r["score"], reverse=True)[:top_n]
