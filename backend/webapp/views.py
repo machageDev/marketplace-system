@@ -23,6 +23,7 @@ from django.db import  transaction
 from rest_framework import status
 from django.core.mail import send_mail
 
+from webapp.matcher import rank_freelancers_for_job
 from webapp.paystack_service import PaystackService
 from .models import Contract, Employer, EmployerProfile, EmployerToken, Order, Proposal, Rating, Service, Submission, Task, TaskCompletion, Transaction, UserProfile, Wallet
 from .models import  User
@@ -1533,4 +1534,47 @@ def freelancer_withdraw(request):
         return Response({'status': True, 'message': 'Withdrawal successful'})
     else:
         return Response({'status': False, 'message': 'Withdrawal failed'})
-        
+
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def suggest_freelancers(request, job_id):
+    
+    job = get_object_or_404(job, pk=job_id)
+
+    #  Get active freelancers in same category
+    candidates = UserProfile.objects.filter(
+        is_active=True,
+        category=job.category
+    )[:1000]   # limit so TF-IDF is fast
+
+    if not candidates:
+        return Response({
+            "status": False,
+            "message": "No freelancers available for this category."
+        })
+
+    #  Run the matching
+    ranked_results = rank_freelancers_for_job(job, list(candidates), top_n=10)
+
+    # Extract profile IDs from results
+    profile_ids = [r["profile_id"] for r in ranked_results]
+
+    # Query corresponding profile data
+    profiles = UserProfileSerializer(
+        UserProfile.objects.filter(profile_id__in=profile_ids),
+        many=True
+    ).data
+
+    # Maintain ranking order
+    ordered_profiles = sorted(
+        profiles,
+        key=lambda p: profile_ids.index(p["profile_id"])
+    )
+
+    return Response({
+        "status": True,
+        "matches": ordered_profiles,
+        "meta": ranked_results
+    })        

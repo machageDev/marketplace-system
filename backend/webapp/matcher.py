@@ -4,9 +4,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 
 def freelancer_text(profile) -> str:
-    """
-    Convert UserProfile into a single searchable text string.
-    """
+    
     # Convert skills string → list safely
     skills_list = []
     if profile.skills:
@@ -28,9 +26,7 @@ def freelancer_text(profile) -> str:
 
 
 def job_text(job) -> str:
-    """
-    Convert Job fields into text for matching.
-    """
+    
     tags = job.tags if isinstance(job.tags, list) else []
     req_skills = job.required_skills if isinstance(job.required_skills, list) else []
 
@@ -45,9 +41,7 @@ def job_text(job) -> str:
 
 
 def rank_freelancers_for_job(job, profiles, top_n=10) -> List[Dict[str, Any]]:
-    """
-    Rank freelancer profiles for a job using TF-IDF + skill match + rating + activity.
-    """
+   
 
     # Build TF-IDF corpus
     corpus = [job_text(job)] + [freelancer_text(p) for p in profiles]
