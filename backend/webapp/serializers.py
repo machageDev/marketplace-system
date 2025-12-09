@@ -241,12 +241,17 @@ class TransactionSerializer(serializers.ModelSerializer):
         model = Transaction
         fields = '__all__'        
 
-
+# In your serializers.py file - REPLACE JUST THE SubmissionSerializer class
 
 class SubmissionSerializer(serializers.ModelSerializer):
     freelancer_name = serializers.CharField(source='freelancer.get_full_name', read_only=True)
     task_title = serializers.CharField(source='task.title', read_only=True)
     employer_name = serializers.CharField(source='contract.employer.user.get_full_name', read_only=True)
+    
+    # ADD THESE: Explicitly define file fields for proper handling
+    zip_file = serializers.FileField(required=False, allow_null=True)
+    screenshots = serializers.FileField(required=False, allow_null=True)
+    video_demo = serializers.FileField(required=False, allow_null=True)
     
     class Meta:
         model = Submission
@@ -261,21 +266,229 @@ class SubmissionSerializer(serializers.ModelSerializer):
             'checklist_no_critical_bugs', 'revision_notes', 'resubmitted_at',
             'task_title', 'employer_name'
         ]
-        read_only_fields = ['submission_id', 'freelancer', 'contract', 'submitted_at', 'resubmitted_at']
+        read_only_fields = [
+            'submission_id', 'freelancer', 'contract', 
+            'submitted_at', 'resubmitted_at', 'status'  # Added status as read_only
+        ]
+        # ADD THIS: Define required fields explicitly
+        extra_kwargs = {
+            'title': {'required': True, 'allow_blank': False},
+            'description': {'required': True, 'allow_blank': False},
+            'task': {'required': True}
+        }
     
     def validate(self, data):
+        """
+        Enhanced validation to match Flutter's submission format
+        """
+        request = self.context.get('request')
         
-        if not any([
+        # Check for at least ONE submission method
+        # Consider both data dict and request.FILES
+        has_url = any([
             data.get('repo_url'),
             data.get('staging_url'), 
             data.get('live_demo_url'),
             data.get('apk_download_url'),
-            data.get('zip_file')
-        ]):
-            raise serializers.ValidationError(
-                "Please provide at least one of: repository URL, staging URL, live demo URL, APK download, or zip file."
-            )
+            data.get('testflight_link')
+        ])
+        
+        # Check for files in both data dict and request
+        has_file_in_data = any([
+            data.get('zip_file'),
+            data.get('screenshots'),
+            data.get('video_demo')
+        ])
+        
+        has_file_in_request = False
+        if request and hasattr(request, 'FILES'):
+            has_file_in_request = any([
+                request.FILES.get('zip_file'),
+                request.FILES.get('screenshots'),
+                request.FILES.get('video_demo')
+            ])
+        
+        if not (has_url or has_file_in_data or has_file_in_request):
+            raise serializers.ValidationError({
+                "submission_method": "Please provide at least one submission method: "
+                "repository URL, staging URL, live demo URL, APK download, TestFlight link, "
+                "or uploaded file (zip, screenshots, video)."
+            })
+        
+        # Validate that task exists (if provided as ID)
+        task_value = data.get('task')
+        if task_value:
+            # Handle if task is provided as ID (from Flutter)
+            if isinstance(task_value, int):
+                try:
+                    task = Task.objects.get(id=task_value)
+                    data['task'] = task  # Replace ID with Task instance
+                except Task.DoesNotExist:
+                    raise serializers.ValidationError({
+                        "task": "Task does not exist."
+                    })
+        
+        # Validate checklist fields are boolean
+        checklist_fields = [
+            'checklist_tests_passing',
+            'checklist_deployed_staging',
+            'checklist_documentation',
+            'checklist_no_critical_bugs'
+        ]
+        
+        for field in checklist_fields:
+            if field in data and not isinstance(data[field], bool):
+                raise serializers.ValidationError({
+                    field: f"{field.replace('_', ' ').title()} must be true or false."
+                })
+        
+        # Validate URLs if provided
+        url_fields = [
+            'repo_url', 'staging_url', 'live_demo_url',
+            'apk_download_url', 'testflight_link'
+        ]
+        
+        for field in url_fields:
+            value = data.get(field)
+            if value and value != '':
+                if not (value.startswith('http://') or value.startswith('https://')):
+                    raise serializers.ValidationError({
+                        field: "URL must start with http:// or https://"
+                    })
+        
         return data
+    
+    def create(self, validated_data):
+        """
+        Custom create to handle file uploads and set relationships
+        """
+        request = self.context.get('request')
+        
+        # Handle files from request.FILES if not in validated_data
+        if request and hasattr(request, 'FILES'):
+            if 'zip_file' not in validated_data and 'zip_file' in request.FILES:
+                validated_data['zip_file'] = request.FILES['zip_file']
+            if 'screenshots' not in validated_data and 'screenshots' in request.FILES:
+                validated_data['screenshots'] = request.FILES['screenshots']
+            if 'video_demo' not in validated_data and 'video_demo' in request.FILES:
+                validated_data['video_demo'] = request.FILES['video_demo']
+        
+        # Set freelancer from request user
+        if 'freelancer' not in validated_data and request and request.user:
+            validated_data['freelancer'] = request.user
+        
+        # Set contract automatically based on task and freelancer
+        if 'contract' not in validated_data:
+            task = validated_data.get('task')
+            freelancer = validated_data.get('freelancer')
+            
+            if task and freelancer:
+                try:
+                    contract = Contract.objects.get(
+                        task=task,
+                        freelancer=freelancer
+                    )
+                    validated_data['contract'] = contract
+                except Contract.DoesNotExist:
+                    # If no contract exists, create one
+                    # You might need to adjust this based on your business logic
+                    employer = task.employer if hasattr(task, 'employer') else None
+                    if employer:
+                        contract = Contract.objects.create(
+                            task=task,
+                            freelancer=freelancer,
+                            employer=employer,
+                            start_date=timezone.now(),
+                            is_active=True
+                        )
+                        validated_data['contract'] = contract
+        
+        # Create the submission
+        submission = Submission.objects.create(**validated_data)
+        
+        return submission
+    
+    def to_representation(self, instance):
+        """
+        Customize the response format
+        """
+        representation = super().to_representation(instance)
+        
+        # Add full URLs for files
+        request = self.context.get('request')
+        
+        if request:
+            if instance.zip_file:
+                representation['zip_file_url'] = request.build_absolute_uri(
+                    instance.zip_file.url
+                )
+            if instance.screenshots:
+                representation['screenshots_url'] = request.build_absolute_uri(
+                    instance.screenshots.url
+                )
+            if instance.video_demo:
+                representation['video_demo_url'] = request.build_absolute_uri(
+                    instance.video_demo.url
+                )
+        
+        # Add checklist summary
+        checklist_complete = all([
+            instance.checklist_tests_passing,
+            instance.checklist_deployed_staging,
+            instance.checklist_documentation,
+            instance.checklist_no_critical_bugs
+        ])
+        representation['checklist_complete'] = checklist_complete
+        
+        return representation
+
+
+
+class SubmissionCreateSerializer(serializers.ModelSerializer):
+   
+    # Mark these as explicitly required
+    task = serializers.IntegerField(write_only=True)  # Expect task ID from Flutter
+    title = serializers.CharField(required=True, max_length=200)
+    description = serializers.CharField(required=True)
+    
+    # File fields
+    zip_file = serializers.FileField(required=False)
+    screenshots = serializers.FileField(required=False)
+    video_demo = serializers.FileField(required=False)
+    
+    class Meta:
+        model = Submission
+        fields = [
+            'task', 'title', 'description',
+            'repo_url', 'commit_hash', 'staging_url', 'live_demo_url',
+            'apk_download_url', 'testflight_link', 'admin_username',
+            'admin_password', 'access_instructions', 'deployment_instructions',
+            'test_instructions', 'release_notes', 'checklist_tests_passing',
+            'checklist_deployed_staging', 'checklist_documentation',
+            'checklist_no_critical_bugs', 'revision_notes',
+            'zip_file', 'screenshots', 'video_demo'
+        ]
+    
+    def validate_task(self, value):
+        """Validate task exists"""
+        try:
+            task = Task.objects.get(id=value)
+            return task  # Return Task instance instead of ID
+        except Task.DoesNotExist:
+            raise serializers.ValidationError("Task does not exist.")
+    
+    def create(self, validated_data):
+        """Override create to use the main SubmissionSerializer logic"""
+        # Use the parent SubmissionSerializer's create method
+        submission_serializer = SubmissionSerializer(
+            data=validated_data,
+            context=self.context
+        )
+        
+        if submission_serializer.is_valid():
+            return submission_serializer.save()
+        
+        raise serializers.ValidationError(submission_serializer.errors)
 
 class TaskCompletionSerializer(serializers.ModelSerializer):
     submission_details = SubmissionSerializer(source='submission', read_only=True)

@@ -1,7 +1,7 @@
+// submission_provider.dart
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:helawork/services/api_sercice.dart';
-
+import 'package:helawork/services/api_sercice.dart'; // Your ApiService
 
 class SubmissionProvider extends ChangeNotifier {
   final ApiService _apiService = ApiService();
@@ -12,6 +12,8 @@ class SubmissionProvider extends ChangeNotifier {
 
   Future<void> submitTask({
     required int taskId,
+    required String title,  // ADD THIS
+    required String description,  // ADD THIS
     String? repoUrl,
     String? commitHash,
     String? stagingUrl,
@@ -34,11 +36,18 @@ class SubmissionProvider extends ChangeNotifier {
     PlatformFile? videoDemo,
   }) async {
     isLoading = true;
+    errorMessage = '';
     notifyListeners();
 
     try {
+      print('Provider: Submitting task $taskId');
+      print('Provider: Title: $title');
+      print('Provider: Description: $description');
+
       final result = await _apiService.submitTask(
         taskId: taskId,
+        title: title,  // PASS THIS
+        description: description,  // PASS THIS
         repoUrl: repoUrl,
         commitHash: commitHash,
         stagingUrl: stagingUrl,
@@ -61,10 +70,24 @@ class SubmissionProvider extends ChangeNotifier {
         videoDemo: videoDemo,
       );
 
-      submissions.add(result);
-      errorMessage = '';
+      print('Provider: Submission result: $result');
+
+      if (result['success'] == true) {
+        // Add to submissions list
+        if (result['data'] != null) {
+          submissions.add(result['data']);
+        }
+        
+        errorMessage = '';
+        
+        print('Provider: Submission successful!');
+      } else {
+        errorMessage = result['message'] ?? 'Submission failed';
+        print('Provider: Submission failed: $errorMessage');
+      }
     } catch (e) {
-      errorMessage = e.toString();
+      errorMessage = 'Error: ${e.toString()}';
+      print('Provider: Exception: $e');
     } finally {
       isLoading = false;
       notifyListeners();

@@ -32,7 +32,7 @@ from rest_framework.decorators import authentication_classes, permission_classes
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from webapp.serializers import ContractSerializer, EmployerProfileSerializer,  EmployerRegisterSerializer, EmployerSerializer, LoginSerializer, OrderSerializer, PaymentInitializeSerializer, ProposalSerializer, RatingSerializer, RegisterSerializer, SubmissionSerializer, TaskCompletionSerializer, TaskCreateSerializer, TaskSerializer, TransactionSerializer, UserProfileSerializer, WalletSerializer
+from webapp.serializers import ContractSerializer, EmployerProfileSerializer,  EmployerRegisterSerializer, EmployerSerializer, LoginSerializer, OrderSerializer, PaymentInitializeSerializer, ProposalSerializer, RatingSerializer, RegisterSerializer, SubmissionCreateSerializer, SubmissionSerializer, TaskCompletionSerializer, TaskCreateSerializer, TaskSerializer, TransactionSerializer, UserProfileSerializer, WalletSerializer
 from .authentication import CustomTokenAuthentication, EmployerTokenAuthentication
 from .permissions import IsAuthenticated  
 from .models import UserProfile
@@ -818,7 +818,7 @@ def create_employer_profile(request):
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def update_employer_profile(request, employer_id):
-    """Update employer profile."""
+    
     try:
         profile = EmployerProfile.objects.get(employer_id=employer_id)
     except EmployerProfile.DoesNotExist:
@@ -870,11 +870,12 @@ def task_completion_detail(request, pk):
     elif request.method == 'DELETE':
         completion.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)        
-
-# Submission Views
 @api_view(['POST'])
+@authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def create_submission(request):
+    
+    # Check if user is a freelancer
     if not hasattr(request.user, 'freelancer'):
         return Response(
             {"error": "Only freelancers can create submissions"}, 
@@ -882,26 +883,59 @@ def create_submission(request):
         )
     
     try:
-        data = request.data
-        task_id = data.get('task')
-        task = get_object_or_404(Task, id=task_id)
-        contract = get_object_or_404(Contract, task=task)
+        # Get task ID from request data
+        task_id = request.data.get('task')
         
-        # Verify freelancer is assigned to this task
-        if contract.freelancer != request.user:
+        if not task_id:
             return Response(
-                {"error": "You are not assigned to this task"}, 
+                {"error": "Task ID is required. Send 'task' field with task ID."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get task
+        task = get_object_or_404(Task, id=task_id)
+        
+        # Get contract for this task and freelancer
+        try:
+            contract = Contract.objects.get(task=task, freelancer=request.user)
+        except Contract.DoesNotExist:
+            return Response(
+                {"error": "You are not assigned to this task or contract doesn't exist."}, 
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        serializer = SubmissionSerializer(data=data)
+        # Validate required fields from Flutter
+        if not request.data.get('title'):
+            return Response(
+                {"error": "Title is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not request.data.get('description'):
+            return Response(
+                {"error": "Description is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        
+        serializer = SubmissionCreateSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+        
         if serializer.is_valid():
             with transaction.atomic():
-                submission = serializer.save(
-                    freelancer=request.user,
-                    contract=contract,
-                    task=task
-                )
+                # Save submission with automatic freelancer and contract assignment
+                submission = serializer.save()
+                
+                # Ensure submission has correct relationships
+                if submission.freelancer != request.user:
+                    submission.freelancer = request.user
+                    submission.save()
+                
+                if submission.contract != contract:
+                    submission.contract = contract
+                    submission.save()
                 
                 # Create or update TaskCompletion
                 completion, created = TaskCompletion.objects.get_or_create(
@@ -910,24 +944,51 @@ def create_submission(request):
                     defaults={
                         'submission': submission, 
                         'amount': task.budget,
-                        'status': 'pending_review'
+                        'status': 'pending_review',
+                        'completed_at': timezone.now()
                     }
                 )
                 
                 if not created:
                     completion.submission = submission
                     completion.status = 'pending_review'
+                    completion.completed_at = timezone.now()
                     completion.save()
+                
+                # Update task status if needed
+                if task.status != 'in_progress':
+                    task.status = 'in_progress'
+                    task.save()
+            
+            # Return full submission details using main serializer
+            full_serializer = SubmissionSerializer(
+                submission, 
+                context={'request': request}
+            )
             
             return Response(
-                {"message": "Submission created successfully", "submission_id": submission.submission_id},
+                {
+                    "message": "Submission created successfully",
+                    "submission_id": submission.submission_id,
+                    "data": full_serializer.data
+                },
                 status=status.HTTP_201_CREATED
             )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Return validation errors
+        return Response(
+            {
+                "error": "Validation failed",
+                "details": serializer.errors
+            }, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
     
     except Exception as e:
+        # Log the error for debugging
+        print(f"Error creating submission: {str(e)}")
         return Response(
-            {"error": str(e)}, 
+            {"error": f"Server error: {str(e)}"}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
@@ -936,7 +997,7 @@ def create_submission(request):
 def get_submission_detail(request, submission_id):
     submission = get_object_or_404(Submission, submission_id=submission_id)
     
-    # Check permissions
+    
     user = request.user
     if not (user.is_staff or submission.freelancer == user or submission.contract.employer.user == user):
         return Response(
@@ -950,7 +1011,7 @@ def get_submission_detail(request, submission_id):
 @api_view(['GET'])
 
 def get_my_submissions(request):
-    """Get submissions for freelancer"""
+   
     if not hasattr(request.user, 'freelancer'):
         return Response(
             {"error": "Only freelancers can view their submissions"}, 
@@ -964,7 +1025,7 @@ def get_my_submissions(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_employer_submissions(request):
-    """Get submissions for employer's tasks"""
+    
     if not hasattr(request.user, 'employer'):
         return Response(
             {"error": "Only employers can view their task submissions"}, 
@@ -1536,15 +1597,13 @@ def freelancer_withdraw(request):
 
 
 from webapp.matcher import rank_freelancers_for_job
-# In your views.py, update the suggest_freelancers function:
+
 
 @api_view(['GET'])
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def suggest_freelancers(request, job_id):
-    """
-    Suggest freelancers for a specific job
-    """
+   
     try:
         # Get the job (Task)
         job = get_object_or_404(Task, pk=job_id)
@@ -1622,9 +1681,7 @@ def suggest_freelancers(request, job_id):
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def recommended_jobs(request):
-    """
-    Get recommended jobs for the authenticated freelancer
-    """
+    
     print(f"=== RECOMMENDED JOBS API CALLED ===")
     print(f"User: {request.user.name} (ID: {request.user.user_id})")
     

@@ -1779,101 +1779,331 @@ Future<List<dynamic>> getFreelancerReceivedRatings(int freelancerId) async {
       return null;
     }
   }
-    Future<Map<String, dynamic>> submitTask({
-    required int taskId,
-    String? repoUrl,
-    String? commitHash,
-    String? stagingUrl,
-    String? liveDemoUrl,
-    String? apkUrl,
-    String? testflightLink,
-    String? adminUsername,
-    String? adminPassword,
-    String? accessInstructions,
-    String? deploymentInstructions,
-    String? testInstructions,
-    String? releaseNotes,
-    String? revisionNotes,
-    required bool checklistTestsPassing,
-    required bool checklistDeployedStaging,
-    required bool checklistDocumentation,
-    required bool checklistNoCriticalBugs,
-    PlatformFile? zipFile,
-    PlatformFile? screenshots,
-    PlatformFile? videoDemo,
-  }) async {
-    try {
-      var uri = Uri.parse("$baseUrl/submissions/");
-      var request = http.MultipartRequest("POST", uri);
+ Future<Map<String, dynamic>> submitTask({
+  required int taskId,
+  required String title,
+  required String description,
+  String? repoUrl,
+  String? commitHash,
+  String? stagingUrl,
+  String? liveDemoUrl,
+  String? apkUrl,
+  String? testflightLink,
+  String? adminUsername,
+  String? adminPassword,
+  String? accessInstructions,
+  String? deploymentInstructions,
+  String? testInstructions,
+  String? releaseNotes,
+  String? revisionNotes,
+  required bool checklistTestsPassing,
+  required bool checklistDeployedStaging,
+  required bool checklistDocumentation,
+  required bool checklistNoCriticalBugs,
+  PlatformFile? zipFile,
+  PlatformFile? screenshots,
+  PlatformFile? videoDemo,
+}) async {
+  try {
+    // Get authentication token
+    final String? token = await _getUserToken();
+    
+    if (token == null) {
+      throw Exception('No authentication token found. Please log in.');
+    }
 
-      // Form fields
-      request.fields['task_id'] = taskId.toString();
-      if (repoUrl != null) request.fields['repo_url'] = repoUrl;
-      if (commitHash != null) request.fields['commit_hash'] = commitHash;
-      if (stagingUrl != null) request.fields['staging_url'] = stagingUrl;
-      if (liveDemoUrl != null) request.fields['live_demo_url'] = liveDemoUrl;
-      if (apkUrl != null) request.fields['apk_download_url'] = apkUrl;
-      if (testflightLink != null) request.fields['testflight_link'] = testflightLink;
-      if (adminUsername != null) request.fields['admin_username'] = adminUsername;
-      if (adminPassword != null) request.fields['admin_password'] = adminPassword;
-      if (accessInstructions != null) request.fields['access_instructions'] = accessInstructions;
-      if (deploymentInstructions != null) request.fields['deployment_instructions'] = deploymentInstructions;
-      if (testInstructions != null) request.fields['test_instructions'] = testInstructions;
-      if (releaseNotes != null) request.fields['release_notes'] = releaseNotes;
-      if (revisionNotes != null) request.fields['revision_notes'] = revisionNotes;
+    // CORRECT URL - Must match Django endpoint
+    var uri = Uri.parse("$baseUrl/api/submissions/create/");
+    
+    var request = http.MultipartRequest("POST", uri);
 
-      // Checklist
-      request.fields['checklist_tests_passing'] = checklistTestsPassing.toString();
-      request.fields['checklist_deployed_staging'] = checklistDeployedStaging.toString();
-      request.fields['checklist_documentation'] = checklistDocumentation.toString();
-      request.fields['checklist_no_critical_bugs'] = checklistNoCriticalBugs.toString();
+    // ========== FORM FIELDS - CORRECTED ==========
+    // NOTE: Django expects 'task' (not 'task_id')
+    request.fields['task'] = taskId.toString();
+    request.fields['title'] = title;
+    request.fields['description'] = description;
+    
+    // Optional URL fields
+    if (repoUrl != null && repoUrl.isNotEmpty) {
+      request.fields['repo_url'] = repoUrl;
+    }
+    if (commitHash != null && commitHash.isNotEmpty) {
+      request.fields['commit_hash'] = commitHash;
+    }
+    if (stagingUrl != null && stagingUrl.isNotEmpty) {
+      request.fields['staging_url'] = stagingUrl;
+    }
+    if (liveDemoUrl != null && liveDemoUrl.isNotEmpty) {
+      request.fields['live_demo_url'] = liveDemoUrl;
+    }
+    if (apkUrl != null && apkUrl.isNotEmpty) {
+      request.fields['apk_download_url'] = apkUrl;
+    }
+    if (testflightLink != null && testflightLink.isNotEmpty) {
+      request.fields['testflight_link'] = testflightLink;
+    }
+    
+    // Admin credentials (optional)
+    if (adminUsername != null && adminUsername.isNotEmpty) {
+      request.fields['admin_username'] = adminUsername;
+    }
+    if (adminPassword != null && adminPassword.isNotEmpty) {
+      request.fields['admin_password'] = adminPassword;
+    }
+    
+    // Instructions (optional)
+    if (accessInstructions != null && accessInstructions.isNotEmpty) {
+      request.fields['access_instructions'] = accessInstructions;
+    }
+    if (deploymentInstructions != null && deploymentInstructions.isNotEmpty) {
+      request.fields['deployment_instructions'] = deploymentInstructions;
+    }
+    if (testInstructions != null && testInstructions.isNotEmpty) {
+      request.fields['test_instructions'] = testInstructions;
+    }
+    
+    // Notes (optional)
+    if (releaseNotes != null && releaseNotes.isNotEmpty) {
+      request.fields['release_notes'] = releaseNotes;
+    }
+    if (revisionNotes != null && revisionNotes.isNotEmpty) {
+      request.fields['revision_notes'] = revisionNotes;
+    }
 
-      // Files
-      if (zipFile != null) {
-        request.files.add(await http.MultipartFile.fromPath('zip_file', zipFile.path!));
+    // Checklist fields - must be boolean strings
+    request.fields['checklist_tests_passing'] = checklistTestsPassing.toString();
+    request.fields['checklist_deployed_staging'] = checklistDeployedStaging.toString();
+    request.fields['checklist_documentation'] = checklistDocumentation.toString();
+    request.fields['checklist_no_critical_bugs'] = checklistNoCriticalBugs.toString();
+
+    // ========== FILE UPLOADS ==========
+    if (zipFile != null && zipFile.path != null && File(zipFile.path!).existsSync()) {
+      request.files.add(await http.MultipartFile.fromPath(
+        'zip_file',
+        zipFile.path!
+      ));
+    }
+    
+    if (screenshots != null && screenshots.path != null && File(screenshots.path!).existsSync()) {
+      request.files.add(await http.MultipartFile.fromPath(
+        'screenshots',
+        screenshots.path!
+      ));
+    }
+    
+    if (videoDemo != null && videoDemo.path != null && File(videoDemo.path!).existsSync()) {
+      request.files.add(await http.MultipartFile.fromPath(
+        'video_demo',
+        videoDemo.path!
+      ));
+    }
+
+    // ========== AUTHENTICATION ==========
+    // Based on your existing code, you use Bearer token
+    request.headers['Authorization'] = 'Bearer $token';
+    request.headers['Accept'] = 'application/json';
+
+    print('=================================');
+    print('SUBMITTING TASK TO DJANGO');
+    print('=================================');
+    print('Endpoint: ${uri.toString()}');
+    print('Task ID: $taskId');
+    print('Title: $title');
+    print('Has files: ${zipFile != null || screenshots != null || videoDemo != null}');
+    print('Authorization: Bearer ${token.substring(0, 20)}...');
+    
+    // Log all fields being sent
+    print('\nFields being sent:');
+    request.fields.forEach((key, value) {
+      print('  $key: $value');
+    });
+    
+    if (request.files.isNotEmpty) {
+      print('\nFiles being sent:');
+      for (var file in request.files) {
+        print('  ${file.field}: ${file.filename}');
       }
-      if (screenshots != null) {
-        request.files.add(await http.MultipartFile.fromPath('screenshots', screenshots.path!));
-      }
-      if (videoDemo != null) {
-        request.files.add(await http.MultipartFile.fromPath('video_demo', videoDemo.path!));
-      }
+    }
 
-      request.headers['Authorization'] = 'Token $token';
+    // ========== SEND REQUEST ==========
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
 
-      var streamedResponse = await request.send();
-      var response = await http.Response.fromStream(streamedResponse);
+    print('\n=================================');
+    print('RESPONSE FROM DJANGO');
+    print('=================================');
+    print('Status Code: ${response.statusCode}');
+    print('Response Body: ${response.body}');
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        return json.decode(response.body);
-      } else {
-        throw Exception('Failed to submit task: ${response.statusCode}');
+    // ========== HANDLE RESPONSE ==========
+    if (response.statusCode == 201) {
+      // Success - submission created
+      final responseData = json.decode(response.body);
+      print(' Submission successful!');
+      print('Submission ID: ${responseData['submission_id']}');
+      
+      return {
+        'success': true,
+        'message': 'Submission created successfully',
+        'submission_id': responseData['submission_id'],
+        'data': responseData
+      };
+      
+    } else if (response.statusCode == 200) {
+      // Some APIs return 200 instead of 201
+      final responseData = json.decode(response.body);
+      print(' Submission successful (200)!');
+      
+      return {
+        'success': true,
+        'message': responseData['message'] ?? 'Submission successful',
+        'submission_id': responseData['submission_id'],
+        'data': responseData
+      };
+      
+    } else if (response.statusCode == 400) {
+      // Validation errors
+      final errorData = json.decode(response.body);
+      print(' Validation failed');
+      
+      String errorMessage = 'Validation failed';
+      if (errorData is Map) {
+        if (errorData.containsKey('error')) {
+          errorMessage = errorData['error'];
+        } else if (errorData.containsKey('details')) {
+          errorMessage = 'Validation errors: ${errorData['details']}';
+        } else {
+          // Try to extract field-specific errors
+          errorMessage = '';
+          errorData.forEach((key, value) {
+            if (value is List && value.isNotEmpty) {
+              errorMessage += '$key: ${value[0]}\n';
+            }
+          });
+          errorMessage = errorMessage.trim();
+        }
       }
-    } catch (e) {
-      throw Exception('An error occurred: $e');
+      
+      throw Exception(errorMessage);
+      
+    } else if (response.statusCode == 403) {
+      // Permission denied
+      print(' Permission denied');
+      throw Exception('Permission denied. Are you assigned to this task?');
+      
+    } else if (response.statusCode == 404) {
+      // Task not found
+      print(' Task not found');
+      throw Exception('Task not found or you are not assigned to it');
+      
+    } else if (response.statusCode == 401) {
+      // Unauthorized
+      print(' Unauthorized - token may be invalid');
+      throw Exception('Session expired. Please log in again.');
+      
+    } else {
+      // Other errors
+      print(' Server error: ${response.statusCode}');
+      throw Exception('Failed to submit task: ${response.statusCode}');
+    }
+    
+  } catch (e) {
+    print('\n=================================');
+    print('EXCEPTION IN submitTask()');
+    print('=================================');
+    print('Error: $e');
+    print('Error type: ${e.runtimeType}');
+    
+    // Rethrow with clearer message
+    if (e is http.ClientException) {
+      throw Exception('Network error: Please check your internet connection');
+    } else if (e is FormatException) {
+      throw Exception('Invalid server response');
+    } else {
+      throw Exception('Submission failed: $e');
     }
   }
+}
 
-  /// Fetch submissions
   Future<List<Map<String, dynamic>>> fetchSubmissions() async {
-    try {
-      final uri = Uri.parse("$baseUrl/submissions/");
-      final response = await http.get(uri, headers: {
-        'Authorization': 'Token $token',
-      });
+  try {
+    // Get authentication token
+    final String? token = await _getUserToken();
+    
+    if (token == null) {
+      throw Exception('No authentication token found. Please log in.');
+    }
 
-      if (response.statusCode == 200) {
-        return List<Map<String, dynamic>>.from(json.decode(response.body));
-      } else {
-        throw Exception('Failed to fetch submissions');
+    // CORRECT URL - Must match Django endpoint
+    final uri = Uri.parse("$baseUrl/api/submissions/list/");
+    
+    final response = await http.get(
+      uri, 
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
       }
-    } catch (e) {
-      throw Exception('An error occurred: $e');
+    );
+
+    print('=================================');
+    print('FETCHING SUBMISSIONS FROM DJANGO');
+    print('=================================');
+    print('Endpoint: ${uri.toString()}');
+    print('Status Code: ${response.statusCode}');
+
+    if (response.statusCode == 200) {
+      final dynamic data = json.decode(response.body);
+      print(' Submissions fetched successfully');
+      
+      // Handle different response formats
+      if (data is Map && data.containsKey('submissions')) {
+        print('Format: Map with "submissions" key');
+        return List<Map<String, dynamic>>.from(data['submissions']);
+        
+      } else if (data is Map && data.containsKey('data')) {
+        print('Format: Map with "data" key');
+        return List<Map<String, dynamic>>.from(data['data']);
+        
+      } else if (data is List) {
+        print('Format: Direct List');
+        return List<Map<String, dynamic>>.from(data);
+        
+      } else if (data is Map && data.containsKey('results')) {
+        print('Format: Paginated results');
+        return List<Map<String, dynamic>>.from(data['results']);
+        
+      } else {
+        print('Warning: Unknown response format');
+        return [];
+      }
+      
+    } else if (response.statusCode == 401) {
+      print(' Unauthorized');
+      throw Exception('Session expired. Please log in again.');
+      
+    } else if (response.statusCode == 403) {
+      print(' Permission denied');
+      throw Exception('You don\'t have permission to view submissions');
+      
+    } else {
+      print(' Server error: ${response.statusCode}');
+      throw Exception('Failed to fetch submissions: ${response.statusCode}');
+    }
+    
+  } catch (e) {
+    print('\n=================================');
+    print('EXCEPTION IN fetchSubmissions()');
+    print('=================================');
+    print('Error: $e');
+    
+    if (e is http.ClientException) {
+      throw Exception('Network error: Please check your internet connection');
+    } else {
+      throw Exception('Failed to load submissions: $e');
     }
   }
-// Add these methods to your ApiService class
-
-// Get orders that need payment
+}
 Future<List<dynamic>> getOrdersForPayment() async {
   try {
     final String? token = await _getUserToken();
