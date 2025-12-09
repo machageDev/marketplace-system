@@ -1535,45 +1535,197 @@ def freelancer_withdraw(request):
         return Response({'status': False, 'message': 'Withdrawal failed'})
 
 
+from webapp.matcher import rank_freelancers_for_job
+# In your views.py, update the suggest_freelancers function:
 
 @api_view(['GET'])
+@authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def suggest_freelancers(request, job_id):
-    
-    job = get_object_or_404(job, pk=job_id)
-
-    #  Get active freelancers in same category
-    candidates = UserProfile.objects.filter(
-        is_active=True,
-        category=job.category
-    )[:1000]   # limit so TF-IDF is fast
-
-    if not candidates:
+    """
+    Suggest freelancers for a specific job
+    """
+    try:
+        # Get the job (Task)
+        job = get_object_or_404(Task, pk=job_id)
+        
+        print(f"Finding freelancers for job: {job.title} (ID: {job_id})")
+        
+        # Get active freelancers in same category
+        candidates = UserProfile.objects.filter(
+            is_active=True,
+            category=job.category
+        )[:100]  # Reduced from 1000 to 100 for better performance
+        
+        print(f"Found {candidates.count()} candidates in category: {job.category}")
+        
+        if not candidates:
+            return Response({
+                "status": False,
+                "message": "No freelancers available for this category."
+            })
+        
+        # Run the matching
+        ranked_results = rank_freelancers_for_job(job, list(candidates), top_n=10)
+        
+        print(f"Ranking completed. Found {len(ranked_results)} matches")
+        
+        # Extract profile IDs from results
+        profile_ids = [r["profile_id"] for r in ranked_results]
+        
+        # Query corresponding profile data
+        profiles = UserProfileSerializer(
+            UserProfile.objects.filter(profile_id__in=profile_ids),
+            many=True
+        ).data
+        
+        # Maintain ranking order and add match scores
+        ordered_profiles = []
+        for rank_result in ranked_results:
+            profile_id = rank_result["profile_id"]
+            # Find the profile with this ID
+            profile = next((p for p in profiles if p["profile_id"] == profile_id), None)
+            if profile:
+                # Add match score to profile data
+                profile_with_score = profile.copy()
+                profile_with_score["match_score"] = rank_result["score"]
+                profile_with_score["skill_overlap"] = rank_result["skill_overlap"]
+                profile_with_score["common_skills"] = rank_result.get("common_skills", [])
+                ordered_profiles.append(profile_with_score)
+        
+        return Response({
+            "status": True,
+            "job": {
+                "id": job.task_id,
+                "title": job.title,
+                "category": job.category,
+                "required_skills": job.required_skills,
+            },
+            "matches": ordered_profiles,
+            "meta": {
+                "total_candidates": candidates.count(),
+                "top_matches": len(ranked_results),
+                "category": job.category,
+            }
+        })
+        
+    except Exception as e:
+        print(f"Error in suggest_freelancers: {e}")
+        import traceback
+        traceback.print_exc()
         return Response({
             "status": False,
-            "message": "No freelancers available for this category."
-        })
+            "message": f"Error suggesting freelancers: {str(e)}"
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)      
 
-    #  Run the matching
-    ranked_results = rank_freelancers_for_job(job, list(candidates), top_n=10)
-
-    # Extract profile IDs from results
-    profile_ids = [r["profile_id"] for r in ranked_results]
-
-    # Query corresponding profile data
-    profiles = UserProfileSerializer(
-        UserProfile.objects.filter(profile_id__in=profile_ids),
-        many=True
-    ).data
-
-    # Maintain ranking order
-    ordered_profiles = sorted(
-        profiles,
-        key=lambda p: profile_ids.index(p["profile_id"])
-    )
-
-    return Response({
-        "status": True,
-        "matches": ordered_profiles,
-        "meta": ranked_results
-    })        
+@api_view(['GET'])
+@authentication_classes([CustomTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def recommended_jobs(request):
+    """
+    Get recommended jobs for the authenticated freelancer
+    """
+    print(f"=== RECOMMENDED JOBS API CALLED ===")
+    print(f"User: {request.user.name} (ID: {request.user.user_id})")
+    
+    try:
+        # Get freelancer's profile
+        try:
+            freelancer_profile = UserProfile.objects.get(user=request.user)
+            print(f"Freelancer profile found: {freelancer_profile}")
+        except UserProfile.DoesNotExist:
+            return Response({
+                "status": False,
+                "message": "Please complete your profile to get job recommendations"
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Get all active tasks (approved and not assigned)
+        all_tasks = Task.objects.select_related('employer').prefetch_related('employer__profile').filter(
+            is_approved=True,
+            assigned_user__isnull=True  # Only unassigned tasks
+        )[:50]  # Limit to 50 for better performance
+        
+        print(f"Found {all_tasks.count()} active tasks")
+        
+        if not all_tasks.exists():
+            return Response({
+                "status": True,
+                "message": "No available tasks",
+                "recommended": []
+            })
+        
+        # Convert tasks to list for the matcher
+        tasks_list = []
+        for task in all_tasks:
+            employer_profile = getattr(task.employer, 'profile', None)
+            task_data = {
+                'id': task.task_id,
+                'title': task.title,
+                'description': task.description,
+                'required_skills': task.required_skills or '',
+                'category': task.category or '',
+                'budget': str(task.budget) if task.budget else '0',
+                'is_approved': task.is_approved,
+                'assigned_user': task.assigned_user.user_id if task.assigned_user else None,
+                'employer': {
+                    'id': task.employer.employer_id,
+                    'username': task.employer.username,
+                    'contact_email': task.employer.contact_email,
+                    'company_name': employer_profile.company_name if employer_profile else None,
+                    'profile_picture': employer_profile.profile_picture.url if employer_profile and employer_profile.profile_picture else None,
+                    'phone_number': employer_profile.phone_number if employer_profile else None,
+                }
+            }
+            tasks_list.append(task_data)
+        
+        # Use your existing matcher function
+        try:
+            # Get ranked jobs
+            ranked_jobs = rank_jobs_for_freelancer(freelancer_profile, all_tasks, top_n=20)
+            
+            # Map ranked results to full task data
+            recommended_jobs = []
+            for rank_result in ranked_jobs:
+                job_id = rank_result["job_id"]
+                # Find the task with this ID
+                task_data = next((t for t in tasks_list if t['id'] == job_id), None)
+                if task_data:
+                    # Add match score to task data
+                    task_with_score = task_data.copy()
+                    task_with_score["match_score"] = rank_result["score"] * 100  # Convert to percentage
+                    task_with_score["skill_overlap"] = rank_result["skill_overlap"]
+                    task_with_score["base_similarity"] = rank_result["base_similarity"]
+                    recommended_jobs.append(task_with_score)
+            
+            print(f"Matcher returned {len(recommended_jobs)} ranked jobs")
+            
+            return Response({
+                "status": True,
+                "message": f"Found {len(recommended_jobs)} recommended jobs",
+                "recommended": recommended_jobs,
+                "freelancer_profile": {
+                    "skills": freelancer_profile.skills,
+                    "category": freelancer_profile.category,
+                    "experience_level": freelancer_profile.experience_level,
+                }
+            })
+            
+        except Exception as e:
+            print(f"Error in matcher: {e}")
+            # Fallback: return all tasks if matcher fails
+            return Response({
+                "status": True,
+                "message": f"Found {len(tasks_list)} available tasks",
+                "recommended": tasks_list,
+                "note": "Using fallback (matcher failed)"
+            })
+        
+    except Exception as e:
+        print(f"Error in recommended_jobs API: {e}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        return Response({
+            "status": False,
+            "message": f"Error fetching recommended jobs: {str(e)}",
+            "recommended": []
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

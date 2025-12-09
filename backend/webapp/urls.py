@@ -10,20 +10,20 @@ urlpatterns = [
     path('apiforgot_password',views.apiforgot_password, name = 'apiforgotpassword'),    
     path('task', views.apitask_list, name='tasklist'),
     #path('task/',views.apitask_detail, name='taskdetail'),
-    path('apiproposal', views.apisubmit_proposal, name='submit-proposal'),
+    path('apiproposal', views.apisubmit_proposal, name='submit_proposal'),
     path('apiuserprofile',views.apiuserprofile,name='apiuser_profile'),
-    path('submissions/create/', views.create_submission, name='submission-create'),
-    path('submissions/my-submissions/', views.get_my_submissions, name='my-submissions'),
-    path('submissions/employer-submissions/', views.get_employer_submissions, name='employer-submissions'),
-    path('submissions/<int:submission_id>/', views.get_submission_detail, name='submission-detail'),
-    path('submissions/<int:submission_id>/approve/', views.approve_submission, name='submission-approve'),
-    path('submissions/<int:submission_id>/request-revision/', views.request_revision, name='request-revision'),
+    path('submissions/create/', views.create_submission, name='submission_create'),
+    path('submissions/my-submissions/', views.get_my_submissions, name='my_submissions'),
+    path('submissions/employer-submissions/', views.get_employer_submissions, name='employer_submissions'),
+    path('submissions/<int:submission_id>/', views.get_submission_detail, name='submission_detail'),
+    path('submissions/<int:submission_id>/approve/', views.approve_submission, name='submission_approve'),
+    path('submissions/<int:submission_id>/request-revision/', views.request_revision, name='request_revision'),
     
     # Rating URLs
     path('ratings/create/', views.create_rating, name='rating-create'),
-    path('users/<int:user_id>/ratings/', views.get_user_ratings, name='user-ratings'),
-    path('tasks/<int:task_id>/ratings/', views.get_task_ratings, name='task-ratings'),
-    
+    path('users/<int:user_id>/ratings/', views.get_user_ratings, name='user_ratings'),
+    path('tasks/<int:task_id>/ratings/', views.get_task_ratings, name='task_ratings'),
+    path('freelancer/recommended-jobs/', views.recommended_jobs, name='recommended_jobs'),
     # Dashboard
     path('submissions/stats/', views.submission_stats, name='submission-stats'),
     

@@ -2020,18 +2020,36 @@ Future<List<dynamic>> getUserOrders() async {
       throw Exception('Failed to fetch transactions');
     }
   }
- Future<List<dynamic>> fetchRecommendedJobs(String token) async {
-  final response = await http.get(
-    Uri.parse("$baseUrl/freelancer/recommended-jobs/"),
-    headers: {"Authorization": "Bearer $token"},
-  );
+ static Future<List<dynamic>> fetchRecommendedJobs(String token) async {
+    try {
+      final response = await http.get(
+        Uri.parse("$baseUrl/freelancer/recommended-jobs/"),
+        headers: {
+          "Authorization": "Bearer $token",
+          "Content-Type": "application/json",
+        },
+      );
 
-  final data = jsonDecode(response.body);
-
-  if (data["status"] == true) {
-    return data["recommended"];
+      print("Recommended jobs API status: ${response.statusCode}");
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        print("Recommended jobs API response: $data");
+        
+        if (data["status"] == true) {
+          return data["recommended"] ?? [];
+        } else {
+          print("API returned false status: ${data['message']}");
+          return [];
+        }
+      } else {
+        print("API error: ${response.statusCode}");
+        throw Exception('Failed to load recommended jobs: ${response.statusCode}');
+      }
+    } catch (error) {
+      print("API exception: $error");
+      rethrow;
+    }
   }
-  return [];
-}
 
 }  
