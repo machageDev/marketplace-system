@@ -40,52 +40,55 @@ def job_text(job) -> str:
     return " ".join(parts).lower()
 
 
-def rank_freelancers_for_job(job, profiles, top_n=10) -> List[Dict[str, Any]]:
-   
+def rank_jobs_for_freelancer(freelancer, jobs, top_n=10):
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.metrics.pairwise import cosine_similarity
+
+    # Text for freelancer
+    freelancer_text_data = " ".join([
+        freelancer.bio or "",
+        " ".join(freelancer.skills or []),
+        freelancer.experience or ""
+    ]).lower()
 
     # Build TF-IDF corpus
-    corpus = [job_text(job)] + [freelancer_text(p) for p in profiles]
+    job_texts = [
+        (job.id, " ".join([
+            job.title or "",
+            job.description or "",
+            " ".join(job.required_skills or []),
+            " ".join(job.tags or [])
+        ]).lower())
+        for job in jobs
+    ]
 
-    vectorizer = TfidfVectorizer(stop_words='english', max_features=4000)
+    corpus = [freelancer_text_data] + [text for _, text in job_texts]
+
+    vectorizer = TfidfVectorizer(stop_words="english", max_features=4000)
     X = vectorizer.fit_transform(corpus)
 
-    job_vec = X[0]
-    profile_vecs = X[1:]
-    sims = cosine_similarity(job_vec, profile_vecs).flatten()
-
-    # Prepare job skills
-    job_skills = set([s.lower() for s in (job.required_skills or [])])
+    freelancer_vec = X[0]
+    job_vecs = X[1:]
+    sims = cosine_similarity(freelancer_vec, job_vecs).flatten()
 
     results = []
 
-    for idx, profile in enumerate(profiles):
+    for idx, job in enumerate(jobs):
         base = float(sims[idx])
 
-        # Normalize profile skills
-        profile_skill_list = []
-        if profile.skills:
-            profile_skill_list = [s.strip() for s in profile.skills.split(",")]
+        fr_skills = set([s.lower() for s in (freelancer.skills or [])])
+        job_sk = set([s.lower() for s in (job.required_skills or [])])
 
-        profile_skills = set([s.lower() for s in profile_skill_list])
-        skill_overlap = len(job_skills.intersection(profile_skills))
-        skill_bonus = min(0.35, 0.1 * skill_overlap)
+        skill_overlap = len(fr_skills.intersection(job_sk))
+        skill_bonus = min(0.4, 0.1 * skill_overlap)
 
-        # Rating bonus (profile.average_rating() recommended)
-        rating = getattr(profile, "rating", 0.0)
-        rating_bonus = (rating / 5.0) * 0.3
-
-        # Online bonus if profile has is_online attribute
-        activity_bonus = 0.15 if getattr(profile, "is_active_now", False) else 0.0
-
-        # Final score
-        score = base + skill_bonus + rating_bonus + activity_bonus
+        score = base + skill_bonus
 
         results.append({
-            "profile_id": profile.profile_id,
-            "user_id": profile.user.user_id,
+            "job_id": job.id,
             "score": score,
-            "base_similarity": base,
             "skill_overlap": skill_overlap,
+            "base_similarity": base
         })
 
     return sorted(results, key=lambda r: r["score"], reverse=True)[:top_n]
