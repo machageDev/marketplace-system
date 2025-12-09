@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'package:helawork/freelancer/home/task_detail.dart';
-
 import 'package:helawork/freelancer/provider/task_provider.dart';
 import 'package:provider/provider.dart';
 
@@ -11,15 +12,29 @@ class TaskPage extends StatefulWidget {
   State<TaskPage> createState() => _TaskPageState();
 }
 
-class _TaskPageState extends State<TaskPage> {
-  // Add search controller and query
+class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   List<Map<String, dynamic>> _filteredTasks = [];
+  List<Map<String, dynamic>> _filteredRecommendedJobs = [];
+  
+  // For Recommended Jobs
+  bool _loadingRecommendedJobs = true;
+  bool _hasError = false;
+  String _errorMessage = '';
+  List<dynamic> _recommendedJobs = [];
+  String? _userToken; // You'll need to get this from somewhere
+  
+  // Add your baseUrl here
+  final String baseUrl = "YOUR_BASE_URL_HERE"; // Replace with your actual base URL
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    
+    // Fetch all tasks
     Future.microtask(() =>
         Provider.of<TaskProvider>(context, listen: false).fetchTasks(context));
     
@@ -32,12 +47,84 @@ class _TaskPageState extends State<TaskPage> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Try to get token when dependencies change
+    _getTokenAndLoadRecommendedJobs();
+  }
+
+  Future<void> _getTokenAndLoadRecommendedJobs() async {
+    // Try to get token from wherever you store it
+    // This could be from SharedPreferences, AuthProvider, etc.
+    // Example: final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    // _userToken = authProvider.token;
+    
+    // For now, you need to implement how to get the token
+    // Once you have the token, load recommended jobs
+    if (_userToken != null) {
+      await _loadRecommendedJobs();
+    }
+  }
+
+  Future<void> _loadRecommendedJobs() async {
+    if (_userToken == null) {
+      setState(() {
+        _hasError = true;
+        _errorMessage = 'Authentication required';
+        _loadingRecommendedJobs = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _loadingRecommendedJobs = true;
+      _hasError = false;
+      _errorMessage = '';
+    });
+
+    try {
+      final results = await fetchRecommendedJobs(_userToken!);
+      
+      setState(() {
+        _recommendedJobs = results;
+        _loadingRecommendedJobs = false;
+        _filteredRecommendedJobs = _filterTasks(
+          _recommendedJobs.cast<Map<String, dynamic>>(), 
+          _searchQuery
+        );
+      });
+    } catch (error) {
+      setState(() {
+        _loadingRecommendedJobs = false;
+        _hasError = true;
+        _errorMessage = 'Failed to load recommended jobs: $error';
+      });
+    }
+  }
+
+  // Your API function
+  Future<List<dynamic>> fetchRecommendedJobs(String token) async {
+    final response = await http.get(
+      Uri.parse("$baseUrl/freelancer/recommended-jobs/"),
+      headers: {"Authorization": "Bearer $token"},
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      if (data["status"] == true) {
+        return data["recommended"];
+      }
+    }
+    return [];
+  }
+
+  @override
   void dispose() {
+    _tabController.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
-  // Function to filter tasks based on search query
   List<Map<String, dynamic>> _filterTasks(List<Map<String, dynamic>> allTasks, String query) {
     if (query.isEmpty) return allTasks;
     
@@ -65,13 +152,29 @@ class _TaskPageState extends State<TaskPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Available Tasks'),
+        title: const Text('Tasks & Jobs'),
         backgroundColor: Theme.of(context).colorScheme.primary,
-        automaticallyImplyLeading: false, 
+        automaticallyImplyLeading: false,
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: Colors.white,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
+          tabs: const [
+            Tab(
+              icon: Icon(Icons.list),
+              text: 'All Tasks',
+            ),
+            Tab(
+              icon: Icon(Icons.star),
+              text: 'Recommended',
+            ),
+          ],
+        ),
       ),
       body: Column(
         children: [
-          // Search Bar
+          // Search Bar - Shared between both tabs
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Container(
@@ -89,7 +192,9 @@ class _TaskPageState extends State<TaskPage> {
               child: TextField(
                 controller: _searchController,
                 decoration: InputDecoration(
-                  hintText: 'Search tasks by title, description or client...',
+                  hintText: _tabController.index == 0 
+                    ? 'Search all tasks...' 
+                    : 'Search recommended jobs...',
                   prefixIcon: const Icon(Icons.search, color: Colors.grey),
                   suffixIcon: _searchQuery.isNotEmpty
                       ? IconButton(
@@ -122,7 +227,9 @@ class _TaskPageState extends State<TaskPage> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Search results: ${_filteredTasks.length}',
+                    _tabController.index == 0
+                      ? 'Search results: ${_filteredTasks.length}'
+                      : 'Search results: ${_filteredRecommendedJobs.length}',
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.primary,
                       fontWeight: FontWeight.w500,
@@ -138,116 +245,276 @@ class _TaskPageState extends State<TaskPage> {
               ),
             ),
           
-          // Tasks List
+          // Tab Content
           Expanded(
-            child: taskProvider.isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : taskProvider.tasks.isEmpty
-                    ? Center(
-                        child: Text(
-                          taskProvider.errorMessage.isNotEmpty
-                              ? taskProvider.errorMessage
-                              : 'No tasks available',
-                          style: const TextStyle(fontSize: 18),
-                        ),
-                      )
-                    : _filteredTasks.isEmpty && _searchQuery.isNotEmpty
-                        ? _buildNoResults()
-                        : ListView.builder(
-                            padding: const EdgeInsets.all(16),
-                            itemCount: _filteredTasks.length,
-                            itemBuilder: (context, index) {
-                              final task = _filteredTasks[index];
-                              final employer = task['employer'] ?? {};
-                              
-                              return Card(
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                elevation: 3,
-                                margin: const EdgeInsets.symmetric(vertical: 8),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(12),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      // Task Title and Status
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              task['title'] ?? 'Untitled Task',
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 18,
-                                              ),
-                                            ),
-                                          ),
-                                          _buildTaskStatus(task),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      
-                                      // Task Description
-                                      Text(
-                                        task['description'] ?? '',
-                                        maxLines: 3,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          color: Colors.grey[700],
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 12),
-                                      
-                                      // Client Information
-                                      _buildClientSection(employer),
-                                      
-                                      const SizedBox(height: 12),
-                                      
-                                      // View Details Button - FIXED: Added taskId parameter
-                                      SizedBox(
-                                        width: double.infinity,
-                                        child: ElevatedButton.icon(
-                                          onPressed: () {
-                                            // Navigate to Task Detail Screen
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (context) => TaskDetailScreen(
-                                                  taskId: task['task_id'] ?? task['id'] ?? 0, 
-                                                  task: task,
-                                                  employer: employer,
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                          icon: const Icon(Icons.visibility, size: 18),
-                                          label: const Text('View Task Details'),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: Theme.of(context).colorScheme.primary,
-                                            foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(vertical: 12),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(8),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                // Tab 1: All Tasks
+                _buildAllTasksTab(taskProvider),
+                
+                // Tab 2: Recommended Jobs
+                _buildRecommendedJobsTab(),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
+  // Tab 1: All Tasks
+  Widget _buildAllTasksTab(TaskProvider taskProvider) {
+    return RefreshIndicator(
+      onRefresh: () async {
+        await Provider.of<TaskProvider>(context, listen: false).fetchTasks(context);
+      },
+      child: taskProvider.isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : taskProvider.tasks.isEmpty
+              ? Center(
+                  child: Text(
+                    taskProvider.errorMessage.isNotEmpty
+                        ? taskProvider.errorMessage
+                        : 'No tasks available',
+                    style: const TextStyle(fontSize: 18),
+                  ),
+                )
+              : _filteredTasks.isEmpty && _searchQuery.isNotEmpty
+                  ? _buildNoResults('tasks')
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _filteredTasks.length,
+                      itemBuilder: (context, index) {
+                        return _buildTaskCard(_filteredTasks[index]);
+                      },
+                    ),
+    );
+  }
+
+  // Tab 2: Recommended Jobs
+  Widget _buildRecommendedJobsTab() {
+    return RefreshIndicator(
+      onRefresh: _loadRecommendedJobs,
+      child: _loadingRecommendedJobs
+          ? const Center(child: CircularProgressIndicator())
+          : _hasError
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 80,
+                        color: Colors.red[300],
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Error Loading Recommendations',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        _errorMessage,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey[500],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          _loadRecommendedJobs();
+                        },
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Try Again'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : _recommendedJobs.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.star_border,
+                            size: 80,
+                            color: Colors.grey[300],
+                          ),
+                          const SizedBox(height: 20),
+                          Text(
+                            'No recommended jobs',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'Complete your profile to get personalized recommendations',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.grey[500],
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              _loadRecommendedJobs();
+                            },
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Refresh Recommendations'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Theme.of(context).colorScheme.primary,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : _filteredRecommendedJobs.isEmpty && _searchQuery.isNotEmpty
+                      ? _buildNoResults('recommended jobs')
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: _filteredRecommendedJobs.length,
+                          itemBuilder: (context, index) {
+                            final job = _filteredRecommendedJobs[index];
+                            return _buildTaskCard(job, isRecommended: true);
+                          },
+                        ),
+    );
+  }
+
+  // Reusable Task Card Widget
+  Widget _buildTaskCard(Map<String, dynamic> task, {bool isRecommended = false}) {
+    final employer = task['employer'] ?? {};
+    
+    return Card(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      elevation: 3,
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header with title, recommendation badge, and status
+            Row(
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      if (isRecommended)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.amber.withOpacity(0.3)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.star, size: 14, color: Colors.amber[800]),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Recommended',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.amber[800],
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (isRecommended) const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          task['title'] ?? 'Untitled Task',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                _buildTaskStatus(task),
+              ],
+            ),
+            const SizedBox(height: 8),
+            
+            // Task Description
+            Text(
+              task['description'] ?? '',
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: Colors.grey[700],
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 12),
+            
+            // Client Information
+            _buildClientSection(employer),
+            
+            const SizedBox(height: 12),
+            
+            // View Details Button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => TaskDetailScreen(
+                        taskId: task['task_id'] ?? task['id'] ?? 0,
+                        task: task,
+                        employer: employer,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.visibility, size: 18),
+                label: Text(isRecommended ? 'View Job Details' : 'View Task Details'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // Widget for when no search results found
-  Widget _buildNoResults() {
+  Widget _buildNoResults(String type) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -259,7 +526,7 @@ class _TaskPageState extends State<TaskPage> {
           ),
           const SizedBox(height: 20),
           Text(
-            'No tasks found',
+            'No $type found',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w500,
@@ -291,7 +558,7 @@ class _TaskPageState extends State<TaskPage> {
     );
   }
 
-  // Rest of your existing methods remain the same...
+  // The rest of your existing helper methods remain the same...
   Widget _buildClientSection(Map<String, dynamic> employer) {
     final companyName = employer['company_name'];
     final username = employer['username'];
@@ -307,11 +574,9 @@ class _TaskPageState extends State<TaskPage> {
       ),
       child: Row(
         children: [
-          // Client Avatar
           _buildClientAvatar(profilePic, displayName),
           const SizedBox(width: 12),
           
-          // Client Info
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -366,7 +631,6 @@ class _TaskPageState extends State<TaskPage> {
             ),
           ),
           
-          // View Profile Button
           IconButton(
             onPressed: () {
               _showClientProfile(context, employer);

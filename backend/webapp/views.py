@@ -22,8 +22,7 @@ from rest_framework.response import Response
 from django.db import  transaction
 from rest_framework import status
 from django.core.mail import send_mail
-
-from webapp.matcher import rank_freelancers_for_job
+from webapp.matcher import rank_jobs_for_freelancer
 from webapp.paystack_service import PaystackService
 from .models import Contract, Employer, EmployerProfile, EmployerToken, Order, Proposal, Rating, Service, Submission, Task, TaskCompletion, Transaction, UserProfile, Wallet
 from .models import  User

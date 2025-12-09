@@ -2020,5 +2020,18 @@ Future<List<dynamic>> getUserOrders() async {
       throw Exception('Failed to fetch transactions');
     }
   }
- 
+ Future<List<dynamic>> fetchRecommendedJobs(String token) async {
+  final response = await http.get(
+    Uri.parse("$baseUrl/freelancer/recommended-jobs/"),
+    headers: {"Authorization": "Bearer $token"},
+  );
+
+  final data = jsonDecode(response.body);
+
+  if (data["status"] == true) {
+    return data["recommended"];
+  }
+  return [];
+}
+
 }  
