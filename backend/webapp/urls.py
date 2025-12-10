@@ -54,12 +54,10 @@ urlpatterns = [
     path('api/payment/verify/<str:reference>/', views.verify_payment_api, name='api_verify_payment'),
     path('api/payment/webhook/', views.payment_webhook_api, name='api_payment_webhook'),
     path('api/transactions/history/', views.transaction_history, name='api_transaction_history'),
-    path('api/submissions/create/', views.create_submission, name='create-submission'),
-    path('api/submissions/test/', views.submit_test_submission, name='test-submission'),
-    path('api/submissions/list/', views.list_user_submissions, name='list-submissions'),
+    path('api/submissions/create/', views.create_submission, name='create-submission'),  
+   
     path('api/submissions/<int:submission_id>/', views.get_submission_detail, name='submission-detail'),
-    path('api/submissions/<int:submission_id>/update/', views.update_submission, name='update-submission'),
-  
+    
     
    
 ] 
