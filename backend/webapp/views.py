@@ -823,9 +823,7 @@ def get_employer_profile(request, employer_id):
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def create_employer_profile(request):
-    """
-    Create a new employer profile
-    """
+   
     try:
         # Ensure user can only create their own profile
         if 'employer' in request.data and request.data['employer'] != request.user.id:
@@ -861,9 +859,7 @@ def create_employer_profile(request):
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def update_employer_profile(request, employer_id):
-    """
-    Update employer profile (supports both PUT and PATCH)
-    """
+    
     try:
         # Permission check
         if request.user.id != employer_id and not request.user.is_staff:
@@ -908,9 +904,7 @@ def update_employer_profile(request, employer_id):
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def check_profile_exists(request):
-    """
-    Check if a profile exists for the current user
-    """
+   
     try:
         profile = EmployerProfile.objects.filter(employer_id=request.user.id).first()
         exists = profile is not None
