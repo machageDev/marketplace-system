@@ -1391,47 +1391,72 @@ Future<Map<String, dynamic>> rejectProposal(String proposalId) async {
     throw Exception('Failed to reject proposal: $e');
   }
 }
-   Future<Map<String, dynamic>> getEmployerProfile(int employerId) async {
-    final response = await http.get(Uri.parse(employerprofileUrl));
+ Future<Map<String, dynamic>> getEmployerProfile(int employerId) async {
+    final token = await _getToken();
 
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body);
-    } else {
-      throw Exception("Failed to load profile");
-    }
-  }
-
-    Future<Map<String, dynamic>> apigetEmployerProfile(int employerId) async {
     final response = await http.get(
       Uri.parse('$baseUrl/employers/$employerId/profile/'),
-     headers: {
+      headers: {
         "Content-Type": "application/json",
-        "Authorization": "Bearer $token", 
+        "Authorization": "Bearer $token",
       },
     );
 
     if (response.statusCode == 200) {
       return jsonDecode(response.body);
+    } else if (response.statusCode == 404) {
+      throw Exception('Profile not found');
     } else {
-      throw Exception('Failed to load employer profile');
+      throw Exception('Failed to load profile. Status: ${response.statusCode}');
     }
   }
 
-  Future<bool> updateEmployerProfile(
+  // Update employer profile
+  Future<Map<String, dynamic>> updateEmployerProfile(
       int employerId, Map<String, dynamic> data) async {
+    final token = await _getToken();
+
     final response = await http.put(
-      Uri.parse('$baseUrl/employers/$employerId/profile/'), 
+      Uri.parse('$baseUrl/employers/$employerId/profile/'),
       headers: {
         "Content-Type": "application/json",
-        "Authorization": "Bearer $token", 
+        "Authorization": "Bearer $token",
       },
       body: jsonEncode(data),
     );
 
     if (response.statusCode == 200) {
-      return true;
+      return jsonDecode(response.body);
+    } else if (response.statusCode == 404) {
+      throw Exception('Profile not found');
+    } else if (response.statusCode == 400) {
+      final errorData = jsonDecode(response.body);
+      throw Exception('Validation error: $errorData');
     } else {
-      throw Exception('Failed to update employer profile');
+      throw Exception('Failed to update profile. Status: ${response.statusCode}');
+    }
+  }
+
+  // Create employer profile (if needed)
+  Future<Map<String, dynamic>> createEmployerProfile(Map<String, dynamic> data) async {
+    final token = await _getToken();
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/employers/profile/'),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+      body: jsonEncode(data),
+    );
+
+    if (response.statusCode == 201) {
+      return jsonDecode(response.body);
+    } else if (response.statusCode == 400) {
+      final errorData = jsonDecode(response.body);
+      throw Exception('Validation error: $errorData');
+    } else {
+      throw Exception('Failed to create profile. Status: ${response.statusCode}');
     }
   }
 
