@@ -789,47 +789,140 @@ def get_employer_tasks(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
  
  
-api_view(['GET'])
+@api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def get_employer_profile(request, employer_id):
-   
+    """
+    Get employer profile by employer_id
+    """
     try:
+        # Add permission check to ensure user can only access their own profile
+        if request.user.id != employer_id and not request.user.is_staff:
+            return Response(
+                {'error': 'You do not have permission to access this profile'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+            
         profile = EmployerProfile.objects.get(employer_id=employer_id)
         serializer = EmployerProfileSerializer(profile)
         return Response(serializer.data, status=status.HTTP_200_OK)
     except EmployerProfile.DoesNotExist:
-        return Response({'error': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {'error': 'Profile not found', 'employer_id': employer_id}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response(
+            {'error': f'Server error: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 
 @api_view(['POST'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def create_employer_profile(request):
-    
-    serializer = EmployerProfileSerializer(data=request.data)
-    if serializer.is_valid():
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    """
+    Create a new employer profile
+    """
+    try:
+        # Ensure user can only create their own profile
+        if 'employer' in request.data and request.data['employer'] != request.user.id:
+            return Response(
+                {'error': 'You can only create your own profile'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+            
+        # Check if profile already exists
+        existing_profile = EmployerProfile.objects.filter(employer_id=request.user.id).first()
+        if existing_profile:
+            return Response(
+                {'error': 'Profile already exists. Use update instead.'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        serializer = EmployerProfileSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(
+            {'error': 'Validation failed', 'details': serializer.errors}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    except Exception as e:
+        return Response(
+            {'error': f'Server error: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 
-@api_view(['PUT'])
+@api_view(['PUT', 'PATCH'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def update_employer_profile(request, employer_id):
-    
+    """
+    Update employer profile (supports both PUT and PATCH)
+    """
     try:
-        profile = EmployerProfile.objects.get(employer_id=employer_id)
-    except EmployerProfile.DoesNotExist:
-        return Response({'error': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        # Permission check
+        if request.user.id != employer_id and not request.user.is_staff:
+            return Response(
+                {'error': 'You do not have permission to update this profile'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+            
+        try:
+            profile = EmployerProfile.objects.get(employer_id=employer_id)
+        except EmployerProfile.DoesNotExist:
+            return Response(
+                {'error': 'Profile not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Determine if it's partial update (PATCH) or full update (PUT)
+        partial = request.method == 'PATCH'
+        
+        serializer = EmployerProfileSerializer(
+            profile, 
+            data=request.data, 
+            partial=partial
+        )
+        
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        return Response(
+            {'error': 'Validation failed', 'details': serializer.errors}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    except Exception as e:
+        return Response(
+            {'error': f'Server error: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
-    serializer = EmployerProfileSerializer(profile, data=request.data, partial=True)
-    if serializer.is_valid():
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_200_OK)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+@api_view(['GET'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def check_profile_exists(request):
+    """
+    Check if a profile exists for the current user
+    """
+    try:
+        profile = EmployerProfile.objects.filter(employer_id=request.user.id).first()
+        exists = profile is not None
+        return Response(
+            {'exists': exists, 'profile_id': profile.id if profile else None}, 
+            status=status.HTTP_200_OK
+        )
+    except Exception as e:
+        return Response(
+            {'error': f'Server error: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 @api_view(['GET', 'POST'])
 @authentication_classes([EmployerTokenAuthentication])
