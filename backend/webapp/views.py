@@ -2079,7 +2079,7 @@ def freelancer_contracts(request):
         # Get contracts for this freelancer
         contracts = Contract.objects.filter(
             freelancer=request.user
-        ).select_related('task', 'employer', 'employer__user', 'employer__profile')
+        ).select_related('task', 'employer',  'employer__profile').all()
         
         data = []
         for contract in contracts:
