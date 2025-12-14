@@ -29,6 +29,12 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
   // Add your baseUrl here
   final String baseUrl = "YOUR_BASE_URL_HERE"; // Replace with your actual base URL
 
+  // HELPER METHOD: Check if task is taken
+  bool _isTaskTaken(Map<String, dynamic> task) {
+    return task['assigned_user'] != null ||
+           (task['status'] != null && task['status'] != 'open');
+  }
+
   @override
   void initState() {
     super.initState();
@@ -484,6 +490,9 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: () {
+                  // Calculate if task is taken
+                  final bool isTaken = _isTaskTaken(task);
+                  
                   Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -491,6 +500,7 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
                         taskId: task['task_id'] ?? task['id'] ?? 0,
                         task: task,
                         employer: employer,
+                        isTaken: isTaken, // 👈 PASS TAKEN STATE
                       ),
                     ),
                   );
@@ -558,7 +568,6 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
     );
   }
 
-  // The rest of your existing helper methods remain the same...
   Widget _buildClientSection(Map<String, dynamic> employer) {
     final companyName = employer['company_name'];
     final username = employer['username'];
@@ -669,23 +678,22 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
   }
 
   Widget _buildTaskStatus(Map<String, dynamic> task) {
-    final isApproved = task['is_approved'] ?? false;
-    final isAssigned = task['assigned_user'] != null;
-    
-    Color statusColor = Colors.orange;
-    String statusText = 'Available';
-    IconData statusIcon = Icons.access_time;
-    
-    if (isAssigned && !isApproved) {
-      statusColor = Colors.blue;
-      statusText = 'Assigned';
-      statusIcon = Icons.person;
-    } else if (isApproved) {
+    final bool isTaken = _isTaskTaken(task);
+
+    Color statusColor;
+    String statusText;
+    IconData statusIcon;
+
+    if (isTaken) {
+      statusColor = Colors.red;
+      statusText = 'Taken';
+      statusIcon = Icons.lock;
+    } else {
       statusColor = Colors.green;
-      statusText = 'Approved';
-      statusIcon = Icons.check_circle;
+      statusText = 'Open';
+      statusIcon = Icons.lock_open;
     }
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(

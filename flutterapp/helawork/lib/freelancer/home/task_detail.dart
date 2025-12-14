@@ -8,12 +8,14 @@ class TaskDetailScreen extends StatefulWidget {
   final int taskId;
   final Map<String, dynamic> task;
   final Map<String, dynamic> employer;
+  final bool isTaken; // 👈 ADD THIS
 
   const TaskDetailScreen({
     super.key,
     required this.taskId,
     required this.task,
     required this.employer,
+    required this.isTaken, // 👈 ADD THIS
   });
 
   @override
@@ -125,15 +127,21 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.2),
+                    color: widget.isTaken 
+                      ? Colors.red.withOpacity(0.2)
+                      : Colors.green.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: Colors.green),
+                    border: Border.all(
+                      color: widget.isTaken ? Colors.red : Colors.green,
+                    ),
                   ),
                   child: Text(
-                    'Available',
+                    widget.isTaken ? 'Taken' : 'Available',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.green[300],
+                      color: widget.isTaken 
+                        ? Colors.red[300]
+                        : Colors.green[300],
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -452,36 +460,68 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   }
 
   Widget _buildActionButtons(BuildContext context) {
-    final isApproved = widget.task['is_approved'] ?? false;
-    final isAssigned = widget.task['assigned_user'] != null;
-
     return Column(
       children: [
-        if (!isAssigned && !isApproved)
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _navigateToProposalScreen, // UPDATED: Now navigates to ProposalScreen
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(6),
+        // Warning message for taken tasks
+        if (widget.isTaken) ...[
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.red.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: Colors.red.withOpacity(0.3)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline, color: Colors.red[300], size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'This task has been assigned to another freelancer.',
+                    style: TextStyle(
+                      color: Colors.red[200],
+                      fontSize: 12,
+                    ),
+                  ),
                 ),
-                elevation: 0,
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+        
+        // Main Apply Button
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: widget.isTaken 
+              ? null // Disable button if task is taken
+              : _navigateToProposalScreen, // Enable if open
+            style: ElevatedButton.styleFrom(
+              backgroundColor: widget.isTaken 
+                ? Colors.grey[700] // Grey when disabled
+                : Colors.orange, // Orange when enabled
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(6),
               ),
-              child: const Text(
-                'Apply for Task',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                ),
+              elevation: 0,
+            ),
+            child: Text(
+              widget.isTaken 
+                ? 'Task Taken' // Show when taken
+                : 'Apply for Task', // Show when open
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
+        ),
         
         const SizedBox(height: 8),
         
+        // Back Button
         SizedBox(
           width: double.infinity,
           child: OutlinedButton(

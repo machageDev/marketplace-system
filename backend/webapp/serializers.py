@@ -48,9 +48,23 @@ class EmployerSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class TaskSerializer(serializers.ModelSerializer):
+    is_taken = serializers.SerializerMethodField()
+
     class Meta:
         model = Task
-        fields = '__all__'        
+        fields = [
+            'task_id',
+            'title',
+            'description',
+            'budget',
+            'status',
+            'assigned_user',
+            'is_taken',
+            'created_at'
+        ]
+
+    def get_is_taken(self, obj):
+        return obj.status != 'open' or obj.assigned_user is not None
 
 
 

@@ -218,6 +218,12 @@ def apiforgot_password(request):
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)        
     
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def list_tasks(request):
+    tasks = Task.objects.filter(is_active=True)
+    serializer = TaskSerializer(tasks, many=True)
+    return Response(serializer.data)
 
 
 @csrf_exempt
@@ -225,87 +231,117 @@ def apiforgot_password(request):
 def apisubmit_proposal(request):
     try:
         print(" PROPOSAL SUBMISSION STARTED")
-        
-        
+
+        # =======================
+        # AUTHENTICATION
+        # =======================
         auth = CustomTokenAuthentication()
         auth_result = auth.authenticate(request)
-        
-        if auth_result is None:
-            print(" AUTHENTICATION FAILED - No valid token")
-            return JsonResponse({"error": "Authentication failed"}, status=401)
-            
-        request.user, request.auth = auth_result
-        
-        
-        user_identifier = getattr(request.user, 'username', 
-                                getattr(request.user, 'email', 
-                                        getattr(request.user, 'name', 
-                                                f"User_{request.user}")))
-        print(f" USER AUTHENTICATED: {user_identifier}")
-        print(f" USER ID: {request.user}")
 
-        # Get form data - use request.POST for multipart forms
+        if auth_result is None:
+            print(" AUTHENTICATION FAILED")
+            return JsonResponse(
+                {"error": "Authentication failed"},
+                status=401
+            )
+
+        request.user, request.auth = auth_result
+
+        print(f" USER AUTHENTICATED: {request.user}")
+
+        # =======================
+        # INPUT DATA
+        # =======================
         task_id = request.POST.get("task_id")
         bid_amount = request.POST.get("bid_amount")
-        title = request.POST.get("title", "")
-        cover_letter_file = request.FILES.get('cover_letter_file')
+        cover_letter_file = request.FILES.get("cover_letter_file")
 
-        print(f" RECEIVED FORM DATA:")
-        print(f"   - task_id: {task_id}")
-        print(f"   - bid_amount: {bid_amount}")
-        print(f"   - title: {title}")
-        print(f"   - file_received: {cover_letter_file is not None}")
-
-        
         if not task_id:
-            return JsonResponse({"error": "Task ID is required"}, status=400)
-        if not cover_letter_file:
-            return JsonResponse({"error": "Cover letter PDF file is required"}, status=400)
+            return JsonResponse(
+                {"error": "Task ID is required"},
+                status=400
+            )
 
-        
+        if not cover_letter_file:
+            return JsonResponse(
+                {"error": "Cover letter PDF file is required"},
+                status=400
+            )
+
+        # =======================
+        # FETCH TASK
+        # =======================
         try:
             task = Task.objects.get(pk=task_id)
-            print(f" Task found: {task.title}")
+            print(f" TASK FOUND: {task.title}")
         except Task.DoesNotExist:
-            return JsonResponse({"error": "Task not found"}, status=404)
+            return JsonResponse(
+                {"error": "Task not found"},
+                status=404
+            )
 
-       
+        # =======================
+        #  TASK LOCK CHECK
+        # =======================
+        if task.status != 'open' or not task.is_active or task.assigned_user is not None:
+            return JsonResponse(
+                {"error": "This task has already been taken"},
+                status=400
+            )
+
+        # =======================
+        # DUPLICATE PROPOSAL CHECK
+        # =======================
         if Proposal.objects.filter(task=task, freelancer=request.user).exists():
-            return JsonResponse({"error": "You have already submitted a proposal for this task"}, status=400)
+            return JsonResponse(
+                {"error": "You have already submitted a proposal for this task"},
+                status=400
+            )
 
-        
-        proposal = Proposal(
+        # =======================
+        # CREATE PROPOSAL
+        # =======================
+        proposal = Proposal.objects.create(
             task=task,
             freelancer=request.user,
-            bid_amount=float(bid_amount) if bid_amount else 0.0,      
-            
-            #cover_letter='Cover letter provided as PDF file',
+            bid_amount=float(bid_amount) if bid_amount else 0.0,
+            submitted_at=timezone.now()
         )
+
+        # =======================
+        # SAVE FILE
+        # =======================
+        proposal.cover_letter_file.save(
+            cover_letter_file.name,
+            cover_letter_file
+        )
+
         proposal.save()
-        print(f"Proposal saved with ID: {proposal}")
 
-        # Save file
-        if cover_letter_file and hasattr(proposal, 'cover_letter_file'):
-            proposal.cover_letter_file.save(cover_letter_file.name, cover_letter_file)
-            proposal.save()
-            print(f" PDF file saved: {cover_letter_file.name}")
+        print(f" PROPOSAL CREATED: {proposal.proposal_id}")
 
+        # =======================
+        # RESPONSE
+        # =======================
         return JsonResponse({
-            "id": proposal,
-            "task_id": proposal.task_id,
-            "freelancer_id": proposal.freelancer.id,
-            "cover_letter": proposal.cover_letter,
+            "id": proposal.proposal_id,
+            "task_id": task.task_id,
+            "freelancer_id": request.user.id,
             "bid_amount": float(proposal.bid_amount),
             "status": proposal.status,
-            "title": proposal.title,
+            "task_title": task.title,
             "message": "Proposal submitted successfully"
         }, status=201)
 
     except Exception as e:
         print(f" ERROR: {str(e)}")
         import traceback
-        print(f" TRACEBACK: {traceback.format_exc()}")
-        return JsonResponse({"error": f"Server error: {str(e)}"}, status=500)
+        print(traceback.format_exc())
+
+        return JsonResponse(
+            {"error": "Internal server error"},
+            status=500
+        )
 @api_view(['GET'])
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -1873,3 +1909,62 @@ def recommended_jobs(request):
             "message": f"Error fetching recommended jobs: {str(e)}",
             "recommended": []
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        
+        
+        
+@api_view(['POST'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def accept_proposal(request, proposal_id):
+    proposal = get_object_or_404(Proposal, proposal_id=proposal_id)
+    task = proposal.task
+
+    if request.user != task.employer.user:
+        return Response({"error": "Unauthorized"}, status=403)
+
+    #  Prevent double acceptance
+    if task.status != 'open':
+        return Response({"error": "Task already locked"}, status=400)
+
+    # Accept proposal
+    proposal.status = 'accepted'
+    proposal.save()
+
+    # Reject others
+    Proposal.objects.filter(task=task).exclude(proposal=proposal)\
+        .update(status='rejected')
+
+    # LOCK TASK
+    task.assigned_user = proposal.freelancer
+    task.status = 'in_progress'
+    task.is_active = False
+    task.save()
+
+    # Create contract
+    Contract.objects.create(
+        task=task,
+        freelancer=proposal.freelancer,
+        employer=task.employer,
+        employer_accepted=True
+    )
+
+    return Response({"message": "Task locked and contract created"})
+
+@api_view(['POST'])
+@authentication_classes([CustomTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def accept_contract(request, contract_id):
+    contract = get_object_or_404(Contract, contract_id=contract_id)
+
+    if request.user != contract.freelancer:
+        return Response({"error": "Unauthorized"}, status=403)
+
+    contract.freelancer_accepted = True
+    contract.activate_contract()
+
+    return Response({
+        "message": "Contract accepted",
+        "is_active": contract.is_active
+    })
+        
