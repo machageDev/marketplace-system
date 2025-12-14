@@ -342,7 +342,8 @@ def apisubmit_proposal(request):
 def apitask_list(request):
     try:
         tasks = Task.objects.select_related('employer').prefetch_related('employer__profile').all()
-        
+        tasks = Task.objects.filter(status='open', is_active=True)
+
         data = []
         for task in tasks:
             employer_profile = getattr(task.employer, 'profile', None)
@@ -358,7 +359,7 @@ def apitask_list(request):
                 'completed': False,
                 'employer': {
                     'id': task.employer.employer_id,
-                    'username': task.employer.user.username,  # Note: Changed from task.employer.username
+                    'username': task.employer.username,  # Note: Changed from task.employer.username
                     'contact_email': task.employer.contact_email,
                     'company_name': employer_profile.company_name if employer_profile else None,
                     'profile_picture': employer_profile.profile_picture.url if employer_profile and employer_profile.profile_picture else None,
@@ -1930,7 +1931,7 @@ def accept_proposal(request, proposal_id):
             .exclude(proposal_id=proposal.proposal_id)\
             .update(status='rejected')
 
-        # 🔒 LOCK TASK
+        #  LOCK TASK
         task.assigned_user = proposal.freelancer
         task.status = 'in_progress'
         task.is_active = False
