@@ -458,10 +458,6 @@ def employer_login(request):
             'error': 'Invalid credentials'
         }, status=status.HTTP_401_UNAUTHORIZED)
 
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
-from rest_framework.response import Response
-from rest_framework import status
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -1903,66 +1899,50 @@ def recommended_jobs(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
         
-        
-        
 @api_view(['POST'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def accept_proposal(request, proposal_id):
     try:
-        # Get the proposal
         proposal = get_object_or_404(Proposal, proposal_id=proposal_id)
         task = proposal.task
 
-        # Authorization check
-        if request.user != task.employer.user:
-            return Response({"error": "Unauthorized - Only task employer can accept proposals"}, status=403)
+        # ✅ CORRECT AUTHORIZATION
+        if request.user != task.employer:
+            return Response(
+                {"error": "Unauthorized - only task employer can accept proposals"},
+                status=403
+            )
 
-        # CRITICAL: Prevent double acceptance
-        if task.status != 'open':
-            return Response({
-                "error": "Task already assigned",
-                "current_status": task.status,
-                "assigned_to": task.assigned_user.id if task.assigned_user else None
-            }, status=400)
+        # Prevent double acceptance
+        if task.status != 'open' or task.assigned_user is not None:
+            return Response(
+                {"error": "Task already assigned"},
+                status=400
+            )
 
-        # CRITICAL: Check if task is already locked
-        if task.assigned_user is not None:
-            return Response({
-                "error": "Task already assigned to another freelancer",
-                "assigned_freelancer_id": task.assigned_user.id
-            }, status=400)
-
-        print(f" Accepting proposal {proposal_id} for task {task.task_id}")
-
-        # 1. Accept this proposal
+        # Accept proposal
         proposal.status = 'accepted'
         proposal.save()
 
-        # 2. Reject all other proposals for this task
-        Proposal.objects.filter(task=task).exclude(proposal_id=proposal.proposal_id)\
+        # Reject all others
+        Proposal.objects.filter(task=task)\
+            .exclude(proposal_id=proposal.proposal_id)\
             .update(status='rejected')
 
-        # 3. CRITICAL: Lock the task
+        # 🔒 LOCK TASK
         task.assigned_user = proposal.freelancer
-        task.status = 'in_progress'  # Change from 'open' to 'in_progress'
-        task.is_active = False  # No longer available
+        task.status = 'in_progress'
+        task.is_active = False
         task.save()
 
-        print(f" Task {task.task_id} locked. Assigned to: {proposal.freelancer.id}")
-
-        # 4. Create contract
+        # Create contract
         contract = Contract.objects.create(
             task=task,
             freelancer=proposal.freelancer,
             employer=task.employer,
             employer_accepted=True
         )
-
-        print(f" Contract created: {contract.contract_id}")
-
-        # 5. Send notification to freelancer (optional but recommended)
-        # You can implement this later
 
         return Response({
             "message": "Proposal accepted and task locked successfully",
@@ -1974,10 +1954,13 @@ def accept_proposal(request, proposal_id):
         })
 
     except Exception as e:
-        print(f" Error in accept_proposal: {str(e)}")
         import traceback
         print(traceback.format_exc())
-        return Response({"error": f"Internal server error: {str(e)}"}, status=500)
+        return Response(
+            {"error": "Internal server error"},
+            status=500
+        )
+        
 
 
 @api_view(['POST'])
