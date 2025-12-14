@@ -217,13 +217,7 @@ def apiforgot_password(request):
         return Response({"message": "Password reset successfully"}, status=status.HTTP_200_OK)
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)        
-    
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def list_tasks(request):
-    tasks = Task.objects.filter(is_active=True)
-    serializer = TaskSerializer(tasks, many=True)
-    return Response(serializer.data)
+
 
 
 @csrf_exempt
@@ -346,14 +340,11 @@ def apisubmit_proposal(request):
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def apitask_list(request):
-    
     try:
-        
         tasks = Task.objects.select_related('employer').prefetch_related('employer__profile').all()
         
         data = []
         for task in tasks:
-            
             employer_profile = getattr(task.employer, 'profile', None)
             
             task_data = {
@@ -361,12 +352,13 @@ def apitask_list(request):
                 'title': task.title,
                 'description': task.description,
                 'is_approved': task.is_approved,
+                'status': task.status,  # 👈 MUST INCLUDE THIS
+                'assigned_user': task.assigned_user.id if task.assigned_user else None,
                 'created_at': task.created_at.isoformat() if task.created_at else None,
-                'assigned_user': task.assigned_user.user_id if task.assigned_user else None,
-                'completed': False,  
+                'completed': False,
                 'employer': {
                     'id': task.employer.employer_id,
-                    'username': task.employer.username,
+                    'username': task.employer.user.username,  # Note: Changed from task.employer.username
                     'contact_email': task.employer.contact_email,
                     'company_name': employer_profile.company_name if employer_profile else None,
                     'profile_picture': employer_profile.profile_picture.url if employer_profile and employer_profile.profile_picture else None,
@@ -1917,40 +1909,75 @@ def recommended_jobs(request):
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def accept_proposal(request, proposal_id):
-    proposal = get_object_or_404(Proposal, proposal_id=proposal_id)
-    task = proposal.task
+    try:
+        # Get the proposal
+        proposal = get_object_or_404(Proposal, proposal_id=proposal_id)
+        task = proposal.task
 
-    if request.user != task.employer.user:
-        return Response({"error": "Unauthorized"}, status=403)
+        # Authorization check
+        if request.user != task.employer.user:
+            return Response({"error": "Unauthorized - Only task employer can accept proposals"}, status=403)
 
-    #  Prevent double acceptance
-    if task.status != 'open':
-        return Response({"error": "Task already locked"}, status=400)
+        # CRITICAL: Prevent double acceptance
+        if task.status != 'open':
+            return Response({
+                "error": "Task already assigned",
+                "current_status": task.status,
+                "assigned_to": task.assigned_user.id if task.assigned_user else None
+            }, status=400)
 
-    # Accept proposal
-    proposal.status = 'accepted'
-    proposal.save()
+        # CRITICAL: Check if task is already locked
+        if task.assigned_user is not None:
+            return Response({
+                "error": "Task already assigned to another freelancer",
+                "assigned_freelancer_id": task.assigned_user.id
+            }, status=400)
 
-    # Reject others
-    Proposal.objects.filter(task=task).exclude(proposal=proposal)\
-        .update(status='rejected')
+        print(f" Accepting proposal {proposal_id} for task {task.task_id}")
 
-    # LOCK TASK
-    task.assigned_user = proposal.freelancer
-    task.status = 'in_progress'
-    task.is_active = False
-    task.save()
+        # 1. Accept this proposal
+        proposal.status = 'accepted'
+        proposal.save()
 
-    # Create contract
-    Contract.objects.create(
-        task=task,
-        freelancer=proposal.freelancer,
-        employer=task.employer,
-        employer_accepted=True
-    )
+        # 2. Reject all other proposals for this task
+        Proposal.objects.filter(task=task).exclude(proposal_id=proposal.proposal_id)\
+            .update(status='rejected')
 
-    return Response({"message": "Task locked and contract created"})
+        # 3. CRITICAL: Lock the task
+        task.assigned_user = proposal.freelancer
+        task.status = 'in_progress'  # Change from 'open' to 'in_progress'
+        task.is_active = False  # No longer available
+        task.save()
 
+        print(f" Task {task.task_id} locked. Assigned to: {proposal.freelancer.id}")
+
+        # 4. Create contract
+        contract = Contract.objects.create(
+            task=task,
+            freelancer=proposal.freelancer,
+            employer=task.employer,
+            employer_accepted=True
+        )
+
+        print(f" Contract created: {contract.contract_id}")
+
+        # 5. Send notification to freelancer (optional but recommended)
+        # You can implement this later
+
+        return Response({
+            "message": "Proposal accepted and task locked successfully",
+            "task_id": task.task_id,
+            "task_status": task.status,
+            "assigned_freelancer_id": proposal.freelancer.id,
+            "contract_id": contract.contract_id,
+            "task_locked": True
+        })
+
+    except Exception as e:
+        print(f" Error in accept_proposal: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
+        return Response({"error": f"Internal server error: {str(e)}"}, status=500)
 @api_view(['POST'])
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
