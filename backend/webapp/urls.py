@@ -18,7 +18,9 @@ urlpatterns = [
     path('submissions/<int:submission_id>/', views.get_submission_detail, name='submission_detail'),
     path('submissions/<int:submission_id>/approve/', views.approve_submission, name='submission_approve'),
     path('submissions/<int:submission_id>/request-revision/', views.request_revision, name='request_revision'),
-    
+     path('api/freelancer/contracts/', views.freelancer_contracts, name='freelancer_contracts'),
+    path('api/contracts/<int:contract_id>/accept/', views.accept_contract, name='accept_contract'),
+    path('api/contracts/<int:contract_id>/reject/', views.reject_contract, name='reject_contract'),
     # Rating URLs
     path('ratings/create/', views.create_rating, name='rating-create'),
     path('users/<int:user_id>/ratings/', views.get_user_ratings, name='user_ratings'),

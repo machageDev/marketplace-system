@@ -666,26 +666,65 @@ Future<List<Contract>> fetchContracts() async {
     throw Exception("Failed to load contracts: ${response.body}");
   }
 }
-  
-  Future<void> acceptContract(int contractId) async {
-    final url = Uri.parse('contractUrl');
-    final response = await http.post(url);
+ 
+ // Get freelancer's contracts
+  Future<Map<String, dynamic>> fetchFreelancerContracts(String token) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/freelancer/contracts/'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
 
-    if (response.statusCode != 200) {
-      throw Exception("Failed to accept contract: ${response.body}");
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else if (response.statusCode == 401) {
+      throw Exception("Authentication expired");
+    } else if (response.statusCode == 404) {
+      throw Exception("Endpoint not found");
+    } else {
+      throw Exception("Server error: ${response.statusCode}");
     }
   }
 
-  
-  Future<void> rejectContract(int contractId) async {
-    final url = Uri.parse("$baseUrl/contracts/$contractId/reject/");
-    final response = await http.post(url);
+  // Accept a contract
+  Future<Map<String, dynamic>> acceptContract(String token, int contractId) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/contracts/$contractId/accept/'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
 
-    if (response.statusCode != 200) {
-      throw Exception("Failed to reject contract: ${response.body}");
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else if (response.statusCode == 403) {
+      throw Exception("Not authorized to accept this contract");
+    } else {
+      throw Exception("Failed to accept contract: ${response.statusCode}");
     }
   }
 
+  // Reject a contract
+  Future<Map<String, dynamic>> rejectContract(String token, int contractId) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/contracts/$contractId/reject/'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else if (response.statusCode == 403) {
+      throw Exception("Not authorized to reject this contract");
+    } else {
+      throw Exception("Failed to reject contract: ${response.statusCode}");
+    }
+  }
    static Future<Map<String, dynamic>> fetchTaskDetails(int taskId) async {
     try {
       final token = await _getToken();

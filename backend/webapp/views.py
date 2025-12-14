@@ -1978,6 +1978,25 @@ def accept_proposal(request, proposal_id):
         import traceback
         print(traceback.format_exc())
         return Response({"error": f"Internal server error: {str(e)}"}, status=500)
+
+
+@api_view(['POST'])
+@authentication_classes([CustomTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def reject_contract(request, contract_id):
+    contract = get_object_or_404(Contract, contract_id=contract_id)
+
+    # Authorization: Only freelancer can reject their own contract
+    if request.user != contract.freelancer:
+        return Response({"error": "Unauthorized"}, status=403)
+
+    # Reject contract
+    contract.delete()  # Or mark as rejected if you want to keep record
+    
+    return Response({
+        "message": "Contract rejected and removed"
+    })
+        
 @api_view(['POST'])
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -1994,4 +2013,53 @@ def accept_contract(request, contract_id):
         "message": "Contract accepted",
         "is_active": contract.is_active
     })
+
+@api_view(['GET'])
+@authentication_classes([CustomTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def freelancer_contracts(request):
+    """Get all contracts for the logged-in freelancer"""
+    try:
+        # Get contracts for this freelancer
+        contracts = Contract.objects.filter(
+            freelancer=request.user
+        ).select_related('task', 'employer', 'employer__user', 'employer__profile')
         
+        data = []
+        for contract in contracts:
+            employer_profile = getattr(contract.employer, 'profile', None)
+            
+            contract_data = {
+                'contract_id': contract.contract_id,
+                'task': {
+                    'task_id': contract.task.task_id,
+                    'title': contract.task.title,
+                    'description': contract.task.description,
+                    'budget': float(contract.task.budget) if contract.task.budget else None,
+                    'deadline': contract.task.deadline.isoformat() if contract.task.deadline else None,
+                },
+                'employer': {
+                    'id': contract.employer.employer_id,
+                    'name': contract.employer.user.username,
+                    'company_name': employer_profile.company_name if employer_profile else None,
+                    'profile_picture': employer_profile.profile_picture.url if employer_profile and employer_profile.profile_picture else None,
+                },
+                'start_date': contract.start_date.isoformat(),
+                'end_date': contract.end_date.isoformat() if contract.end_date else None,
+                'employer_accepted': contract.employer_accepted,
+                'freelancer_accepted': contract.freelancer_accepted,
+                'is_active': contract.is_active,
+                'is_fully_accepted': contract.is_fully_accepted,
+                'status': 'active' if contract.is_active else 'pending',
+            }
+            data.append(contract_data)
+        
+        return Response({
+            "status": True,
+            "contracts": data,
+            "count": len(data)
+        })
+        
+    except Exception as e:
+        print(f" Error in freelancer_contracts: {e}")
+        return Response({"error": str(e)}, status=500)       

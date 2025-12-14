@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:helawork/clients/provider/auth_provider.dart' as client_auth;
 import 'package:helawork/clients/provider/client_profile_provider.dart';
 import 'package:helawork/clients/provider/client_proposal_provider.dart' as client_proposal;
-import 'package:helawork/clients/provider/contract_provider.dart';
+//import 'package:helawork/clients/provider/contract_provider.dart';
 import 'package:helawork/clients/provider/dashboard_provider.dart' as client_dashboard;
 //import 'package:helawork/clients/provider/employer_rating_provider.dart';
 import 'package:helawork/clients/provider/rating_provider.dart' as client_rating;
@@ -43,7 +43,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => freelancer_dashboard.DashboardProvider()),
         ChangeNotifierProvider(create: (_) => TaskProvider()), 
         ChangeNotifierProvider(create: (_) => ProposalProvider()),
-        ChangeNotifierProvider(create: (_) => ContractProvider()..fetchContracts()),
+        ChangeNotifierProvider(create: (_) => ContractProvider()),
         ChangeNotifierProvider(create: (_) => freelancer_rating.RatingProvider()),
         ChangeNotifierProvider(create: (_) => SubmissionProvider()),
         
@@ -55,7 +55,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => client_task.TaskProvider()),
         ChangeNotifierProvider(create: (_) => client_proposal.ProposalsProvider(apiService: ApiService())), 
         ChangeNotifierProvider(create: (_) => ClientProfileProvider()),
-        ChangeNotifierProvider(create: (_) => ClientContractProvider()),
+      
         //ChangeNotifierProvider(create: (_) => EmployerRatingProvider()),
         ChangeNotifierProvider(create: (_) => client_rating.ClientRatingProvider()),
         
