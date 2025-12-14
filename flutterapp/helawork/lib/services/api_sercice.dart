@@ -49,6 +49,7 @@ class ApiService{
   static const String submitRatingUrl = '$baseUrl/employer_ratings/';
   static const String employerratingsUrl ='$baseUrl/apifetchratings';
   static const String taskforratingUrl = '$baseUrl/completetask';
+
 Future<Map<String, dynamic>> register(String name, String email,String phoneNO, String password,  String confirmPassword) async {
   final url = Uri.parse(registerUrl);
   try {

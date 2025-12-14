@@ -2096,7 +2096,7 @@ def freelancer_contracts(request):
                 },
                 'employer': {
                     'id': contract.employer.employer_id,
-                    'name': contract.employer.user.username,
+                    'name': contract.employer.username,
                     'company_name': employer_profile.company_name if employer_profile else None,
                     'profile_picture': employer_profile.profile_picture.url if employer_profile and employer_profile.profile_picture else None,
                 },

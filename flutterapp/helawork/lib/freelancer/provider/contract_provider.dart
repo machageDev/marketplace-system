@@ -1,5 +1,6 @@
-// lib/freelancer/provider/contract_provider.dart
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:helawork/services/api_sercice.dart';
 import 'auth_provider.dart';
@@ -26,6 +27,7 @@ class ContractProvider with ChangeNotifier {
     }
   }
 
+  // Fetch all contracts
   Future<void> fetchContracts(BuildContext context) async {
     _isLoading = true;
     _errorMessage = null;
@@ -37,16 +39,36 @@ class ContractProvider with ChangeNotifier {
         throw Exception("Not authenticated. Please login again.");
       }
 
-      debugPrint("Fetching contracts with token: ${token.substring(0, 20)}...");
+      debugPrint("Fetching contracts...");
 
-      final response = await _apiService.fetchFreelancerContracts(token);
-      
-      if (response['status'] == true) {
-        List<dynamic> contractsData = response['contracts'] ?? [];
-        _contracts = contractsData.map((json) => Contract.fromJson(json)).toList();
-        debugPrint("Loaded ${_contracts.length} contracts");
+      // ✅ Correct: full URL
+      final url = Uri.parse('${ApiService.baseUrl}/api/freelancer/contracts/');
+
+      final response = await http.get(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      debugPrint("Contracts API Response: ${response.statusCode}");
+      debugPrint("Contracts API Body: ${response.body}");
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+
+        if (data['status'] == true) {
+          List<dynamic> contractsData = data['contracts'] ?? [];
+          _contracts = contractsData.map((json) => Contract.fromJson(json)).toList();
+          debugPrint("Loaded ${_contracts.length} contracts");
+        } else {
+          throw Exception(data['error'] ?? "Failed to load contracts");
+        }
+      } else if (response.statusCode == 500) {
+        throw Exception("Server error. Please try again later.");
       } else {
-        throw Exception(response['error'] ?? "Failed to load contracts");
+        throw Exception("Failed to load contracts: ${response.statusCode}");
       }
     } catch (e) {
       debugPrint("Error fetching contracts: $e");
@@ -57,6 +79,7 @@ class ContractProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  // Accept a contract
   Future<void> acceptContract(BuildContext context, int contractId) async {
     try {
       final token = _getToken(context);
@@ -67,10 +90,10 @@ class ContractProvider with ChangeNotifier {
       debugPrint("Accepting contract $contractId");
 
       await _apiService.acceptContract(token, contractId);
-      
+
       // Refresh contracts after acceptance
       await fetchContracts(context);
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Contract accepted successfully!'),
@@ -91,6 +114,7 @@ class ContractProvider with ChangeNotifier {
     }
   }
 
+  // Reject a contract
   Future<void> rejectContract(BuildContext context, int contractId) async {
     try {
       final token = _getToken(context);
@@ -101,10 +125,10 @@ class ContractProvider with ChangeNotifier {
       debugPrint("Rejecting contract $contractId");
 
       await _apiService.rejectContract(token, contractId);
-      
+
       // Refresh contracts after rejection
       await fetchContracts(context);
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Contract rejected.'),
@@ -127,16 +151,16 @@ class ContractProvider with ChangeNotifier {
 
   // Get pending contracts (employer accepted, freelancer not accepted)
   List<Contract> get pendingContracts {
-    return _contracts.where((contract) => 
-      contract.employerAccepted && !contract.freelancerAccepted
-    ).toList();
+    return _contracts
+        .where((contract) => contract.employerAccepted && !contract.freelancerAccepted)
+        .toList();
   }
 
   // Get active contracts (both accepted)
   List<Contract> get activeContracts {
-    return _contracts.where((contract) => 
-      contract.employerAccepted && contract.freelancerAccepted
-    ).toList();
+    return _contracts
+        .where((contract) => contract.employerAccepted && contract.freelancerAccepted)
+        .toList();
   }
 
   // Get contract by ID
