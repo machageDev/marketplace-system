@@ -26,12 +26,12 @@ class _ContractScreenState extends State<ContractScreen> {
     if (!_hasFetched && !provider.isLoading && provider.contracts.isEmpty) {
       _hasFetched = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        provider.fetchContracts(context); // Pass context here
+        provider.fetchContracts(context);
       });
     }
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.grey[900], // Changed to grey 900
       appBar: AppBar(
         title: const Text(
           "My Contracts",
@@ -41,12 +41,14 @@ class _ContractScreenState extends State<ContractScreen> {
             color: Colors.white,
           ),
         ),
-        backgroundColor: const Color(0xFF007bff),
+        backgroundColor: Colors.grey[900], // Changed to grey 900
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: provider.isLoading
           ? const Center(
               child: CircularProgressIndicator(
-                color: Color(0xFF007bff),
+                color: Colors.blue, // Keep blue for loading indicator
               ),
             )
           : provider.errorMessage != null
@@ -60,26 +62,34 @@ class _ContractScreenState extends State<ContractScreen> {
                         color: Colors.red,
                       ),
                       const SizedBox(height: 16),
-                      Text(
-                        provider.errorMessage!,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          color: Colors.white,
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Text(
+                          provider.errorMessage!,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey[300], // Lighter grey for text
+                          ),
                         ),
                       ),
                       const SizedBox(height: 20),
                       ElevatedButton(
                         onPressed: () {
-                          provider.fetchContracts(context); // Pass context
+                          provider.fetchContracts(context);
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF007bff),
+                          backgroundColor: Colors.blue, // Keep blue for buttons
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 30,
+                            vertical: 12,
+                          ),
                         ),
                         child: const Text(
                           "Try Again",
                           style: TextStyle(
-                            color: Colors.white,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ),
@@ -91,74 +101,95 @@ class _ContractScreenState extends State<ContractScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(
+                          Icon(
                             Icons.description,
                             size: 64,
-                            color: Colors.grey,
+                            color: Colors.grey[600],
                           ),
                           const SizedBox(height: 16),
-                          const Text(
+                          Text(
                             "No contracts available",
                             style: TextStyle(
                               fontSize: 18,
-                              color: Colors.grey,
+                              color: Colors.grey[300],
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                           const SizedBox(height: 8),
-                          const Text(
-                            "When employers accept your proposals,\ncontracts will appear here",
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey,
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 40),
+                            child: Text(
+                              "When employers accept your proposals,\ncontracts will appear here",
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[400],
+                              ),
                             ),
                           ),
                           const SizedBox(height: 20),
                           ElevatedButton(
                             onPressed: () {
-                              provider.fetchContracts(context); // Pass context
+                              provider.fetchContracts(context);
                             },
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF007bff),
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 30,
+                                vertical: 12,
+                              ),
                             ),
                             child: const Text(
                               "Refresh",
                               style: TextStyle(
-                                color: Colors.white,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                           ),
                         ],
                       ),
                     )
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: provider.contracts.length,
-                      itemBuilder: (context, index) {
-                        final contract = provider.contracts[index];
-                        return _buildContractCard(context, contract, provider);
+                  : RefreshIndicator(
+                      onRefresh: () async {
+                        await provider.fetchContracts(context);
+                        return;
                       },
+                      child: ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: provider.contracts.length,
+                        itemBuilder: (context, index) {
+                          final contract = provider.contracts[index];
+                          return _buildContractCard(context, contract, provider);
+                        },
+                      ),
                     ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          provider.fetchContracts(context); // Pass context
+          provider.fetchContracts(context);
         },
-        backgroundColor: const Color(0xFF007bff),
-        child: const Icon(
-          Icons.refresh,
-          color: Colors.white,
-        ),
+        backgroundColor: Colors.blue, // Keep blue for FAB
+        foregroundColor: Colors.white,
+        child: const Icon(Icons.refresh),
       ),
     );
   }
 
-  Widget _buildContractCard(BuildContext context, Contract contract, ContractProvider provider) {
-    return Card(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      elevation: 4,
+  Widget _buildContractCard(
+      BuildContext context, Contract contract, ContractProvider provider) {
+    return Container(
       margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.grey[800], // Dark grey card
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -170,19 +201,20 @@ class _ContractScreenState extends State<ContractScreen> {
                 Expanded(
                   child: Text(
                     contract.taskTitle,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
-                      color: Color(0xFF0056b3),
+                      color: Colors.grey[100], // Light grey text
                     ),
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: contract.isAccepted 
-                      ? Colors.green.withOpacity(0.1) 
-                      : Colors.orange.withOpacity(0.1),
+                    color: contract.isAccepted
+                        ? Colors.green.withOpacity(0.2)
+                        : Colors.orange.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
                       color: contract.isAccepted ? Colors.green : Colors.orange,
@@ -199,9 +231,7 @@ class _ContractScreenState extends State<ContractScreen> {
                 ),
               ],
             ),
-            
             const SizedBox(height: 12),
-            
             // Acceptance status
             Row(
               children: [
@@ -210,17 +240,13 @@ class _ContractScreenState extends State<ContractScreen> {
                 _buildAcceptanceStatus('You', contract.freelancerAccepted),
               ],
             ),
-            
             const SizedBox(height: 12),
-            
             // Contract details
             _buildDetailRow('Employer', contract.employerName),
             _buildDetailRow('Start Date', contract.formattedStartDate),
             if (contract.endDate != null)
               _buildDetailRow('End Date', contract.formattedEndDate!),
-            
             const SizedBox(height: 12),
-            
             // Budget
             if (contract.task['budget'] != null)
               Container(
@@ -228,10 +254,12 @@ class _ContractScreenState extends State<ContractScreen> {
                 decoration: BoxDecoration(
                   color: Colors.green.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.green.withOpacity(0.3)),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.attach_money, size: 16, color: Colors.green),
+                    const Icon(Icons.attach_money,
+                        size: 16, color: Colors.green),
                     const SizedBox(width: 8),
                     Text(
                       'Budget: \$${contract.task['budget']}',
@@ -243,9 +271,7 @@ class _ContractScreenState extends State<ContractScreen> {
                   ],
                 ),
               ),
-            
             const SizedBox(height: 16),
-            
             // Action buttons
             if (contract.canAccept)
               Row(
@@ -253,7 +279,8 @@ class _ContractScreenState extends State<ContractScreen> {
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () {
-                        _showAcceptContractDialog(context, contract.contractId, provider);
+                        _showAcceptContractDialog(
+                            context, contract.contractId, provider);
                       },
                       icon: const Icon(Icons.check_circle, size: 20),
                       label: const Text('Accept Contract'),
@@ -261,6 +288,9 @@ class _ContractScreenState extends State<ContractScreen> {
                         backgroundColor: Colors.green,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     ),
                   ),
@@ -268,7 +298,8 @@ class _ContractScreenState extends State<ContractScreen> {
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () {
-                        _showRejectContractDialog(context, contract.contractId, provider);
+                        _showRejectContractDialog(
+                            context, contract.contractId, provider);
                       },
                       icon: const Icon(Icons.cancel, size: 20),
                       label: const Text('Reject'),
@@ -276,26 +307,30 @@ class _ContractScreenState extends State<ContractScreen> {
                         side: const BorderSide(color: Colors.red),
                         foregroundColor: Colors.red,
                         padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     ),
                   ),
                 ],
               ),
-            
             if (contract.isAccepted)
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: () {
-                    // Navigate to task management
                     Navigator.pushNamed(context, '/my-tasks');
                   },
                   icon: const Icon(Icons.assignment, size: 20),
                   label: const Text('View Task'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF007bff),
+                    backgroundColor: Colors.blue,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                 ),
               ),
@@ -310,9 +345,9 @@ class _ContractScreenState extends State<ContractScreen> {
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
-            color: Colors.grey,
+            color: Colors.grey[400],
           ),
         ),
         const SizedBox(height: 4),
@@ -321,7 +356,7 @@ class _ContractScreenState extends State<ContractScreen> {
           height: 24,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: accepted ? Colors.green : Colors.grey,
+            color: accepted ? Colors.green : Colors.grey[600],
           ),
           child: Icon(
             accepted ? Icons.check : Icons.pending,
@@ -337,22 +372,25 @@ class _ContractScreenState extends State<ContractScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
             width: 80,
             child: Text(
               '$label:',
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.w500,
-                color: Colors.grey,
+                color: Colors.grey[400],
+                fontSize: 13,
               ),
             ),
           ),
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(
-                color: Colors.black87,
+              style: TextStyle(
+                color: Colors.grey[200],
+                fontSize: 13,
               ),
             ),
           ),
@@ -361,28 +399,40 @@ class _ContractScreenState extends State<ContractScreen> {
     );
   }
 
-  void _showAcceptContractDialog(BuildContext context, int contractId, ContractProvider provider) {
+  void _showAcceptContractDialog(
+      BuildContext context, int contractId, ContractProvider provider) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Accept Contract'),
-        content: const Text(
+        backgroundColor: Colors.grey[800],
+        title: Text(
+          'Accept Contract',
+          style: TextStyle(color: Colors.grey[100]),
+        ),
+        content: Text(
           'By accepting this contract, you agree to complete the task according to the terms and conditions.',
+          style: TextStyle(color: Colors.grey[300]),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: Colors.grey[400]),
+            ),
           ),
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(context);
               try {
-                await provider.acceptContract(context, contractId); // Pass context
+                await provider.acceptContract(context, contractId);
               } catch (e) {
                 // Error is already shown by provider
               }
             },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+            ),
             child: const Text('Accept'),
           ),
         ],
@@ -390,24 +440,33 @@ class _ContractScreenState extends State<ContractScreen> {
     );
   }
 
-  void _showRejectContractDialog(BuildContext context, int contractId, ContractProvider provider) {
+  void _showRejectContractDialog(
+      BuildContext context, int contractId, ContractProvider provider) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Reject Contract'),
-        content: const Text(
+        backgroundColor: Colors.grey[800],
+        title: Text(
+          'Reject Contract',
+          style: TextStyle(color: Colors.grey[100]),
+        ),
+        content: Text(
           'Are you sure you want to reject this contract? This action cannot be undone.',
+          style: TextStyle(color: Colors.grey[300]),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: Colors.grey[400]),
+            ),
           ),
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(context);
               try {
-                await provider.rejectContract(context, contractId); // Pass context
+                await provider.rejectContract(context, contractId);
               } catch (e) {
                 // Error is already shown by provider
               }

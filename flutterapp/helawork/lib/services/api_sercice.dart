@@ -648,22 +648,78 @@ static Future<List<Proposal>> fetchProposals() async {
   }
 }
 
-// In fetchContracts method  
+// In ApiService class, FIX this method:
 Future<List<Contract>> fetchContracts() async {
-  final String? token = await _getUserToken();
-  final url = Uri.parse(contractUrl);
-  final response = await http.get(
-    url,
-    headers: {
-      'Authorization': 'Bearer $token', 
-    },
-  );
+  try {
+    // Use _getUserToken() instead of _getToken()
+    final String? token = await _getUserToken();
+    
+    if (token == null) {
+      throw Exception("No authentication token found. Please login.");
+    }
 
-  if (response.statusCode == 200) {
-    final List<dynamic> data = json.decode(response.body);
-    return data.map((json) => Contract.fromJson(json)).toList();
-  } else {
-    throw Exception("Failed to load contracts: ${response.body}");
+    print("Fetching contracts with token: ${token.substring(0, 20)}...");
+    
+    final response = await http.get(
+      Uri.parse(contractUrl),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    print("Contracts API Status: ${response.statusCode}");
+    print("Contracts API Body (first 500 chars): ${response.body.length > 500 ? '${response.body.substring(0, 500)}...' : response.body}");
+
+    if (response.statusCode == 200) {
+      final dynamic data = json.decode(response.body);
+      
+      // Handle different response formats
+      if (data is List) {
+        // Format: Direct list [ {...}, {...} ]
+        print("Detected format: Direct List");
+        return data.map((json) => Contract.fromJson(json)).toList();
+        
+      } else if (data is Map) {
+        if (data.containsKey('contracts') && data['contracts'] is List) {
+          // Format: {"contracts": [...], "status": true}
+          print("Detected format: Wrapped with 'contracts' key");
+          final contractsData = data['contracts'] as List;
+          return contractsData.map((json) => Contract.fromJson(json)).toList();
+          
+        } else if (data.containsKey('data') && data['data'] is List) {
+          // Format: {"data": [...], "success": true}
+          print("Detected format: Wrapped with 'data' key");
+          final contractsData = data['data'] as List;
+          return contractsData.map((json) => Contract.fromJson(json)).toList();
+          
+        } else {
+          print("Unexpected Map format. Keys: ${data.keys}");
+          throw Exception("Unexpected response format from server");
+        }
+        
+      } else {
+        print("Unknown response type: ${data.runtimeType}");
+        throw Exception("Unknown response format from server");
+      }
+      
+    } else if (response.statusCode == 401) {
+      throw Exception("Authentication expired. Please login again.");
+    } else if (response.statusCode == 500) {
+      // Try to get error details
+      try {
+        final errorData = json.decode(response.body);
+        throw Exception("Server Error: ${errorData['error'] ?? errorData['detail'] ?? 'Internal server error'}");
+      } catch (_) {
+        throw Exception("Server Error (500): ${response.body}");
+      }
+    } else {
+      throw Exception("Failed to load contracts: ${response.statusCode}");
+    }
+    
+  } catch (e) {
+    print("Error in fetchContracts: $e");
+    rethrow;
   }
 }
  
