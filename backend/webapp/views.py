@@ -1996,13 +1996,15 @@ def accept_contract(request, contract_id):
 @permission_classes([IsAuthenticated])
 def freelancer_contracts(request):
     try:
+        # CORRECT: Filter by User directly since Contract.freelancer points to User
         contracts = Contract.objects.filter(
-            freelancer__user=request.user  # Important fix
-        ).select_related('task', 'employer', 'employer__profile').all()
+            freelancer=request.user
+        ).select_related('task', 'employer').all()
         
         data = []
         for contract in contracts:
-            employer_profile = getattr(contract.employer, 'profile', None)
+            # Note: Your Employer model doesn't have a 'profile' field
+            # Remove employer__profile from select_related if it doesn't exist
             
             contract_data = {
                 'contract_id': contract.contract_id,
@@ -2015,9 +2017,9 @@ def freelancer_contracts(request):
                 },
                 'employer': {
                     'id': contract.employer.employer_id,
-                    'name': contract.employer.user.username if hasattr(contract.employer, 'user') else contract.employer.name,
-                    'company_name': employer_profile.company_name if employer_profile else None,
-                    'profile_picture': employer_profile.profile_picture.url if employer_profile and employer_profile.profile_picture else None,
+                    'name': contract.employer.username,  # Direct field from Employer model
+                    'email': contract.employer.contact_email,
+                    'phone': contract.employer.phone_number,
                 },
                 'start_date': contract.start_date.isoformat(),
                 'end_date': contract.end_date.isoformat() if contract.end_date else None,
@@ -2037,4 +2039,6 @@ def freelancer_contracts(request):
         
     except Exception as e:
         print(f"Error in freelancer_contracts: {e}")
+        import traceback
+        print(traceback.format_exc())  # Add this for detailed error
         return Response({"error": str(e)}, status=500)
