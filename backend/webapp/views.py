@@ -976,6 +976,7 @@ def task_completion_detail(request, pk):
     elif request.method == 'DELETE':
         completion.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)        
+    
 @api_view(['POST'])
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -989,41 +990,7 @@ def create_submission(request):
         )
     
     try:
-        # Get task ID from request data
-        task_id = request.data.get('task')
-        
-        if not task_id:
-            return Response(
-                {"error": "Task ID is required. Send 'task' field with task ID."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Get task
-        task = get_object_or_404(Task, id=task_id)
-        
-        # Get contract for this task and freelancer
-        try:
-            contract = Contract.objects.get(task=task, freelancer=request.user)
-        except Contract.DoesNotExist:
-            return Response(
-                {"error": "You are not assigned to this task or contract doesn't exist."}, 
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        # Validate required fields from Flutter
-        if not request.data.get('title'):
-            return Response(
-                {"error": "Title is required"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        if not request.data.get('description'):
-            return Response(
-                {"error": "Description is required"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        
+        # Create serializer with request data
         serializer = SubmissionCreateSerializer(
             data=request.data,
             context={'request': request}
@@ -1031,17 +998,11 @@ def create_submission(request):
         
         if serializer.is_valid():
             with transaction.atomic():
-                # Save submission with automatic freelancer and contract assignment
+                # Save submission (serializer handles relationships)
                 submission = serializer.save()
                 
-                # Ensure submission has correct relationships
-                if submission.freelancer != request.user:
-                    submission.freelancer = request.user
-                    submission.save()
-                
-                if submission.contract != contract:
-                    submission.contract = contract
-                    submission.save()
+                # Get task from submission
+                task = submission.task
                 
                 # Create or update TaskCompletion
                 completion, created = TaskCompletion.objects.get_or_create(
@@ -1061,12 +1022,11 @@ def create_submission(request):
                     completion.completed_at = timezone.now()
                     completion.save()
                 
-                # Update task status if needed
-                if task.status != 'in_progress':
-                    task.status = 'in_progress'
-                    task.save()
+                # Update task status
+                task.status = 'in_progress'
+                task.save()
             
-            # Return full submission details using main serializer
+            # Return submission details
             full_serializer = SubmissionSerializer(
                 submission, 
                 context={'request': request}
@@ -1074,60 +1034,38 @@ def create_submission(request):
             
             return Response(
                 {
+                    "success": True,
                     "message": "Submission created successfully",
                     "submission_id": submission.submission_id,
                     "data": full_serializer.data
                 },
                 status=status.HTTP_201_CREATED
             )
-        
-        # Return validation errors
-        return Response(
-            {
-                "error": "Validation failed",
-                "details": serializer.errors
-            }, 
-            status=status.HTTP_400_BAD_REQUEST
-        )
+        else:
+            # Return validation errors
+            return Response(
+                {
+                    "success": False,
+                    "error": "Validation failed",
+                    "details": serializer.errors
+                }, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
     
     except Exception as e:
         # Log the error for debugging
+        import traceback
+        error_trace = traceback.format_exc()
         print(f"Error creating submission: {str(e)}")
+        print(f"Traceback: {error_trace}")
+        
         return Response(
-            {"error": f"Server error: {str(e)}"}, 
+            {
+                "success": False,
+                "error": f"Server error: {str(e)}"
+            }, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def get_submission_detail(request, submission_id):
-    submission = get_object_or_404(Submission, submission_id=submission_id)
-    
-    
-    user = request.user
-    if not (user.is_staff or submission.freelancer == user or submission.contract.employer.user == user):
-        return Response(
-            {"error": "You don't have permission to view this submission"}, 
-            status=status.HTTP_403_FORBIDDEN
-        )
-    
-    serializer = SubmissionSerializer(submission)
-    return Response(serializer.data)
-
-@api_view(['GET'])
-
-def get_my_submissions(request):
-   
-    if not hasattr(request.user, 'freelancer'):
-        return Response(
-            {"error": "Only freelancers can view their submissions"}, 
-            status=status.HTTP_403_FORBIDDEN
-        )
-    
-    submissions = Submission.objects.filter(freelancer=request.user).order_by('-submitted_at')
-    serializer = SubmissionSerializer(submissions, many=True)
-    return Response(serializer.data)
-
+        )    
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_employer_submissions(request):

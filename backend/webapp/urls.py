@@ -13,9 +13,9 @@ urlpatterns = [
     path('apiproposal', views.apisubmit_proposal, name='submit_proposal'),
     path('apiuserprofile',views.apiuserprofile,name='apiuser_profile'),
     path('submissions/create/', views.create_submission, name='submission_create'),
-    path('submissions/my-submissions/', views.get_my_submissions, name='my_submissions'),
+    #path('submissions/my-submissions/', views.get_my_submissions, name='my_submissions'),
     path('submissions/employer-submissions/', views.get_employer_submissions, name='employer_submissions'),
-    path('submissions/<int:submission_id>/', views.get_submission_detail, name='submission_detail'),
+    #path('submissions/<int:submission_id>/', views.get_submission_detail, name='submission_detail'),
     path('submissions/<int:submission_id>/approve/', views.approve_submission, name='submission_approve'),
     path('submissions/<int:submission_id>/request-revision/', views.request_revision, name='request_revision'),
      path('api/freelancer/contracts/', views.freelancer_contracts, name='freelancer_contracts'),
@@ -57,7 +57,7 @@ urlpatterns = [
     path('api/payment/webhook/', views.payment_webhook_api, name='api_payment_webhook'),
     path('api/transactions/history/', views.transaction_history, name='api_transaction_history'),
     path('api/submissions/create/', views.create_submission, name='create-submission'), 
-    path('api/submissions/<int:submission_id>/', views.get_submission_detail, name='submission-detail'),
+   # path('api/submissions/<int:submission_id>/', views.get_submission_detail, name='submission-detail'),
     
     
    
