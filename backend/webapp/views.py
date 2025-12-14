@@ -400,85 +400,7 @@ def apitask_detail(request, pk):
 
 
 
-@api_view(['GET'])
-@authentication_classes([CustomTokenAuthentication])
-@permission_classes([IsAuthenticated])
-def freelancer_contracts(request):
-    """Get all contracts for the logged-in freelancer"""
-    try:
-        print(f"DEBUG: freelancer_contracts called. User: {request.user.id}")
-        
-        # Get contracts for this freelancer
-        contracts = Contract.objects.filter(
-            freelancer=request.user
-        ).select_related('task', 'employer', 'employer__profile')  # REMOVED 'employer__user'
-        
-        print(f"DEBUG: Found {contracts.count()} contracts")
-        
-        data = []
-        for contract in contracts:
-            try:
-                print(f"DEBUG: Processing contract {contract.contract_id}")
-                
-                # Get employer profile if it exists
-                employer_profile = getattr(contract.employer, 'profile', None)
-                
-                # Get employer user (different relationship)
-                employer_user = None
-                try:
-                    # If employer has a user field
-                    employer_user = contract.employer.user
-                except AttributeError:
-                    # If employer IS a user (one-to-one)
-                    employer_user = contract.employer
-                
-                contract_data = {
-                    'contract_id': contract.contract_id,
-                    'task': {
-                        'task_id': contract.task.task_id,
-                        'title': contract.task.title,
-                        'description': contract.task.description,
-                        'budget': float(contract.task.budget) if contract.task.budget else None,
-                        'deadline': contract.task.deadline.isoformat() if contract.task.deadline else None,
-                    },
-                    'employer': {
-                        'id': contract.employer.employer_id,
-                        'name': employer_user.username if employer_user else 'Unknown',
-                        'company_name': employer_profile.company_name if employer_profile else None,
-                        'profile_picture': employer_profile.profile_picture.url if employer_profile and employer_profile.profile_picture else None,
-                    },
-                    'start_date': contract.start_date.isoformat(),
-                    'end_date': contract.end_date.isoformat() if contract.end_date else None,
-                    'employer_accepted': contract.employer_accepted,
-                    'freelancer_accepted': contract.freelancer_accepted,
-                    'is_active': contract.is_active,
-                    'is_fully_accepted': contract.is_fully_accepted,
-                    'status': 'active' if contract.is_active else 'pending',
-                }
-                data.append(contract_data)
-                print(f"DEBUG: Added contract {contract.contract_id} to data")
-                
-            except Exception as e:
-                print(f"ERROR processing contract {contract.contract_id}: {str(e)}")
-                continue
-        
-        print(f"DEBUG: Returning {len(data)} contracts")
-        
-        return Response({
-            "status": True,
-            "contracts": data,
-            "count": len(data)
-        })
-        
-    except Exception as e:
-        print(f"ERROR in freelancer_contracts: {str(e)}")
-        import traceback
-        print(traceback.format_exc())
-        return Response({
-            "status": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }, status=500)
+
 
 
 @api_view(["GET"])
@@ -2069,17 +1991,14 @@ def accept_contract(request, contract_id):
         "message": "Contract accepted",
         "is_active": contract.is_active
     })
-
 @api_view(['GET'])
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def freelancer_contracts(request):
-    """Get all contracts for the logged-in freelancer"""
     try:
-        # Get contracts for this freelancer
         contracts = Contract.objects.filter(
-            freelancer=request.user
-        ).select_related('task', 'employer',  'employer__profile').all()
+            freelancer__user=request.user  # Important fix
+        ).select_related('task', 'employer', 'employer__profile').all()
         
         data = []
         for contract in contracts:
@@ -2096,7 +2015,7 @@ def freelancer_contracts(request):
                 },
                 'employer': {
                     'id': contract.employer.employer_id,
-                    'name': contract.employer.username,
+                    'name': contract.employer.user.username if hasattr(contract.employer, 'user') else contract.employer.name,
                     'company_name': employer_profile.company_name if employer_profile else None,
                     'profile_picture': employer_profile.profile_picture.url if employer_profile and employer_profile.profile_picture else None,
                 },
@@ -2117,5 +2036,5 @@ def freelancer_contracts(request):
         })
         
     except Exception as e:
-        print(f" Error in freelancer_contracts: {e}")
-        return Response({"error": str(e)}, status=500)       
+        print(f"Error in freelancer_contracts: {e}")
+        return Response({"error": str(e)}, status=500)
