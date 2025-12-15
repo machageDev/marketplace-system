@@ -459,7 +459,6 @@ class SubmissionSerializer(serializers.ModelSerializer):
 
 
 class SubmissionCreateSerializer(serializers.ModelSerializer):
-    # Add all fields that Flutter is sending
     class Meta:
         model = Submission
         fields = [
@@ -467,36 +466,84 @@ class SubmissionCreateSerializer(serializers.ModelSerializer):
             'repo_url', 'commit_hash', 'staging_url', 'live_demo_url',
             'apk_download_url', 'testflight_link', 'admin_username',
             'admin_password', 'access_instructions', 'deployment_instructions',
-            'test_instructions', 'release_notes', 'revision_notes',  # Make sure this matches
+            'test_instructions', 'release_notes', 'revision_notes',
             'checklist_tests_passing', 'checklist_deployed_staging',
             'checklist_documentation', 'checklist_no_critical_bugs',
             'zip_file', 'screenshots', 'video_demo'
+            # Note: 'status' is NOT included because it has a default
+            # Note: 'submitted_at' is auto_now_add=True
+            # Note: 'resubmitted_at' is optional and shouldn't be in create
         ]
+        # Make all fields optional except required ones
+        extra_kwargs = {
+            'title': {'required': True},
+            'description': {'required': True},
+            # All other fields are optional
+            'repo_url': {'required': False, 'allow_blank': True},
+            'commit_hash': {'required': False, 'allow_blank': True},
+            'staging_url': {'required': False, 'allow_blank': True},
+            'live_demo_url': {'required': False, 'allow_blank': True},
+            'apk_download_url': {'required': False, 'allow_blank': True},
+            'testflight_link': {'required': False, 'allow_blank': True},
+            'admin_username': {'required': False, 'allow_blank': True},
+            'admin_password': {'required': False, 'allow_blank': True},
+            'access_instructions': {'required': False, 'allow_blank': True},
+            'deployment_instructions': {'required': False, 'allow_blank': True},
+            'test_instructions': {'required': False, 'allow_blank': True},
+            'release_notes': {'required': False, 'allow_blank': True},
+            'revision_notes': {'required': False, 'allow_blank': True},
+            'checklist_tests_passing': {'required': False},
+            'checklist_deployed_staging': {'required': False},
+            'checklist_documentation': {'required': False},
+            'checklist_no_critical_bugs': {'required': False},
+            'zip_file': {'required': False},
+            'screenshots': {'required': False},
+            'video_demo': {'required': False},
+        }
     
     def create(self, validated_data):
+        print(f"\n=== SERIALIZER CREATE ===")
+        print(f"Validated data keys: {validated_data.keys()}")
+        
         # Get task, freelancer, and contract from context
         task = self.context.get('task')
         freelancer = self.context.get('freelancer')
         contract = self.context.get('contract')
         
-        if not all([task, freelancer, contract]):
-            raise serializers.ValidationError(
-                "Missing required context: task, freelancer, or contract"
+        print(f"Context - Task ID: {task.id if task else None}")
+        print(f"Context - Freelancer ID: {freelancer.id if freelancer else None}")
+        print(f"Context - Contract ID: {contract.id if contract else None}")
+        
+        if not task:
+            raise serializers.ValidationError({"task": "Task is required"})
+        if not freelancer:
+            raise serializers.ValidationError({"freelancer": "Freelancer is required"})
+        if not contract:
+            raise serializers.ValidationError({"contract": "Contract is required"})
+        
+        try:
+            print(f"Creating submission with task={task.id}, freelancer={freelancer.id}, contract={contract.id}")
+            
+            # Create submission - status will use default 'submitted'
+            # submitted_at is auto_now_add=True
+            submission = Submission.objects.create(
+                task=task,
+                freelancer=freelancer,
+                contract=contract,
+                **validated_data
             )
-        
-        print(f"Creating submission with validated data keys: {validated_data.keys()}")
-        print(f"Context - Task: {task}, Freelancer: {freelancer}, Contract: {contract}")
-        
-        # Create submission
-        submission = Submission.objects.create(
-            task=task,
-            freelancer=freelancer,
-            contract=contract,
-            **validated_data
-        )
-        
-        print(f"Submission created: {submission.id}")
-        return submission
+            
+            print(f"✓ Submission created: ID={submission.submission_id}")
+            print(f"✓ Submission status: {submission.status}")
+            print(f"✓ Submission submitted_at: {submission.submitted_at}")
+            
+            return submission
+            
+        except Exception as e:
+            print(f"✗ Error creating submission: {e}")
+            import traceback
+            print(f"Create traceback: {traceback.format_exc()}")
+            raise serializers.ValidationError({"detail": f"Error creating submission: {str(e)}"})
 
 class TaskCompletionSerializer(serializers.ModelSerializer):
     submission_details = SubmissionSerializer(source='submission', read_only=True)

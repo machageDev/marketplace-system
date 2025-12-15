@@ -976,105 +976,92 @@ def task_completion_detail(request, pk):
     elif request.method == 'DELETE':
         completion.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)        
-    
-
 @api_view(['POST'])
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def create_submission(request):
+    print(f"\n{'='*60}")
+    print("CREATE SUBMISSION - START")
+    print(f"{'='*60}")
     
-    # Check if user is a freelancer
-    if not hasattr(request.user, 'freelancer'):
-        return Response(
-            {"error": "Only freelancers can create submissions"}, 
-            status=status.HTTP_403_FORBIDDEN
-        )
+    # Log full request info
+    print(f"Request method: {request.method}")
+    print(f"Request path: {request.path}")
+    print(f"Request full path: {request.get_full_path()}")
+    print(f"Request absolute URI: {request.build_absolute_uri()}")
+    print(f"Request META keys: {list(request.META.keys())}")
+    
+    # Check specific META values
+    print(f"\nHTTP headers:")
+    for key, value in request.META.items():
+        if key.startswith('HTTP_'):
+            print(f"  {key}: {value}")
+    
+    print(f"\nUser: {request.user} (ID: {request.user.id})")
+    print(f"Authenticated: {request.user.is_authenticated}")
     
     try:
-        print(f"=== CREATE SUBMISSION REQUEST ===")
-        print(f"Data received: {request.data}")
-        
-        # Get task UUID from request data
-        task_uuid = request.data.get('task')
-        
-        if not task_uuid:
+        # Check if user is a freelancer
+        if not hasattr(request.user, 'freelancer'):
+            print("ERROR: User is not a freelancer")
             return Response(
-                {"error": "Task ID is required"}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Get task by UUID
-        try:
-            task = Task.objects.get(task_id=task_uuid)
-        except Task.DoesNotExist:
-            return Response(
-                {"error": "Task not found"}, 
-                status=status.HTTP_404_NOT_FOUND
-            )
-        
-        # Get contract for this task and freelancer
-        try:
-            contract = Contract.objects.get(task=task, freelancer=request.user)
-        except Contract.DoesNotExist:
-            return Response(
-                {"error": "You are not assigned to this task"}, 
+                {"success": False, "error": "Only freelancers can create submissions"}, 
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        # Create serializer with context
-        serializer = SubmissionCreateSerializer(
-            data=request.data,
-            context={
-                'request': request,
-                'task': task,
-                'freelancer': request.user,
-                'contract': contract
-            }
-        )
+        print(f"✓ User is a freelancer")
         
-        if serializer.is_valid():
-            with transaction.atomic():
-                # Save submission
-                submission = serializer.save()
-                
-                # Update task status
-                task.status = 'in_progress'
-                task.save()
-            
-            # Return success response
-            return Response(
-                {
-                    "success": True,
-                    "message": "Submission created successfully",
-                    "submission_id": submission.submission_id,
-                    "data": SubmissionSerializer(submission).data
-                },
-                status=status.HTTP_201_CREATED
-            )
-        else:
-            # Return validation errors
-            return Response(
-                {
-                    "success": False,
-                    "error": "Validation failed",
-                    "details": serializer.errors
-                }, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-    
+        # Try to parse request data safely
+        print(f"\nAttempting to parse request data...")
+        
+        data = {}
+        try:
+            if request.content_type == 'application/json':
+                import json
+                if hasattr(request, 'data') and request.data:
+                    data = request.data
+                    print(f"Using request.data: {data}")
+                else:
+                    try:
+                        body = request.body.decode('utf-8')
+                        print(f"Raw body: {body}")
+                        if body:
+                            data = json.loads(body)
+                    except:
+                        pass
+            else:
+                data = request.data.dict() if hasattr(request.data, 'dict') else dict(request.data)
+                print(f"Form data: {data}")
+        except Exception as parse_error:
+            print(f"Warning: Could not parse data: {parse_error}")
+            data = {}
+        
+        # For testing, just return success with what we have
+        return Response({
+            "success": True,
+            "message": "Test endpoint working",
+            "user": request.user.username,
+            "user_id": request.user.id,
+            "is_freelancer": hasattr(request.user, 'freelancer'),
+            "request_path": request.path,
+            "data_received": data
+        }, status=status.HTTP_200_OK)
+        
     except Exception as e:
+        print(f"\n{'='*60}")
+        print("UNHANDLED EXCEPTION")
+        print(f"{'='*60}")
+        print(f"Exception: {e}")
         import traceback
-        error_traceback = traceback.format_exc()
-        print(f"Error creating submission: {str(e)}")
-        print(f"Traceback: {error_traceback}")
+        print(f"Traceback:\n{traceback.format_exc()}")
         
-        return Response(
-            {
-                "success": False,
-                "error": f"Server error: {str(e)}"
-            }, 
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )          
+        return Response({
+            "success": False,
+            "error": "Internal server error",
+            "detail": str(e),
+            "type": type(e).__name__
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_employer_submissions(request):
