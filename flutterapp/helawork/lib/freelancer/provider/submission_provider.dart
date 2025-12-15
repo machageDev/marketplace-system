@@ -46,8 +46,8 @@ class SubmissionProvider extends ChangeNotifier {
 
       final result = await _apiService.submitTask(
         taskId: taskId,
-        title: title,  // PASS THIS
-        description: description,  // PASS THIS
+        title: title,  
+        description: description,  
         repoUrl: repoUrl,
         commitHash: commitHash,
         stagingUrl: stagingUrl,

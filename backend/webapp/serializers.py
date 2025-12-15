@@ -459,7 +459,7 @@ class SubmissionSerializer(serializers.ModelSerializer):
 
 
 class SubmissionCreateSerializer(serializers.ModelSerializer):
-    # Remove the custom task field entirely - let the view handle it
+    # Add all fields that Flutter is sending
     class Meta:
         model = Submission
         fields = [
@@ -467,9 +467,9 @@ class SubmissionCreateSerializer(serializers.ModelSerializer):
             'repo_url', 'commit_hash', 'staging_url', 'live_demo_url',
             'apk_download_url', 'testflight_link', 'admin_username',
             'admin_password', 'access_instructions', 'deployment_instructions',
-            'test_instructions', 'release_notes', 'checklist_tests_passing',
-            'checklist_deployed_staging', 'checklist_documentation',
-            'checklist_no_critical_bugs', 'revision_notes',
+            'test_instructions', 'release_notes', 'revision_notes',  # Make sure this matches
+            'checklist_tests_passing', 'checklist_deployed_staging',
+            'checklist_documentation', 'checklist_no_critical_bugs',
             'zip_file', 'screenshots', 'video_demo'
         ]
     
@@ -484,6 +484,9 @@ class SubmissionCreateSerializer(serializers.ModelSerializer):
                 "Missing required context: task, freelancer, or contract"
             )
         
+        print(f"Creating submission with validated data keys: {validated_data.keys()}")
+        print(f"Context - Task: {task}, Freelancer: {freelancer}, Contract: {contract}")
+        
         # Create submission
         submission = Submission.objects.create(
             task=task,
@@ -492,6 +495,7 @@ class SubmissionCreateSerializer(serializers.ModelSerializer):
             **validated_data
         )
         
+        print(f"Submission created: {submission.id}")
         return submission
 
 class TaskCompletionSerializer(serializers.ModelSerializer):

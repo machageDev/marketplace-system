@@ -47,6 +47,15 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
   PlatformFile? videoDemo;
 
   @override
+  void initState() {
+    super.initState();
+    print('📱 SubmitTaskScreen initialized');
+    print('📦 Task ID received: ${widget.taskId}');
+    print('📦 Task ID length: ${widget.taskId.length}');
+    print('📦 Task ID is empty: ${widget.taskId.isEmpty}');
+  }
+
+  @override
   Widget build(BuildContext context) {
     final submissionProvider = Provider.of<SubmissionProvider>(context);
 
@@ -271,6 +280,36 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
                       ),
                     ),
                     
+                    // ========== DEBUG BUTTONS ==========
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () {
+                              print('🔍 ======= DEBUG BUTTON 1 =======');
+                              print('Task ID: ${widget.taskId}');
+                              print('Title: ${titleController.text}');
+                              print('Description: ${descriptionController.text}');
+                              print('Files: zip=${zipFile != null}, screenshots=${screenshots != null}, video=${videoDemo != null}');
+                              print('Checklist: $checklistTestsPassing, $checklistDeployedStaging, $checklistDocumentation, $checklistNoCriticalBugs');
+                            },
+                            child: const Text('Debug Info'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () {
+                              print('🧪 ======= TEST SUBMISSION =======');
+                              _testSubmit(submissionProvider);
+                            },
+                            child: const Text('Test Submit'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    
                     // ========== SUBMIT BUTTON ==========
                     const SizedBox(height: 24),
                     SizedBox(
@@ -319,19 +358,28 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
   }
 
   void _submitTask(BuildContext context, SubmissionProvider submissionProvider) async {
+    print('🚀 ======= SUBMIT BUTTON CLICKED =======');
+    print('📋 Step 1: Basic field validation');
+    
     // Validate required fields
     if (titleController.text.isEmpty) {
+      print('❌ Validation failed: Title is empty');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Title is required')),
       );
       return;
+    } else {
+      print('✅ Title: ${titleController.text}');
     }
     
     if (descriptionController.text.isEmpty) {
+      print('❌ Validation failed: Description is empty');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Description is required')),
       );
       return;
+    } else {
+      print('✅ Description length: ${descriptionController.text.length}');
     }
     
     // Validate at least one submission method
@@ -343,7 +391,11 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
     
     bool hasFile = zipFile != null || screenshots != null || videoDemo != null;
     
+    print('📊 URL submissions: $hasUrl');
+    print('📊 File submissions: $hasFile');
+    
     if (!hasUrl && !hasFile) {
+      print('❌ Validation failed: No URL or file provided');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please provide at least one: URL or file upload'),
@@ -352,8 +404,17 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
       return;
     }
     
+    print('📋 Step 2: Form validation');
     if (_formKey.currentState!.validate()) {
+      print('✅ Form validation passed');
+      
       try {
+        print('📋 Step 3: Calling submissionProvider.submitTask()');
+        print('📦 Task ID being sent: ${widget.taskId}');
+        print('📦 Task ID type: ${widget.taskId.runtimeType}');
+        print('📦 Title being sent: ${titleController.text}');
+        print('📦 Description being sent: ${descriptionController.text.substring(0, min(50, descriptionController.text.length))}...');
+        
         await submissionProvider.submitTask(
           taskId: widget.taskId,
           title: titleController.text,
@@ -380,8 +441,14 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
           videoDemo: videoDemo,
         );
 
+        print('📋 Step 4: Submission completed');
+        print('📊 Provider error message: ${submissionProvider.errorMessage}');
+        print('📊 Provider isLoading: ${submissionProvider.isLoading}');
+
         // Check if submission was successful
         if (submissionProvider.errorMessage.isEmpty) {
+          print('✅ Submission successful!');
+          
           // Show success message
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -391,13 +458,19 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
           );
           
           // Navigate back after a delay
+          print('⏳ Waiting 1.5 seconds before navigation...');
           await Future.delayed(const Duration(milliseconds: 1500));
           
           // Check if widget is still mounted before navigating
           if (mounted) {
+            print('📤 Navigating back with success flag');
             Navigator.pop(context, true); // Pass true to indicate success
+          } else {
+            print('⚠️ Widget not mounted, cannot navigate');
           }
         } else {
+          print('❌ Submission failed with error: ${submissionProvider.errorMessage}');
+          
           // Show error from provider
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -406,7 +479,11 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
             ),
           );
         }
-      } catch (e) {
+      } catch (e, stackTrace) {
+        print('❌ ======= UNEXPECTED ERROR =======');
+        print('Error: $e');
+        print('Stack trace: $stackTrace');
+        
         // Handle any unexpected errors
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -415,7 +492,39 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
           ),
         );
       }
+    } else {
+      print('❌ Form validation failed');
     }
+    
+    print('🏁 ======= SUBMIT PROCESS COMPLETED =======\n');
+  }
+
+  // Test submission with minimal data
+  void _testSubmit(SubmissionProvider submissionProvider) {
+    print('🧪 ======= TEST SUBMISSION STARTED =======');
+    print('Task ID: ${widget.taskId}');
+    
+    // Create test data as direct strings
+    final String testTitle = 'Test Submission ${DateTime.now().millisecondsSinceEpoch}';
+    final String testDescription = 'This is a test submission from debug button';
+    
+    print('Test title: $testTitle');
+    print('Test description: $testDescription');
+    
+    // Call the provider with proper String types
+    submissionProvider.submitTask(
+      taskId: widget.taskId,
+      title: testTitle,
+      description: testDescription,
+      checklistTestsPassing: true,
+      checklistDeployedStaging: true,
+      checklistDocumentation: true,
+      checklistNoCriticalBugs: true,
+      repoUrl: 'https://github.com/test/test',
+      stagingUrl: 'https://staging.example.com',
+    );
+    
+    print('🧪 ======= TEST SUBMISSION TRIGGERED =======');
   }
 
   // ========== WIDGET BUILDERS ==========
@@ -551,9 +660,13 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
                 )
               : null,
           onTap: () async {
+            print('📁 File picker tapped for: $label');
             final result = await FilePicker.platform.pickFiles();
             if (result != null && result.files.isNotEmpty) {
+              print('📁 File selected: ${result.files.first.name}');
               onPicked(result.files.first);
+            } else {
+              print('📁 No file selected');
             }
           },
           shape: RoundedRectangleBorder(
@@ -564,8 +677,12 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
     );
   }
 
+  int min(int a, int b) => a < b ? a : b;
+
   @override
   void dispose() {
+    print('🗑️ SubmitTaskScreen disposed');
+    
     // Clean up controllers
     titleController.dispose();
     descriptionController.dispose();

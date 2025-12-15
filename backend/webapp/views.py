@@ -991,6 +991,9 @@ def create_submission(request):
         )
     
     try:
+        print(f"=== CREATE SUBMISSION REQUEST ===")
+        print(f"Data received: {request.data}")
+        
         # Get task UUID from request data
         task_uuid = request.data.get('task')
         
@@ -1044,6 +1047,7 @@ def create_submission(request):
                     "success": True,
                     "message": "Submission created successfully",
                     "submission_id": submission.submission_id,
+                    "data": SubmissionSerializer(submission).data
                 },
                 status=status.HTTP_201_CREATED
             )
@@ -1059,14 +1063,18 @@ def create_submission(request):
             )
     
     except Exception as e:
+        import traceback
+        error_traceback = traceback.format_exc()
         print(f"Error creating submission: {str(e)}")
+        print(f"Traceback: {error_traceback}")
+        
         return Response(
             {
                 "success": False,
                 "error": f"Server error: {str(e)}"
             }, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )           
+        )          
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_employer_submissions(request):
