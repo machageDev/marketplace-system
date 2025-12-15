@@ -11,7 +11,7 @@ class SubmissionProvider extends ChangeNotifier {
   List<Map<String, dynamic>> submissions = [];
 
   Future<void> submitTask({
-    required int taskId,
+    required String taskId,
     required String title,  // ADD THIS
     required String description,  // ADD THIS
     String? repoUrl,

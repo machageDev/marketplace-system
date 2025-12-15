@@ -10,7 +10,7 @@ class WalletScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final wallet = Provider.of<WalletProvider>(context);
 
-    void _showWithdrawDialog() {
+    void showWithdrawDialog() {
       final amountController = TextEditingController();
       showDialog(
         context: context,
@@ -44,7 +44,7 @@ class WalletScreen extends StatelessWidget {
       );
     }
 
-    void _showTopUpDialog() {
+    void showTopUpDialog() {
       final amountController = TextEditingController();
       showDialog(
         context: context,
@@ -128,12 +128,12 @@ class WalletScreen extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
                         ElevatedButton.icon(
-                          onPressed: _showTopUpDialog,
+                          onPressed: showTopUpDialog,
                           icon: const Icon(Icons.add_circle_outline),
                           label: const Text('Top Up'),
                         ),
                         ElevatedButton.icon(
-                          onPressed: _showWithdrawDialog,
+                          onPressed: showWithdrawDialog,
                           icon: const Icon(Icons.arrow_circle_down_outlined),
                           label: const Text('Withdraw'),
                         ),

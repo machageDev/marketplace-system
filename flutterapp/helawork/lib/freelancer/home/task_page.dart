@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:helawork/freelancer/home/task_detail.dart';
+import 'package:helawork/freelancer/home/submitting_task.dart'; // IMPORT SubmitTaskScreen
 import 'package:helawork/freelancer/provider/task_provider.dart';
 import 'package:provider/provider.dart';
 
@@ -24,15 +25,22 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
   bool _hasError = false;
   String _errorMessage = '';
   List<dynamic> _recommendedJobs = [];
-  String? _userToken; // You'll need to get this from somewhere
+  String? _userToken;
   
-  // Add your baseUrl here
   final String baseUrl = "YOUR_BASE_URL_HERE"; // Replace with your actual base URL
 
   // HELPER METHOD: Check if task is taken
   bool _isTaskTaken(Map<String, dynamic> task) {
     return task['assigned_user'] != null ||
            (task['status'] != null && task['status'] != 'open');
+  }
+
+  // HELPER METHOD: Check if task is assigned to current user (for submit button)
+  bool _isTaskAssignedToMe(Map<String, dynamic> task) {
+    // You need to implement logic to check if current user is assigned
+    // Example: Compare task['assigned_user'] with current user ID
+    // For now, we'll assume any task with 'in_progress' status can be submitted
+    return task['status'] == 'in_progress' || task['status'] == 'assigned';
   }
 
   @override
@@ -55,18 +63,14 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Try to get token when dependencies change
     _getTokenAndLoadRecommendedJobs();
   }
 
   Future<void> _getTokenAndLoadRecommendedJobs() async {
-    // Try to get token from wherever you store it
-    // This could be from SharedPreferences, AuthProvider, etc.
+    // Implement token retrieval here
     // Example: final authProvider = Provider.of<AuthProvider>(context, listen: false);
     // _userToken = authProvider.token;
     
-    // For now, you need to implement how to get the token
-    // Once you have the token, load recommended jobs
     if (_userToken != null) {
       await _loadRecommendedJobs();
     }
@@ -108,7 +112,6 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
     }
   }
 
-  // Your API function
   Future<List<dynamic>> fetchRecommendedJobs(String token) async {
     final response = await http.get(
       Uri.parse("$baseUrl/freelancer/recommended-jobs/"),
@@ -151,7 +154,6 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
   Widget build(BuildContext context) {
     final taskProvider = Provider.of<TaskProvider>(context);
     
-    // Filter tasks when provider data changes or search query changes
     if (taskProvider.tasks.isNotEmpty) {
       _filteredTasks = _filterTasks(taskProvider.tasks, _searchQuery);
     }
@@ -180,7 +182,7 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
       ),
       body: Column(
         children: [
-          // Search Bar - Shared between both tabs
+          // Search Bar
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Container(
@@ -225,7 +227,6 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
             ),
           ),
           
-          // Show search results count if searching
           if (_searchQuery.isNotEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -251,7 +252,6 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
               ),
             ),
           
-          // Tab Content
           Expanded(
             child: TabBarView(
               controller: _tabController,
@@ -403,9 +403,11 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
     );
   }
 
-  // Reusable Task Card Widget
+  // Reusable Task Card Widget - UPDATED WITH SUBMIT BUTTON
   Widget _buildTaskCard(Map<String, dynamic> task, {bool isRecommended = false}) {
     final employer = task['employer'] ?? {};
+    final bool isAssignedToMe = _isTaskAssignedToMe(task);
+    final bool isTaken = _isTaskTaken(task);
     
     return Card(
       shape: RoundedRectangleBorder(
@@ -485,37 +487,76 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
             
             const SizedBox(height: 12),
             
-            // View Details Button
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  // Calculate if task is taken
-                  final bool isTaken = _isTaskTaken(task);
-                  
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => TaskDetailScreen(
-                        taskId: task['task_id'] ?? task['id'] ?? 0,
-                        task: task,
-                        employer: employer,
-                        isTaken: isTaken, // 👈 PASS TAKEN STATE
+            // BUTTON ROW: View Details + Submit Task (if assigned)
+            Row(
+              children: [
+                // View Details Button
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => TaskDetailScreen(
+                            taskId: task['task_id'] ?? task['id'] ?? 0,
+                            task: task,
+                            employer: employer,
+                            isTaken: isTaken,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.visibility, size: 18),
+                    label: Text(isRecommended ? 'View Details' : 'View Details'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.grey[300],
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                  );
-                },
-                icon: const Icon(Icons.visibility, size: 18),
-                label: Text(isRecommended ? 'View Job Details' : 'View Task Details'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-              ),
+                
+                const SizedBox(width: 8),
+                
+                // SUBMIT TASK BUTTON - Only show if task is assigned to current user
+                if (isAssignedToMe)
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      // Get task UUID - use the correct field from your API
+                      final taskId = task['task_id']?.toString() ?? 
+                                    task['id']?.toString() ?? 
+                                    '';
+                      
+                      if (taskId.isNotEmpty) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => SubmitTaskScreen(
+                              taskId: taskId, // PASS ACTUAL TASK UUID
+                            ),
+                          ),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Cannot submit: Invalid task ID')),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.send, size: 18),
+                    label: const Text('Submit'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ],
         ),
@@ -679,12 +720,17 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
 
   Widget _buildTaskStatus(Map<String, dynamic> task) {
     final bool isTaken = _isTaskTaken(task);
+    final bool isAssignedToMe = _isTaskAssignedToMe(task);
 
     Color statusColor;
     String statusText;
     IconData statusIcon;
 
-    if (isTaken) {
+    if (isAssignedToMe) {
+      statusColor = Colors.blue;
+      statusText = 'Assigned to you';
+      statusIcon = Icons.assignment_ind;
+    } else if (isTaken) {
       statusColor = Colors.red;
       statusText = 'Taken';
       statusIcon = Icons.lock;

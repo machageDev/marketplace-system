@@ -459,21 +459,11 @@ class SubmissionSerializer(serializers.ModelSerializer):
 
 
 class SubmissionCreateSerializer(serializers.ModelSerializer):
-    
-    # Use CharField for UUID string, not IntegerField!
-    task = serializers.CharField(write_only=True, required=True)  # UUID string
-    title = serializers.CharField(required=True, max_length=200)
-    description = serializers.CharField(required=True)
-    
-    # File fields
-    zip_file = serializers.FileField(required=False, allow_null=True)
-    screenshots = serializers.FileField(required=False, allow_null=True)
-    video_demo = serializers.FileField(required=False, allow_null=True)
-    
+    # Remove the custom task field entirely - let the view handle it
     class Meta:
         model = Submission
         fields = [
-            'task', 'title', 'description',
+            'title', 'description',
             'repo_url', 'commit_hash', 'staging_url', 'live_demo_url',
             'apk_download_url', 'testflight_link', 'admin_username',
             'admin_password', 'access_instructions', 'deployment_instructions',
@@ -482,35 +472,16 @@ class SubmissionCreateSerializer(serializers.ModelSerializer):
             'checklist_no_critical_bugs', 'revision_notes',
             'zip_file', 'screenshots', 'video_demo'
         ]
-        read_only_fields = ['freelancer', 'contract']  # These will be set in view
-    
-    def validate_task(self, value):
-        """Validate task exists using UUID"""
-        try:
-            task = Task.objects.get(task_id=value)  # Lookup by UUID field
-            return task  # Return Task instance
-        except Task.DoesNotExist:
-            raise serializers.ValidationError("Task does not exist.")
-        except ValueError:
-            raise serializers.ValidationError("Invalid task ID format. Must be a valid UUID.")
     
     def create(self, validated_data):
-        """
-        Create submission with automatic field assignment
-        """
-        # Get task instance from validated data
-        task = validated_data.pop('task')
+        # Get task, freelancer, and contract from context
+        task = self.context.get('task')
+        freelancer = self.context.get('freelancer')
+        contract = self.context.get('contract')
         
-        # Get freelancer and contract from context (set in view)
-        request = self.context.get('request')
-        freelancer = request.user if request else None
-        
-        # Get contract for this task and freelancer
-        try:
-            contract = Contract.objects.get(task=task, freelancer=freelancer)
-        except Contract.DoesNotExist:
+        if not all([task, freelancer, contract]):
             raise serializers.ValidationError(
-                {"contract": "No contract exists for this task and freelancer."}
+                "Missing required context: task, freelancer, or contract"
             )
         
         # Create submission

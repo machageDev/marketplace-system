@@ -1901,7 +1901,7 @@ Future<List<dynamic>> getFreelancerReceivedRatings(int freelancerId) async {
     }
   }
  Future<Map<String, dynamic>> submitTask({
-  required int taskId,
+  required String taskId,
   required String title,
   required String description,
   String? repoUrl,

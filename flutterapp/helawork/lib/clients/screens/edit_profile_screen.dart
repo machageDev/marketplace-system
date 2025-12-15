@@ -79,7 +79,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final themeBlue = Color(0xFF1976D2);
+    const themeBlue = Color(0xFF1976D2);
     
     return Scaffold(
       appBar: AppBar(
@@ -240,7 +240,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         initialValue: _formData[fieldName],
         decoration: InputDecoration(
           labelText: label,
-          prefixIcon: Icon(icon, color: Color(0xFF1976D2).withOpacity(0.7)),
+          prefixIcon: Icon(icon, color: const Color(0xFF1976D2).withOpacity(0.7)),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
             borderSide: BorderSide(color: Colors.grey[400]!),

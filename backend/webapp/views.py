@@ -977,6 +977,7 @@ def task_completion_detail(request, pk):
         completion.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)        
     
+
 @api_view(['POST'])
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -990,54 +991,59 @@ def create_submission(request):
         )
     
     try:
-        # Create serializer with request data
+        # Get task UUID from request data
+        task_uuid = request.data.get('task')
+        
+        if not task_uuid:
+            return Response(
+                {"error": "Task ID is required"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get task by UUID
+        try:
+            task = Task.objects.get(task_id=task_uuid)
+        except Task.DoesNotExist:
+            return Response(
+                {"error": "Task not found"}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Get contract for this task and freelancer
+        try:
+            contract = Contract.objects.get(task=task, freelancer=request.user)
+        except Contract.DoesNotExist:
+            return Response(
+                {"error": "You are not assigned to this task"}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Create serializer with context
         serializer = SubmissionCreateSerializer(
             data=request.data,
-            context={'request': request}
+            context={
+                'request': request,
+                'task': task,
+                'freelancer': request.user,
+                'contract': contract
+            }
         )
         
         if serializer.is_valid():
             with transaction.atomic():
-                # Save submission (serializer handles relationships)
+                # Save submission
                 submission = serializer.save()
-                
-                # Get task from submission
-                task = submission.task
-                
-                # Create or update TaskCompletion
-                completion, created = TaskCompletion.objects.get_or_create(
-                    user=request.user,
-                    task=task,
-                    defaults={
-                        'submission': submission, 
-                        'amount': task.budget,
-                        'status': 'pending_review',
-                        'completed_at': timezone.now()
-                    }
-                )
-                
-                if not created:
-                    completion.submission = submission
-                    completion.status = 'pending_review'
-                    completion.completed_at = timezone.now()
-                    completion.save()
                 
                 # Update task status
                 task.status = 'in_progress'
                 task.save()
             
-            # Return submission details
-            full_serializer = SubmissionSerializer(
-                submission, 
-                context={'request': request}
-            )
-            
+            # Return success response
             return Response(
                 {
                     "success": True,
                     "message": "Submission created successfully",
                     "submission_id": submission.submission_id,
-                    "data": full_serializer.data
                 },
                 status=status.HTTP_201_CREATED
             )
@@ -1053,19 +1059,14 @@ def create_submission(request):
             )
     
     except Exception as e:
-        # Log the error for debugging
-        import traceback
-        error_trace = traceback.format_exc()
         print(f"Error creating submission: {str(e)}")
-        print(f"Traceback: {error_trace}")
-        
         return Response(
             {
                 "success": False,
                 "error": f"Server error: {str(e)}"
             }, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )    
+        )           
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_employer_submissions(request):

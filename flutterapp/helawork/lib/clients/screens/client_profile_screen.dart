@@ -54,8 +54,8 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<ClientProfileProvider>(context);
-    final themeBlue = Color(0xFF1976D2);
-    final themeWhite = Colors.white;
+    const themeBlue = Color(0xFF1976D2);
+    const themeWhite = Colors.white;
     final themeGrey = Colors.grey[200];
 
     return Scaffold(
@@ -109,7 +109,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
+              const Icon(
                 Icons.error_outline,
                 color: Colors.redAccent,
                 size: 64,
@@ -369,7 +369,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
         children: [
           Icon(
             icon,
-            color: Color(0xFF1976D2).withOpacity(0.7),
+            color: const Color(0xFF1976D2).withOpacity(0.7),
             size: 20,
           ),
           const SizedBox(width: 12),

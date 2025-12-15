@@ -24,7 +24,7 @@ class _DashboardPageState extends State<DashboardPage> {
     const TaskPage(), 
     const WalletScreen(token: '',),
     const ProposalsScreen(taskId: 0, task: {}, employer: {},), 
-    const SubmitTaskScreen(taskId:0), 
+    // REMOVED: SubmitTaskScreen from here - it needs a taskId
   ];
 
   @override
@@ -37,9 +37,36 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
+    if (index == 4) {
+      // Directly navigate to SubmitTaskScreen with empty taskId
+      // User will select task in the SubmitTaskScreen itself
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const SubmitTaskScreen(
+            taskId: '', // Empty initially, user will select
+          ),
+        ),
+      );
+    } else {
+      setState(() {
+        _selectedIndex = index;
+      });
+    }
+  }
+
+  // Navigation method - updated
+  void _navigateToSubmitTask(String taskId) {
+    print('Navigating to SubmitTaskScreen with taskId: $taskId');
+    
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SubmitTaskScreen(
+          taskId: taskId,
+        ),
+      ),
+    );
   }
 
   // ================= MAIN DASHBOARD BODY (Home Tab) =================
@@ -387,7 +414,7 @@ class _DashboardPageState extends State<DashboardPage> {
         'message': '${dashboard.completedTasks} task(s) have been completed',
         'icon': Icons.check_circle,
         'color': Colors.purple,
-        'action': () => _onItemTapped(4), // Navigate to completed tasks
+        'action': () => _onItemTapped(4), // Navigate to submit task
       });
     }
 

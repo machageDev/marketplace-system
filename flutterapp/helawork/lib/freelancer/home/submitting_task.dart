@@ -4,8 +4,12 @@ import 'package:file_picker/file_picker.dart';
 import 'package:helawork/freelancer/provider/submission_provider.dart';
 
 class SubmitTaskScreen extends StatefulWidget {
-  final int taskId;
-  const SubmitTaskScreen({super.key, required this.taskId});
+  final String taskId; 
+  
+  const SubmitTaskScreen({
+    super.key, 
+    required this.taskId,
+  });
 
   @override
   State<SubmitTaskScreen> createState() => _SubmitTaskScreenState();
@@ -50,7 +54,7 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
       appBar: AppBar(
         title: const Text("Submit Task"),
         backgroundColor: Theme.of(context).colorScheme.primary,
-        automaticallyImplyLeading: true, // Changed back to show back arrow
+        automaticallyImplyLeading: true,
       ),
       body: submissionProvider.isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -352,8 +356,8 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
       try {
         await submissionProvider.submitTask(
           taskId: widget.taskId,
-          title: titleController.text,  // ADDED - REQUIRED
-          description: descriptionController.text,  // ADDED - REQUIRED
+          title: titleController.text,
+          description: descriptionController.text,
           repoUrl: repoUrlController.text.isNotEmpty ? repoUrlController.text : null,
           commitHash: commitHashController.text.isNotEmpty ? commitHashController.text : null,
           stagingUrl: stagingUrlController.text.isNotEmpty ? stagingUrlController.text : null,
@@ -433,7 +437,7 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
                 label,
                 style: const TextStyle(
                   fontWeight: FontWeight.w500,
-                  color: Colors.blue, // Highlight required fields
+                  color: Colors.blue,
                 ),
               ),
               const SizedBox(width: 4),
