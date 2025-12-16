@@ -47,48 +47,72 @@ from .models import Task, Proposal
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def apiuserprofile(request):
-    print(f"=== PROFILE API CALLED ===")
-    print(f"AUTH SUCCESS: {request.user.name} (ID: {request.user.user_id})")
+    print(f"\n{'='*60}")
+    print("PROFILE API CALLED")
+    print(f"{'='*60}")
+    print(f"Authenticated User: {request.user.name} (ID: {request.user.user_id})")
     print(f"Method: {request.method}")
+    print(f"Content-Type: {request.content_type}")
+    print(f"Request data: {request.data}")
+    print(f"Request FILES: {request.FILES}")
     
     if request.method == 'POST':
         print("POST - Creating new profile...")
         serializer = UserProfileSerializer(data=request.data)
         if serializer.is_valid():
             profile = serializer.save(user=request.user)  
-            return Response(UserProfileSerializer(profile).data, status=status.HTTP_201_CREATED)
+            return Response({
+                "success": True,
+                "message": "Profile created successfully",
+                "profile": UserProfileSerializer(profile).data
+            }, status=status.HTTP_201_CREATED)
         print("POST errors:", serializer.errors)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response({
+            "success": False,
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
 
     elif request.method == 'PUT':
-        print("PUT data:", request.data)
-        print("FILES:", request.FILES)
+        print("PUT - Updating profile...")
         
         try:
             # Try to get existing profile
             profile = UserProfile.objects.get(user=request.user)
-            print(f" Found existing profile: {profile}")
+            print(f"Found existing profile: ID={profile.profile_id}")
             
             # UPDATE existing profile
             serializer = UserProfileSerializer(profile, data=request.data, partial=True)
             if serializer.is_valid():
                 updated_profile = serializer.save()
-                print(" Profile updated successfully")
-                return Response(UserProfileSerializer(updated_profile).data, status=status.HTTP_200_OK)
-            print(" PUT validation errors:", serializer.errors)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                print("Profile updated successfully")
+                return Response({
+                    "success": True,
+                    "message": "Profile updated successfully",
+                    "profile": UserProfileSerializer(updated_profile).data
+                }, status=status.HTTP_200_OK)
+            print("PUT validation errors:", serializer.errors)
+            return Response({
+                "success": False,
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
             
         except UserProfile.DoesNotExist:
-            print(" No profile found - CREATING new profile")
+            print("No profile found - CREATING new profile with PUT")
             
             serializer = UserProfileSerializer(data=request.data)
             if serializer.is_valid():
                 new_profile = serializer.save(user=request.user)
-                print(" New profile created successfully")
-                return Response(UserProfileSerializer(new_profile).data, status=status.HTTP_201_CREATED)
-            print(" CREATE validation errors:", serializer.errors)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)  
-@csrf_exempt
+                print("New profile created successfully via PUT")
+                return Response({
+                    "success": True,
+                    "message": "Profile created successfully",
+                    "profile": UserProfileSerializer(new_profile).data
+                }, status=status.HTTP_201_CREATED)
+            print("CREATE validation errors:", serializer.errors)
+            return Response({
+                "success": False,
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
 @api_view(['GET'])
 def debug_auth_test(request):
    
@@ -984,55 +1008,105 @@ def create_submission(request):
     print("CREATE SUBMISSION - START")
     print(f"{'='*60}")
     
-    print(f"User: {request.user} (ID: {request.user.id})")
-    print(f"Authenticated: {request.user.is_authenticated}")
-    
     try:
-        # Check if user is a freelancer
-        if not hasattr(request.user, 'freelancer'):
-            print("ERROR: User is not a freelancer")
+        # Step 1: Basic validation
+        print(f"1. User object: {request.user}")
+        print(f"   User ID: {request.user.user_id}")
+        print(f"   User Name: {request.user.name}")
+        print(f"   Is authenticated: {request.user.is_authenticated}")
+        
+        # Step 2: Check if user has UserProfile
+        print(f"\n2. Checking UserProfile...")
+        
+        if not hasattr(request.user, 'worker_profile'):
+            print("✗ User does not have a UserProfile")
             return Response(
-                {"success": False, "error": "Only freelancers can create submissions"}, 
+                {"success": False, "error": "Please complete your user profile first"}, 
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        print(f"✓ User is a freelancer")
+        user_profile = request.user.worker_profile
+        print(f"✓ User has profile: ID={user_profile.profile_id}")
         
-        # Get task_id from request data
+        # Step 3: Check request data
+        print(f"\n3. Request data analysis:")
         task_id = request.data.get('task_id')
+        print(f"   Task ID: {task_id}")
+        
         if not task_id:
+            print("✗ task_id is missing")
             return Response(
                 {"success": False, "error": "task_id is required"},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        print(f"Task ID from request: {task_id}")
-        
-        # Get the task
+        # Step 4: Import models
+        print(f"\n4. Importing models...")
         try:
-            task = Task.objects.get(id=task_id)
-            print(f"✓ Found task: {task.id} - {task.title}")
+            from django.apps import apps
+            Task = apps.get_model('webapp', 'Task')
+            Contract = apps.get_model('webapp', 'Contract')
+            print(f"   ✓ Successfully imported Task and Contract models")
+        except LookupError as e:
+            print(f"   ✗ Model import failed: {e}")
+            raise
+        
+        # Step 5: Get task
+        print(f"\n5. Getting task...")
+        try:
+            task = Task.objects.get(task_id=task_id)
+            print(f"   ✓ Task found: ID={task.task_id}, Title='{task.title}'")
         except Task.DoesNotExist:
+            print(f"   ✗ Task not found")
             return Response(
                 {"success": False, "error": f"Task with ID {task_id} not found"},
                 status=status.HTTP_404_NOT_FOUND
             )
+        except Exception as e:
+            print(f"   ✗ Error getting task: {type(e).__name__}: {e}")
+            raise
         
-        # Get the contract between this freelancer and task
+        # Step 6: ✅ STRICT contract check - NO auto-creation
+        print(f"\n6. Checking for ACTIVE contract...")
         try:
+            # Only accept submissions with ACTIVE contracts
             contract = Contract.objects.get(
                 task=task,
-                freelancer=request.user.freelancer,
-                status='active'  # Only active contracts
+                freelancer=request.user,
+                is_active=True,  # Must be active
+                employer_accepted=True,  # Both must have accepted
+                freelancer_accepted=True
             )
-            print(f"✓ Found contract: {contract.id}")
+            print(f"   ✓ Active contract found: ID={contract.contract_id}")
+            print(f"   Contract details: is_active={contract.is_active}")
+            
         except Contract.DoesNotExist:
-            return Response(
-                {"success": False, "error": "No active contract found for this task"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            print(f"   ✗ No active contract found")
+            
+            # Check what contracts exist (for debugging)
+            contracts = Contract.objects.filter(task=task, freelancer=request.user)
+            if contracts.exists():
+                print(f"   Found {contracts.count()} inactive contracts:")
+                for c in contracts:
+                    print(f"     Contract {c.contract_id}: "
+                          f"is_active={c.is_active}, "
+                          f"employer_accepted={c.employer_accepted}, "
+                          f"freelancer_accepted={c.freelancer_accepted}")
+            else:
+                print(f"   No contracts found at all")
+            
+            return Response({
+                "success": False,
+                "error": "No active contract found. You must have an accepted proposal to submit work.",
+                "action_required": "Wait for your proposal to be accepted or submit a proposal first"
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        except Exception as e:
+            print(f"   ✗ Error getting contract: {type(e).__name__}: {e}")
+            raise
         
-        # Check if a submission already exists for this task and freelancer
+        # Step 7: Check if submission already exists (prevent duplicates)
+        print(f"\n7. Checking for existing submissions...")
         existing_submission = Submission.objects.filter(
             task=task,
             freelancer=request.user,
@@ -1040,76 +1114,100 @@ def create_submission(request):
         ).first()
         
         if existing_submission:
-            # Check if we should update or create new based on status
-            if existing_submission.status == 'revisions_requested':
-                print(f"Updating existing submission (ID: {existing_submission.id}) that needs revision")
-                # This would be a resubmission
-                serializer = SubmissionCreateSerializer(
-                    existing_submission,
-                    data=request.data,
-                    context={
-                        'task': task,
-                        'freelancer': request.user,
-                        'contract': contract,
-                        'is_resubmission': True
-                    }
-                )
-            else:
+            print(f"   ✓ Existing submission found: ID={existing_submission.submission_id}")
+            print(f"   Status: {existing_submission.status}")
+            
+            # Only allow resubmission if revisions are requested
+            if existing_submission.status != 'revisions_requested':
                 return Response({
                     "success": False,
-                    "error": "A submission already exists for this task",
+                    "error": "Submission already exists for this task",
                     "submission_id": existing_submission.submission_id,
-                    "status": existing_submission.status
+                    "status": existing_submission.status,
+                    "action": "Use resubmission endpoint if revisions are requested"
                 }, status=status.HTTP_400_BAD_REQUEST)
-        else:
-            # Create new submission
+            else:
+                print(f"   Allowing resubmission for revisions")
+        
+        # Step 8: Create serializer
+        print(f"\n8. Creating serializer...")
+        try:
+            from .serializers import SubmissionCreateSerializer
             serializer = SubmissionCreateSerializer(
                 data=request.data,
                 context={
                     'task': task,
                     'freelancer': request.user,
                     'contract': contract,
-                    'is_resubmission': False
+                    'is_resubmission': bool(existing_submission)
                 }
             )
+            print(f"   ✓ Serializer created")
+        except Exception as e:
+            print(f"   ✗ Error creating serializer: {type(e).__name__}: {e}")
+            raise
         
-        # Validate and save
+        # Step 9: Validate serializer
+        print(f"\n9. Validating serializer...")
         if serializer.is_valid():
-            print(f"✓ Serializer is valid")
-            
-            # Handle file uploads separately if needed
-            submission = serializer.save()
-            
-            print(f"✓ Submission created successfully!")
-            print(f"  Submission ID: {submission.submission_id}")
-            print(f"  Status: {submission.status}")
-            print(f"  Submitted at: {submission.submitted_at}")
-            
-            # Return success response
-            return Response({
-                "success": True,
-                "message": "Submission created successfully",
-                "submission_id": submission.submission_id,
-                "status": submission.status,
-                "submitted_at": submission.submitted_at,
-                "task_id": task.id,
-                "task_title": task.title
-            }, status=status.HTTP_201_CREATED)
+            print(f"   ✓ Serializer is valid")
         else:
-            print(f"✗ Serializer errors: {serializer.errors}")
+            print(f"   ✗ Serializer validation failed")
+            print(f"   Errors: {serializer.errors}")
             return Response({
                 "success": False,
                 "error": "Validation failed",
                 "errors": serializer.errors
             }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Step 10: Save submission
+        print(f"\n10. Saving submission...")
+        try:
+            submission = serializer.save()
+            print(f"   ✓ Submission saved: ID={submission.submission_id}")
+            print(f"   Status: {submission.status}")
             
+            # ✅ Optional: Send notification to employer
+            # try:
+            #     send_email_notification(
+            #         to_email=contract.employer.contact_email,
+            #         subject=f"New Submission for {task.title}",
+            #         message=f"{request.user.name} has submitted work for task: {task.title}"
+            #     )
+            #     print(f"   ✓ Notification sent to employer")
+            # except Exception as notify_error:
+            #     print(f"   ⚠ Notification failed: {notify_error}")
+            
+        except Exception as e:
+            print(f"   ✗ Error saving submission: {type(e).__name__}: {e}")
+            raise
+        
+        # Success!
+        print(f"\n{'='*60}")
+        print("SUCCESS: Submission created")
+        print(f"{'='*60}")
+        
+        return Response({
+            "success": True,
+            "message": "Submission created successfully",
+            "submission_id": submission.submission_id,
+            "status": submission.status,
+            "submitted_at": submission.submitted_at,
+            "task_id": task.task_id,
+            "task_title": task.title,
+            "contract_id": contract.contract_id,
+            "is_resubmission": bool(existing_submission)
+        }, status=status.HTTP_201_CREATED)
+        
     except Exception as e:
         print(f"\n{'='*60}")
-        print("UNHANDLED EXCEPTION")
+        print("FATAL ERROR")
         print(f"{'='*60}")
-        print(f"Exception: {e}")
+        print(f"Error type: {type(e).__name__}")
+        print(f"Error message: {str(e)}")
         import traceback
-        print(f"Traceback:\n{traceback.format_exc()}")
+        error_traceback = traceback.format_exc()
+        print(f"Full traceback:\n{error_traceback}")
         
         return Response({
             "success": False,
@@ -1887,64 +1985,102 @@ def recommended_jobs(request):
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def accept_proposal(request, proposal_id):
+    print(f"\n{'='*60}")
+    print("ACCEPT PROPOSAL - START")
+    print(f"{'='*60}")
+    
     try:
         proposal = get_object_or_404(Proposal, proposal_id=proposal_id)
         task = proposal.task
+        
+        print(f"Proposal ID: {proposal_id}")
+        print(f"Task: {task.title} (ID: {task.task_id})")
+        print(f"Freelancer: {proposal.freelancer.name} (ID: {proposal.freelancer.user_id})")
+        print(f"Employer making request: {request.user.username}")
 
         # ✅ CORRECT AUTHORIZATION
         if request.user != task.employer:
+            print("✗ Unauthorized - only task employer can accept proposals")
             return Response(
-                {"error": "Unauthorized - only task employer can accept proposals"},
+                {"success": False, "error": "Unauthorized - only task employer can accept proposals"},
                 status=403
             )
 
         # Prevent double acceptance
         if task.status != 'open' or task.assigned_user is not None:
+            print("✗ Task already assigned or not open")
             return Response(
-                {"error": "Task already assigned"},
+                {"success": False, "error": "Task already assigned"},
                 status=400
             )
 
         # Accept proposal
         proposal.status = 'accepted'
         proposal.save()
+        print(f"✓ Proposal accepted")
 
         # Reject all others
-        Proposal.objects.filter(task=task)\
+        rejected_count = Proposal.objects.filter(task=task)\
             .exclude(proposal_id=proposal.proposal_id)\
             .update(status='rejected')
+        print(f"✓ Rejected {rejected_count} other proposals")
 
-        #  LOCK TASK
+        # LOCK TASK
         task.assigned_user = proposal.freelancer
         task.status = 'in_progress'
         task.is_active = False
         task.save()
+        print(f"✓ Task locked and assigned to freelancer")
 
-        # Create contract
+        # ✅ FIX: Create ACTIVE contract with both parties accepted
+        from django.utils import timezone
         contract = Contract.objects.create(
             task=task,
             freelancer=proposal.freelancer,
             employer=task.employer,
-            employer_accepted=True
+            employer_accepted=True,
+            freelancer_accepted=True,  # Freelancer accepts by default when proposal is accepted
+            is_active=True,  # Contract should be active immediately
+            start_date=timezone.now()
         )
+        print(f"✓ Contract created: ID={contract.contract_id}")
+        print(f"  Contract is_active: {contract.is_active}")
+        print(f"  employer_accepted: {contract.employer_accepted}")
+        print(f"  freelancer_accepted: {contract.freelancer_accepted}")
 
+        # ✅ Optional: Send notifications
+        # send_notification(proposal.freelancer, "Your proposal has been accepted!")
+        # send_notification(task.employer, "You have accepted a proposal!")
+
+        print(f"\n{'='*60}")
+        print("SUCCESS: Proposal accepted and ACTIVE contract created")
+        print(f"{'='*60}")
+        
         return Response({
+            "success": True,
             "message": "Proposal accepted and task locked successfully",
             "task_id": task.task_id,
+            "task_title": task.title,
             "task_status": task.status,
-            "assigned_freelancer_id": proposal.freelancer.id,
+            "assigned_freelancer_id": proposal.freelancer.user_id,
+            "assigned_freelancer_name": proposal.freelancer.name,
             "contract_id": contract.contract_id,
+            "contract_active": contract.is_active,
             "task_locked": True
         })
 
     except Exception as e:
+        print(f"\n{'='*60}")
+        print("ERROR in accept_proposal")
+        print(f"{'='*60}")
+        print(f"Error: {e}")
         import traceback
-        print(traceback.format_exc())
+        print(f"Traceback:\n{traceback.format_exc()}")
+        
         return Response(
-            {"error": "Internal server error"},
+            {"success": False, "error": "Internal server error", "detail": str(e)},
             status=500
         )
-        
 
 
 @api_view(['POST'])

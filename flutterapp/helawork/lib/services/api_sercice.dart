@@ -337,57 +337,52 @@ Future<List<dynamic>> getEmployerRatings(int employerId) async {
 }
 
  Future<Map<String, dynamic>> updateUserProfile(
-    Map<String, dynamic> profile, String token, String userId) async {
+    Map<String, dynamic> profile, String token) async {  // Remove userId parameter
   try {
     const String url = "$baseUrl/apiuserprofile";
 
     var request = http.MultipartRequest("PUT", Uri.parse(url));
 
-    
+    // Headers only - NO user_id in fields
     request.headers.addAll({
-      'Authorization': 'Bearer $token', 
-      // 'Authorization': 'Token $token', 
-      // 'Authorization': 'JWT $token', 
+      'Authorization': 'Bearer $token',
       'Accept': 'application/json',
     });
 
-    
-    request.fields['user_id'] = userId;
-
-    
+    // Add profile fields (EXCEPT user_id)
     profile.forEach((key, value) {
-      if (value != null && value is! File) {
+      if (value != null && value is! File && key != 'user_id') {  // Skip user_id
         request.fields[key] = value.toString();
       }
     });
 
-    
+    // Handle profile picture
     if (profile['profile_picture'] != null && profile['profile_picture'] is File) {
       File file = profile['profile_picture'];
       request.files.add(
           await http.MultipartFile.fromPath('profile_picture', file.path));
     }
 
-    
     var streamedResponse = await request.send();
     var response = await http.Response.fromStream(streamedResponse);
 
     print('Response Status: ${response.statusCode}');
     print('Response Body: ${response.body}');
 
-   
     if (response.statusCode == 200 || response.statusCode == 201) {
+      var responseData = json.decode(response.body);
       return {
         "success": true,
-        "message": "Profile updated successfully",
-        "data": json.decode(response.body),
+        "message": responseData["message"] ?? "Profile updated successfully",
+        "data": responseData,
       };
     } else if (response.statusCode == 401) {
       return {"success": false, "message": "Unauthorized. Please log in again."};
     } else {
+      var errorData = json.decode(response.body);
       return {
         "success": false,
-        "message": "Failed: ${response.statusCode} ${response.body}"
+        "message": errorData["errors"] ?? "Failed: ${response.statusCode}"
       };
     }
   } catch (e) {

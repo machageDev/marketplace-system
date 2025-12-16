@@ -23,43 +23,49 @@ class UserProfileProvider with ChangeNotifier {
   }
 
   
-  Future<void> saveProfile(BuildContext context) async {
-    _isLoading = true;
-    _errorMessage = '';
-    notifyListeners();
+ Future<void> saveProfile(BuildContext context) async {
+  _isLoading = true;
+  _errorMessage = '';
+  notifyListeners();
 
-    try {
-      
-      final token = await _secureStorage.read(key: "auth_token");
-      final userId = await _secureStorage.read(key: "user_id");
+  try {
+    final token = await _secureStorage.read(key: "auth_token");
+    // Remove userId retrieval - not needed anymore
 
-      print('Token: $token'); 
-      print('User ID: $userId'); 
+    print('Token: $token');
 
-      if (token == null || userId == null) {
-        _errorMessage = 'You must log in first';
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('You must log in first')),
-        );
-        _isLoading = false;
-        notifyListeners();
-        return;
-      }
-
-      final response = await _apiService.updateUserProfile(_userProfile, token, userId); 
-
+    if (token == null) {  // Only check token
+      _errorMessage = 'You must log in first';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(response["message"] ?? 'Profile saved successfully')),
+        const SnackBar(content: Text('You must log in first')),
       );
-    } catch (e) {
-      print('Error saving profile: $e'); 
-      _errorMessage = 'Failed to save profile: $e';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save profile: $e')),
-      );
+      _isLoading = false;
+      notifyListeners();
+      return;
     }
 
-    _isLoading = false;
-    notifyListeners();
+    // Remove userId parameter
+    final response = await _apiService.updateUserProfile(_userProfile, token);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(response["message"] ?? 'Profile saved successfully')),
+    );
+    
+    // If successful, you might want to fetch the updated profile
+    if (response["success"] == true) {
+      // Optionally update local profile data
+      _userProfile.addAll(response["data"]?["profile"] ?? {});
+      notifyListeners();
+    }
+  } catch (e) {
+    print('Error saving profile: $e');
+    _errorMessage = 'Failed to save profile: $e';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Failed to save profile: $e')),
+    );
   }
+
+  _isLoading = false;
+  notifyListeners();
+}
 }

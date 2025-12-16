@@ -30,16 +30,31 @@ class UserProfileSerializer(serializers.ModelSerializer):
         read_only_fields = ("user",)
 
     def create(self, validated_data):
+        print(f"\n=== SERIALIZER CREATE ===")
+        print(f"Validated data keys: {validated_data.keys()}")
         
+        # Extract user from validated_data (it's already there from view)
+        user = validated_data.get('user')
+        if not user:
+            raise serializers.ValidationError({"user": "User is required"})
+        
+        print(f"Creating profile for: {user.name}")
+        
+        # Check if profile already exists
+        if hasattr(user, 'worker_profile'):
+            raise serializers.ValidationError({"user": "User already has a profile"})
+        
+        # Create the profile
         return UserProfile.objects.create(**validated_data)
 
     def update(self, instance, validated_data):
+        # Remove user if present (can't change user)
+        validated_data.pop('user', None)
         
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
         return instance
-
 
 
 class EmployerSerializer(serializers.ModelSerializer):
@@ -456,8 +471,6 @@ class SubmissionSerializer(serializers.ModelSerializer):
         
         return representation
 
-
-
 class SubmissionCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Submission
@@ -470,11 +483,7 @@ class SubmissionCreateSerializer(serializers.ModelSerializer):
             'checklist_tests_passing', 'checklist_deployed_staging',
             'checklist_documentation', 'checklist_no_critical_bugs',
             'zip_file', 'screenshots', 'video_demo'
-            # Note: 'status' is NOT included because it has a default
-            # Note: 'submitted_at' is auto_now_add=True
-            # Note: 'resubmitted_at' is optional and shouldn't be in create
         ]
-        # Make all fields optional except required ones
         extra_kwargs = {
             'title': {'required': True},
             'description': {'required': True},
@@ -503,16 +512,16 @@ class SubmissionCreateSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         print(f"\n=== SERIALIZER CREATE ===")
-        print(f"Validated data keys: {validated_data.keys()}")
         
         # Get task, freelancer, and contract from context
         task = self.context.get('task')
-        freelancer = self.context.get('freelancer')
+        freelancer = self.context.get('freelancer')  # This is User object
         contract = self.context.get('contract')
         
-        print(f"Context - Task ID: {task.id if task else None}")
-        print(f"Context - Freelancer ID: {freelancer.id if freelancer else None}")
-        print(f"Context - Contract ID: {contract.id if contract else None}")
+        print(f"Context - Task ID: {task.task_id if task else None}")
+        print(f"Context - Freelancer User ID: {freelancer.user_id if freelancer else None}")
+        print(f"Context - Freelancer Name: {freelancer.name if freelancer else None}")
+        print(f"Context - Contract ID: {contract.contract_id if contract else None}")
         
         if not task:
             raise serializers.ValidationError({"task": "Task is required"})
@@ -522,13 +531,12 @@ class SubmissionCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"contract": "Contract is required"})
         
         try:
-            print(f"Creating submission with task={task.id}, freelancer={freelancer.id}, contract={contract.id}")
+            print(f"Creating submission with task={task.task_id}, freelancer={freelancer.user_id}, contract={contract.contract_id}")
             
-            # Create submission - status will use default 'submitted'
-            # submitted_at is auto_now_add=True
+            # Create submission
             submission = Submission.objects.create(
                 task=task,
-                freelancer=freelancer,
+                freelancer=freelancer,  # User object
                 contract=contract,
                 **validated_data
             )
