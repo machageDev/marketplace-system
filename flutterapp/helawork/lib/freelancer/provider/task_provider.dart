@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:helawork/services/api_sercice.dart';
 
-
 class TaskProvider with ChangeNotifier {
   bool _isLoading = false;
   bool get isLoading => _isLoading;
@@ -12,20 +11,25 @@ class TaskProvider with ChangeNotifier {
   String _errorMessage = '';
   String get errorMessage => _errorMessage;
 
- 
   Future<void> fetchTasks(BuildContext context) async {
     _setLoading(true);
     _errorMessage = '';
     
     try {
-      final data = await ApiService.fetchTasks(); 
+      // CORRECTED: Use positional argument, not named argument
+      final data = await ApiService.fetchTasks(context, context: null); 
       _tasks = List<Map<String, dynamic>>.from(data);
       
-      print(' Successfully loaded ${_tasks.length} tasks');
+      print('Successfully loaded ${_tasks.length} tasks');
+      
+      // Debug: Print all tasks with their taken status
+      for (var task in _tasks) {
+        print('Task: ${task['title']} - is_taken: ${task['is_taken']}');
+      }
       
     } catch (e) {
       _errorMessage = 'Failed to load tasks: $e';
-      print(' Error loading tasks: $e');
+      print('Error loading tasks: $e');
       
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -37,16 +41,16 @@ class TaskProvider with ChangeNotifier {
     }
   }
 
-  
-  Future<void> fetchTasksForProposals() async {
+  Future<void> fetchTasksForProposals(BuildContext context) async {
     _setLoading(true);
     _errorMessage = '';
     
     try {
-      final data = await ApiService.fetchTasks(); 
+      // Also corrected here
+      final data = await ApiService.fetchTasks(context, context: null); 
       _tasks = List<Map<String, dynamic>>.from(data);
       
-      print(' Successfully loaded ${_tasks.length} tasks for proposals');
+      print('Successfully loaded ${_tasks.length} tasks for proposals');
       
     } catch (e) {
       _errorMessage = 'Failed to load tasks: $e';
@@ -57,13 +61,15 @@ class TaskProvider with ChangeNotifier {
     }
   }
 
-  
   List<Map<String, dynamic>> get availableTasks {
-    print(' Available tasks called - total tasks: ${_tasks.length}');
+    print('Available tasks called - total tasks: ${_tasks.length}');
     
-    
+    // Debug all tasks
     for (var task in _tasks) {
-      print(' Task: ${task['title']} - assigned: ${task['assigned_user'] != null}, completed: ${task['completed'] ?? false}, approved: ${task['is_approved'] ?? false}');
+      print('Task: ${task['title']}');
+      print('   assigned_freelancer: ${task['assigned_freelancer'] != null ? "Exists" : "None"}');
+      print('   is_taken: ${task['is_taken']}');
+      print('   has_contract: ${task['has_contract']}');
     }
     
     return _tasks.map((task) {
@@ -72,11 +78,13 @@ class TaskProvider with ChangeNotifier {
         'title': task['title'] ?? 'Untitled Task',
         'description': task['description'] ?? '',
         'employer': task['employer'] ?? {},
+        'is_taken': task['is_taken'] ?? false,
+        'has_contract': task['has_contract'] ?? false,
+        'assigned_freelancer': task['assigned_freelancer'],
       };
     }).toList();
   }
 
-  
   String getTaskTitleById(int taskId) {
     try {
       final task = _tasks.firstWhere(
@@ -85,7 +93,7 @@ class TaskProvider with ChangeNotifier {
       );
       return task['title'] ?? 'Selected Task';
     } catch (e) {
-      print(' Error finding task title for ID $taskId: $e');
+      print('Error finding task title for ID $taskId: $e');
       return 'Selected Task';
     }
   }

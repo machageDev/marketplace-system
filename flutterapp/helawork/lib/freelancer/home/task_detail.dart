@@ -15,7 +15,7 @@ class TaskDetailScreen extends StatefulWidget {
     required this.taskId,
     required this.task,
     required this.employer,
-    required this.isTaken, // 👈 ADD THIS
+    required this.isTaken, required bool isFromContract, Map<String, dynamic>? assignedFreelancer, // 👈 ADD THIS
   });
 
   @override

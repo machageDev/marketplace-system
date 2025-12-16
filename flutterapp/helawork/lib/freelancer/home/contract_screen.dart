@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:helawork/freelancer/home/task_detail.dart';
 import 'package:helawork/freelancer/models/contract_model.dart';
 import 'package:helawork/freelancer/provider/contract_provider.dart';
 import 'package:provider/provider.dart';
@@ -31,7 +32,7 @@ class _ContractScreenState extends State<ContractScreen> {
     }
 
     return Scaffold(
-      backgroundColor: Colors.grey[900], // Changed to grey 900
+      backgroundColor: Colors.grey[900],
       appBar: AppBar(
         title: const Text(
           "My Contracts",
@@ -41,14 +42,14 @@ class _ContractScreenState extends State<ContractScreen> {
             color: Colors.white,
           ),
         ),
-        backgroundColor: Colors.grey[900], // Changed to grey 900
+        backgroundColor: Colors.grey[900],
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: provider.isLoading
           ? const Center(
               child: CircularProgressIndicator(
-                color: Colors.blue, // Keep blue for loading indicator
+                color: Colors.blue,
               ),
             )
           : provider.errorMessage != null
@@ -69,7 +70,7 @@ class _ContractScreenState extends State<ContractScreen> {
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 16,
-                            color: Colors.grey[300], // Lighter grey for text
+                            color: Colors.grey[300],
                           ),
                         ),
                       ),
@@ -79,7 +80,7 @@ class _ContractScreenState extends State<ContractScreen> {
                           provider.fetchContracts(context);
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue, // Keep blue for buttons
+                          backgroundColor: Colors.blue,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 30,
@@ -168,7 +169,7 @@ class _ContractScreenState extends State<ContractScreen> {
         onPressed: () {
           provider.fetchContracts(context);
         },
-        backgroundColor: Colors.blue, // Keep blue for FAB
+        backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         child: const Icon(Icons.refresh),
       ),
@@ -177,10 +178,21 @@ class _ContractScreenState extends State<ContractScreen> {
 
   Widget _buildContractCard(
       BuildContext context, Contract contract, ContractProvider provider) {
+    
+    // DEBUG: Add this to see what's happening
+    print('🔍 CONTRACT CARD DEBUG:');
+    print('   ID: ${contract.contractId}');
+    print('   Title: ${contract.taskTitle}');
+    print('   Employer Accepted: ${contract.employerAccepted}');
+    print('   You Accepted: ${contract.freelancerAccepted}');
+    print('   canAccept: ${contract.canAccept}');
+    print('   isAccepted: ${contract.isAccepted}');
+    print('   Status: ${contract.status}');
+    
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: Colors.grey[800], // Dark grey card
+        color: Colors.grey[800],
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -204,7 +216,7 @@ class _ContractScreenState extends State<ContractScreen> {
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
-                      color: Colors.grey[100], // Light grey text
+                      color: Colors.grey[100],
                     ),
                   ),
                 ),
@@ -248,7 +260,7 @@ class _ContractScreenState extends State<ContractScreen> {
               _buildDetailRow('End Date', contract.formattedEndDate!),
             const SizedBox(height: 12),
             // Budget
-            if (contract.task['budget'] != null)
+            if (contract.budget != null)
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
@@ -262,7 +274,7 @@ class _ContractScreenState extends State<ContractScreen> {
                         size: 16, color: Colors.green),
                     const SizedBox(width: 8),
                     Text(
-                      'Budget: \$${contract.task['budget']}',
+                      'Budget: \$${contract.budget!.toStringAsFixed(2)}',
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         color: Colors.green,
@@ -272,8 +284,10 @@ class _ContractScreenState extends State<ContractScreen> {
                 ),
               ),
             const SizedBox(height: 16),
-            // Action buttons
-            if (contract.canAccept)
+            // ACTION BUTTONS - CORRECT LOGIC BASED ON DEBUG DATA
+            // From your logs: employer_accepted: true, freelancer_accepted: true
+            // So this contract is already fully accepted
+            if (contract.employerAccepted && !contract.freelancerAccepted)
               Row(
                 children: [
                   Expanded(
@@ -315,12 +329,25 @@ class _ContractScreenState extends State<ContractScreen> {
                   ),
                 ],
               ),
-            if (contract.isAccepted)
+            if (contract.isAccepted && contract.freelancerAccepted)
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: () {
-                    Navigator.pushNamed(context, '/my-tasks');
+                    // Get task ID from the contract
+                    final taskId = contract.task['id'] ?? contract.task['task_id'];
+                    
+                    if (taskId != null) {
+                      // Navigate to TaskPage with the task data
+                      _navigateToTaskPage(context, contract);
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Task information not available'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
                   },
                   icon: const Icon(Icons.assignment, size: 20),
                   label: const Text('View Task'),
@@ -335,6 +362,38 @@ class _ContractScreenState extends State<ContractScreen> {
                 ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+
+  // NEW METHOD: Navigate to TaskPage with contract data
+  void _navigateToTaskPage(BuildContext context, Contract contract) {
+    // Get task data from contract
+    final taskData = Map<String, dynamic>.from(contract.task);
+    
+    // Add employer data
+    taskData['employer'] = Map<String, dynamic>.from(contract.employer);
+    
+    // Add task ID (try different possible fields)
+    final taskId = contract.task['id'] ?? contract.task['task_id'] ?? 0;
+    taskData['task_id'] = taskId;
+    taskData['id'] = taskId;
+    
+    // Mark the task as assigned to current user since it's a contract
+    taskData['assigned_user'] = true;
+    taskData['status'] = 'in_progress'; // Or 'assigned' based on your logic
+    
+    // Navigate to TaskPage
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TaskDetailScreen(
+          taskId: taskId,
+          task: taskData,
+          employer: Map<String, dynamic>.from(contract.employer),
+          isTaken: true, // Contract tasks are always taken
+          isFromContract: true, // Flag to indicate this is from contract
         ),
       ),
     );

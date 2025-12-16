@@ -70,13 +70,13 @@ Future<Map<String, dynamic>> createTask({
 }
 
   // Fetch all tasks
-  Future<void> fetchTasks() async {
+  Future<void> fetchTasks(dynamic context) async {
     _isLoading = true;
     _errorMessage = '';
     notifyListeners();
 
     try {
-      final tasks = await ApiService.fetchTasks();
+      final tasks = await ApiService.fetchTasks(context, context: null);
       _tasks = tasks;
       _isLoading = false;
       notifyListeners();

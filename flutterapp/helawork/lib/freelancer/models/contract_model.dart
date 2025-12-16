@@ -1,3 +1,6 @@
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+
 class Contract {
   final int contractId;
   final Map<String, dynamic> task;
@@ -24,37 +27,97 @@ class Contract {
   });
 
   factory Contract.fromJson(Map<String, dynamic> json) {
+    // Debug the incoming JSON
+    debugPrint("📄 Parsing contract: ${json['contract_id'] ?? 'Unknown'}");
+    
     return Contract(
       contractId: json['contract_id'] ?? 0,
-      task: Map<String, dynamic>.from(json['task'] ?? {}),
-      employer: Map<String, dynamic>.from(json['employer'] ?? {}),
-      startDate: json['start_date'] ?? '',
-      endDate: json['end_date'],
-      employerAccepted: json['employer_accepted'] ?? false,
-      freelancerAccepted: json['freelancer_accepted'] ?? false,
-      isActive: json['is_active'] ?? false,
-      isFullyAccepted: json['is_fully_accepted'] ?? false,
-      status: json['status'] ?? 'pending',
+      task: json['task'] is Map ? Map<String, dynamic>.from(json['task']) : {},
+      employer: json['employer'] is Map ? Map<String, dynamic>.from(json['employer']) : {},
+      startDate: json['start_date']?.toString() ?? DateTime.now().toString(),
+      endDate: json['end_date']?.toString(),
+      employerAccepted: (json['employer_accepted'] ?? false) == true,
+      freelancerAccepted: (json['freelancer_accepted'] ?? false) == true,
+      isActive: (json['is_active'] ?? false) == true,
+      isFullyAccepted: (json['is_fully_accepted'] ?? false) == true,
+      status: (json['status']?.toString() ?? 'pending').toLowerCase(),
     );
   }
 
-  // Helper getters
-  String get taskTitle => task['title'] ?? 'Untitled Task';
-  String get employerName => employer['company_name'] ?? employer['name'] ?? 'Client';
-  String get formattedStartDate => _formatDate(startDate);
-  String? get formattedEndDate => endDate != null ? _formatDate(endDate!) : null;
+  // Getter for task title
+  String get taskTitle {
+    if (task['title'] != null) return task['title'].toString();
+    if (task['task_title'] != null) return task['task_title'].toString();
+    if (task['name'] != null) return task['name'].toString();
+    return 'Untitled Task';
+  }
 
-  String _formatDate(String dateString) {
+  // Getter for employer name
+  String get employerName {
+    if (employer['company_name'] != null) return employer['company_name'].toString();
+    if (employer['name'] != null) return employer['name'].toString();
+    if (employer['username'] != null) return employer['username'].toString();
+    if (employer['email'] != null) return employer['email'].toString().split('@').first;
+    return 'Client';
+  }
+
+  // Format dates
+  String get formattedStartDate {
     try {
-      final date = DateTime.parse(dateString);
-      return '${date.day}/${date.month}/${date.year}';
+      return DateFormat('dd/MM/yyyy').format(DateTime.parse(startDate));
     } catch (e) {
-      return dateString;
+      return startDate;
     }
   }
 
+  String? get formattedEndDate {
+    if (endDate == null) return null;
+    try {
+      return DateFormat('dd/MM/yyyy').format(DateTime.parse(endDate!));
+    } catch (e) {
+      return endDate;
+    }
+  }
+
+  // CORRECT LOGIC: Show accept button when employer has accepted but freelancer hasn't
   bool get canAccept => employerAccepted && !freelancerAccepted;
+  
+  //  Show reject button under same conditions
   bool get canReject => employerAccepted && !freelancerAccepted;
-  bool get isPending => !isFullyAccepted;
+  
+  //  Contract is fully accepted
   bool get isAccepted => isFullyAccepted;
+  
+  // Get budget if available
+  double? get budget {
+    final budgetValue = task['budget'];
+    if (budgetValue == null) return null;
+    
+    if (budgetValue is double) return budgetValue;
+    if (budgetValue is int) return budgetValue.toDouble();
+    if (budgetValue is String) return double.tryParse(budgetValue);
+    
+    return null;
+  }
+  String get taskStatus {
+    if (task['status'] != null) return task['status'].toString();
+    if (isFullyAccepted) return 'in_progress';
+    return 'open';
+  }
+
+  // Check if task is taken by anyone
+  bool get isTaskTaken {
+    final status = taskStatus.toLowerCase();
+    return status == 'taken' || 
+           status == 'assigned' || 
+           status == 'in_progress' || 
+           status == 'completed' ||
+           status == 'closed';
+  }
+
+  // Check if task is assigned to current user (for contracts)
+  bool get isAssignedToMe {
+    return isFullyAccepted && freelancerAccepted;
+  }
+
 }

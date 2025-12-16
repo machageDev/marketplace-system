@@ -1,4 +1,3 @@
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:helawork/freelancer/models/contract_model.dart';
 import 'package:helawork/freelancer/models/proposal.dart';
 import 'package:http_parser/http_parser.dart';
@@ -270,42 +269,28 @@ Future<List<dynamic>> getEmployerRatings(int employerId) async {
     return json.decode(response.body);
   }
 
- static Future<List<Map<String, dynamic>>> fetchTasks() async {
+ // In ApiService.dart, update fetchTasks method:
+static Future<List<Map<String, dynamic>>> fetchTasks(dynamic response, {required context}) async {
   try {
-    // Get the token from storage
-    const storage = FlutterSecureStorage();
-    final String? token = await storage.read(key: 'auth_token');
-    
-    // Check if token exists
-    if (token == null || token.isEmpty) {
-      throw Exception("No authentication token found");
-    }
-    
-    print('Using token: ${token.substring(0, 20)}...'); // Log first 20 chars for debugging
-    
-    // Make the request with Authorization header
-    final response = await http.get(
-      Uri.parse(taskUrl),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-    );
-    
-    print('Task API Response Status: ${response.statusCode}');
-    print('Task API Response Body: ${response.body}');
+    // ... existing code ...
 
     if (response.statusCode == 200) {
       final dynamic data = jsonDecode(response.body);
+      
+      print('📦 Task API Raw Response:');
+      print(data);
       
       if (data is List) {
         if (data.isEmpty) {
           return [
             {
               "task_id": 0, 
+              "id": 0,
               "title": "No tasks available",
               "description": "Check back later for new tasks",
-              "employer": {"username": "System"}
+              "employer": {"username": "System"},
+              "is_taken": false,  // ✅ ADD
+              "has_contract": false,  // ✅ ADD
             }
           ];
         }
@@ -313,11 +298,26 @@ Future<List<dynamic>> getEmployerRatings(int employerId) async {
         return data.map((task) {
           final mappedTask = Map<String, dynamic>.from(task);
           
+          // ✅ NEW: Ensure all new fields exist
+          mappedTask['id'] = mappedTask['id'] ?? mappedTask['task_id'] ?? 0;
+          mappedTask['is_taken'] = mappedTask['is_taken'] ?? false;
+          mappedTask['has_contract'] = mappedTask['has_contract'] ?? false;
+          mappedTask['overall_status'] = mappedTask['overall_status'] ?? mappedTask['status'] ?? 'open';
+          mappedTask['assigned_freelancer'] = mappedTask['assigned_freelancer'] ?? mappedTask['assigned_user'] ?? null;
+          
           mappedTask['completed'] = mappedTask['completed'] ?? false;
           mappedTask['employer'] = mappedTask['employer'] ?? {
             'username': 'Unknown Client',
             'company_name': 'Unknown Company'
           };
+          
+          // Debug the new fields
+          print('📋 Task ${mappedTask['title']}:');
+          print('  ID: ${mappedTask['id']}');
+          print('  Is Taken: ${mappedTask['is_taken']}');
+          print('  Has Contract: ${mappedTask['has_contract']}');
+          print('  Overall Status: ${mappedTask['overall_status']}');
+          print('  Assigned Freelancer: ${mappedTask['assigned_freelancer']}');
           
           return mappedTask;
         }).toList();
@@ -331,7 +331,7 @@ Future<List<dynamic>> getEmployerRatings(int employerId) async {
       throw Exception("Failed to load tasks: ${response.statusCode} - ${response.body}");
     }
   } catch (e) {
-    print('Error fetching tasks: $e');
+    print('❌ Error fetching tasks: $e');
     rethrow;
   }
 }

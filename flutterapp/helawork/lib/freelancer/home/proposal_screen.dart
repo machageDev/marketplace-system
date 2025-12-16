@@ -44,7 +44,7 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
       print(' Fetching proposals...');
       await proposalProvider.fetchProposals();
       print(' Fetching tasks...');
-      await taskProvider.fetchTasksForProposals();
+      await taskProvider.fetchTasksForProposals(context);
       print(' Initial data loaded successfully');
     } catch (e) {
       print(' Error loading initial data: $e');

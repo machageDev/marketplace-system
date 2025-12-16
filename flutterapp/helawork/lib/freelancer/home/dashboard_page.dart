@@ -32,7 +32,7 @@ class _DashboardPageState extends State<DashboardPage> {
     super.initState();
     
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<DashboardProvider>(context, listen: false).loadData();
+      Provider.of<DashboardProvider>(context, listen: false).loadData(context);
     });
   }
 
@@ -85,7 +85,7 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     return RefreshIndicator(
-      onRefresh: () => dashboard.loadData(),
+      onRefresh: () => dashboard.loadData(context),
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
@@ -578,7 +578,7 @@ class _DashboardPageState extends State<DashboardPage> {
             actions: [
               IconButton(
                 icon: const Icon(Icons.refresh, color: Colors.white),
-                onPressed: () => dashboard.loadData(),
+                onPressed: () => dashboard.loadData(context),
               ),
             ],
           ),

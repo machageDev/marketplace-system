@@ -358,32 +358,64 @@ def apisubmit_proposal(request):
 
         return JsonResponse(
             {"error": "Internal server error"},
-            status=500
-        )
+           
+            status=500)
+from django.db.models import Prefetch
+        
 @api_view(['GET'])
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def apitask_list(request):
     try:
-        tasks = Task.objects.select_related('employer').prefetch_related('employer__profile').all()
-        tasks = Task.objects.filter(status='open', is_active=True)
-
+        # Get open and active tasks
+        tasks = Task.objects.filter(
+            status='open', 
+            is_active=True
+        ).select_related('employer').prefetch_related(
+            Prefetch(
+                'contract_set',
+                queryset=Contract.objects.filter(is_active=True).select_related('freelancer'),
+                to_attr='active_contracts'
+            ),
+            'employer__profile'
+        )
+        
         data = []
         for task in tasks:
             employer_profile = getattr(task.employer, 'profile', None)
             
+            # Check active contracts (prefetched)
+            has_active_contract = len(task.active_contracts) > 0
+            active_contract = task.active_contracts[0] if has_active_contract else None
+            
+            # Get freelancer info
+            assigned_freelancer = None
+            if active_contract and active_contract.freelancer:
+                assigned_freelancer = {
+                    'id': active_contract.freelancer.id,
+                    'name': active_contract.freelancer.get_full_name() or active_contract.freelancer.username,
+                    'username': active_contract.freelancer.username,
+                    'email': active_contract.freelancer.email,
+                }
+            
             task_data = {
                 'task_id': task.task_id,
+                'id': task.task_id,
                 'title': task.title,
                 'description': task.description,
                 'is_approved': task.is_approved,
-                'status': task.status,  # 👈 MUST INCLUDE THIS
+                'status': task.status,
+                'overall_status': 'taken' if has_active_contract else task.status,
+                'has_contract': has_active_contract,
+                'is_taken': has_active_contract,
                 'assigned_user': task.assigned_user.id if task.assigned_user else None,
+                'assigned_freelancer': assigned_freelancer,
+                'contract_count': len(task.active_contracts),
                 'created_at': task.created_at.isoformat() if task.created_at else None,
                 'completed': False,
                 'employer': {
                     'id': task.employer.employer_id,
-                    'username': task.employer.username,  # Note: Changed from task.employer.username
+                    'username': task.employer.username,
                     'contact_email': task.employer.contact_email,
                     'company_name': employer_profile.company_name if employer_profile else None,
                     'profile_picture': employer_profile.profile_picture.url if employer_profile and employer_profile.profile_picture else None,
@@ -392,11 +424,17 @@ def apitask_list(request):
             }
             data.append(task_data)
         
-        print(f" Returning {len(data)} tasks with employer data")
-        return Response(data)
+        print(f"✅ Returning {len(data)} tasks with contract status")
+        return Response({
+            "status": True,
+            "tasks": data,
+            "count": len(data)
+        })
         
     except Exception as e:
-        print(f" Error in apitask_list: {e}")
+        print(f"❌ Error in apitask_list: {e}")
+        import traceback
+        traceback.print_exc()
         return Response({"error": str(e)}, status=500)
 
 
