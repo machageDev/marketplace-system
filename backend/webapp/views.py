@@ -984,20 +984,7 @@ def create_submission(request):
     print("CREATE SUBMISSION - START")
     print(f"{'='*60}")
     
-    # Log full request info
-    print(f"Request method: {request.method}")
-    print(f"Request path: {request.path}")
-    print(f"Request full path: {request.get_full_path()}")
-    print(f"Request absolute URI: {request.build_absolute_uri()}")
-    print(f"Request META keys: {list(request.META.keys())}")
-    
-    # Check specific META values
-    print(f"\nHTTP headers:")
-    for key, value in request.META.items():
-        if key.startswith('HTTP_'):
-            print(f"  {key}: {value}")
-    
-    print(f"\nUser: {request.user} (ID: {request.user.id})")
+    print(f"User: {request.user} (ID: {request.user.id})")
     print(f"Authenticated: {request.user.is_authenticated}")
     
     try:
@@ -1011,42 +998,111 @@ def create_submission(request):
         
         print(f"✓ User is a freelancer")
         
-        # Try to parse request data safely
-        print(f"\nAttempting to parse request data...")
+        # Get task_id from request data
+        task_id = request.data.get('task_id')
+        if not task_id:
+            return Response(
+                {"success": False, "error": "task_id is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
-        data = {}
+        print(f"Task ID from request: {task_id}")
+        
+        # Get the task
         try:
-            if request.content_type == 'application/json':
-                import json
-                if hasattr(request, 'data') and request.data:
-                    data = request.data
-                    print(f"Using request.data: {data}")
-                else:
-                    try:
-                        body = request.body.decode('utf-8')
-                        print(f"Raw body: {body}")
-                        if body:
-                            data = json.loads(body)
-                    except:
-                        pass
+            task = Task.objects.get(id=task_id)
+            print(f"✓ Found task: {task.id} - {task.title}")
+        except Task.DoesNotExist:
+            return Response(
+                {"success": False, "error": f"Task with ID {task_id} not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Get the contract between this freelancer and task
+        try:
+            contract = Contract.objects.get(
+                task=task,
+                freelancer=request.user.freelancer,
+                status='active'  # Only active contracts
+            )
+            print(f"✓ Found contract: {contract.id}")
+        except Contract.DoesNotExist:
+            return Response(
+                {"success": False, "error": "No active contract found for this task"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check if a submission already exists for this task and freelancer
+        existing_submission = Submission.objects.filter(
+            task=task,
+            freelancer=request.user,
+            contract=contract
+        ).first()
+        
+        if existing_submission:
+            # Check if we should update or create new based on status
+            if existing_submission.status == 'revisions_requested':
+                print(f"Updating existing submission (ID: {existing_submission.id}) that needs revision")
+                # This would be a resubmission
+                serializer = SubmissionCreateSerializer(
+                    existing_submission,
+                    data=request.data,
+                    context={
+                        'task': task,
+                        'freelancer': request.user,
+                        'contract': contract,
+                        'is_resubmission': True
+                    }
+                )
             else:
-                data = request.data.dict() if hasattr(request.data, 'dict') else dict(request.data)
-                print(f"Form data: {data}")
-        except Exception as parse_error:
-            print(f"Warning: Could not parse data: {parse_error}")
-            data = {}
+                return Response({
+                    "success": False,
+                    "error": "A submission already exists for this task",
+                    "submission_id": existing_submission.submission_id,
+                    "status": existing_submission.status
+                }, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            # Create new submission
+            serializer = SubmissionCreateSerializer(
+                data=request.data,
+                context={
+                    'task': task,
+                    'freelancer': request.user,
+                    'contract': contract,
+                    'is_resubmission': False
+                }
+            )
         
-        # For testing, just return success with what we have
-        return Response({
-            "success": True,
-            "message": "Test endpoint working",
-            "user": request.user.username,
-            "user_id": request.user.id,
-            "is_freelancer": hasattr(request.user, 'freelancer'),
-            "request_path": request.path,
-            "data_received": data
-        }, status=status.HTTP_200_OK)
-        
+        # Validate and save
+        if serializer.is_valid():
+            print(f"✓ Serializer is valid")
+            
+            # Handle file uploads separately if needed
+            submission = serializer.save()
+            
+            print(f"✓ Submission created successfully!")
+            print(f"  Submission ID: {submission.submission_id}")
+            print(f"  Status: {submission.status}")
+            print(f"  Submitted at: {submission.submitted_at}")
+            
+            # Return success response
+            return Response({
+                "success": True,
+                "message": "Submission created successfully",
+                "submission_id": submission.submission_id,
+                "status": submission.status,
+                "submitted_at": submission.submitted_at,
+                "task_id": task.id,
+                "task_title": task.title
+            }, status=status.HTTP_201_CREATED)
+        else:
+            print(f"✗ Serializer errors: {serializer.errors}")
+            return Response({
+                "success": False,
+                "error": "Validation failed",
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
     except Exception as e:
         print(f"\n{'='*60}")
         print("UNHANDLED EXCEPTION")
@@ -1061,7 +1117,6 @@ def create_submission(request):
             "detail": str(e),
             "type": type(e).__name__
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_employer_submissions(request):
