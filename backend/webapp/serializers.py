@@ -625,3 +625,112 @@ class PaymentInitializeSerializer(serializers.Serializer):
 
 class PaymentVerificationSerializer(serializers.Serializer):
     reference = serializers.CharField(max_length=100)        
+    
+
+
+
+class ProposalSerializer(serializers.ModelSerializer):
+    # For read operations (GET) - these fields are read-only
+    task_id = serializers.IntegerField(source='task.task_id', read_only=True)
+    task_title = serializers.CharField(source='task.title', read_only=True)
+    freelancer_id = serializers.IntegerField(source='freelancer.user_id', read_only=True)
+    freelancer_name = serializers.CharField(source='freelancer.name', read_only=True)
+    employer_name = serializers.CharField(source='task.employer.username', read_only=True)
+    
+    # For write operations (POST) - these accept IDs
+    task = serializers.PrimaryKeyRelatedField(
+        queryset=Task.objects.all(), 
+        write_only=True,
+        help_text="Task ID (not task_id field)"
+    )
+    
+    # File handling
+    cover_letter_file = serializers.FileField(
+        required=True,
+        write_only=True,
+        help_text="PDF cover letter file"
+    )
+    
+    # For API responses
+    cover_letter_file_url = serializers.SerializerMethodField(read_only=True)
+    
+    class Meta:
+        model = Proposal
+        fields = [
+            'proposal_id', 'task', 'task_id', 'task_title',
+            'freelancer_id', 'freelancer_name', 'employer_name',
+            'cover_letter_file', 'cover_letter_file_url',
+            'bid_amount', 'cover_letter', 'status',
+            'estimated_days', 'submitted_at'
+        ]
+        read_only_fields = ['proposal_id', 'submitted_at', 'freelancer']
+    
+    def get_cover_letter_file_url(self, obj):
+        if obj.cover_letter_file:
+            return obj.cover_letter_file.url
+        return None
+    
+    def validate_bid_amount(self, value):
+        """Ensure bid amount is positive"""
+        if value <= 0:
+            raise serializers.ValidationError("Bid amount must be positive")
+        return value
+    
+    def validate(self, data):
+        """Custom validation for the entire proposal"""
+        task = data.get('task')
+        request = self.context.get('request')
+        
+        # Check task is open and active
+        if task.status != 'open':
+            raise serializers.ValidationError(
+                f"Task '{task.title}' is not open (status: {task.status})"
+            )
+        
+        if not task.is_active:
+            raise serializers.ValidationError(
+                f"Task '{task.title}' is not active"
+            )
+        
+        if task.assigned_user is not None:
+            raise serializers.ValidationError(
+                f"Task '{task.title}' is already assigned"
+            )
+        
+        # Check for duplicate proposal
+        if request and request.user:
+            existing = Proposal.objects.filter(
+                task=task, 
+                freelancer=request.user
+            ).exists()
+            
+            if existing:
+                raise serializers.ValidationError(
+                    "You have already submitted a proposal for this task"
+                )
+        
+        return data
+    
+    def create(self, validated_data):
+        """Create proposal with the authenticated user as freelancer"""
+        request = self.context.get('request')
+        
+        # Extract file separately
+        cover_letter_file = validated_data.pop('cover_letter_file', None)
+        
+        # Create proposal
+        proposal = Proposal.objects.create(
+            **validated_data,
+            freelancer=request.user,  # Set from authenticated user
+            submitted_at=timezone.now()
+        )
+        
+        # Save file if provided
+        if cover_letter_file:
+            proposal.cover_letter_file.save(
+                cover_letter_file.name,
+                cover_letter_file
+            )
+            proposal.save()
+        
+        return proposal    

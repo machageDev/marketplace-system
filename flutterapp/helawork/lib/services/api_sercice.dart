@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/src/widgets/framework.dart';
 import 'package:helawork/freelancer/models/contract_model.dart';
 import 'package:helawork/freelancer/models/proposal.dart';
@@ -269,25 +271,8 @@ Future<List<dynamic>> getEmployerRatings(int employerId) async {
     final response = await http.get(Uri.parse(earningUrl));
     return json.decode(response.body);
   }
-
 static Future<List<Map<String, dynamic>>> fetchTasks(http.Response response, {required BuildContext context}) async {
   try {
-    final String? token = await _getUserToken();
-    
-    if (token == null) {
-      throw Exception('No authentication token found');
-    }
-
-    print('Fetching tasks from: $taskUrl');
-    
-    final response = await http.get(
-      Uri.parse(taskUrl),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-    );
-
     print('Task API Response Status: ${response.statusCode}');
     
     if (response.statusCode == 200) {
@@ -296,7 +281,45 @@ static Future<List<Map<String, dynamic>>> fetchTasks(http.Response response, {re
       print('Task API Raw Response:');
       print(data);
       
-      if (data is List) {
+      // Handle your Django API format: {"status": true, "tasks": [...], "count": 8}
+      if (data is Map && data.containsKey('tasks')) {
+        final List<dynamic> tasksList = data['tasks'];
+        
+        if (tasksList.isEmpty) {
+          return [
+            {
+              "task_id": 0, 
+              "id": 0,
+              "title": "No tasks available",
+              "description": "Check back later for new tasks",
+              "employer": {"username": "System"},
+              "is_taken": false,  
+              "has_contract": false,  
+            }
+          ];
+        }
+        
+        return tasksList.map((task) {
+          final mappedTask = Map<String, dynamic>.from(task);
+          
+          // Map your fields
+          mappedTask['id'] = mappedTask['id'] ?? mappedTask['task_id'] ?? 0;
+          mappedTask['is_taken'] = mappedTask['is_taken'] ?? false;
+          mappedTask['has_contract'] = mappedTask['has_contract'] ?? false;
+          mappedTask['overall_status'] = mappedTask['overall_status'] ?? mappedTask['status'] ?? 'open';
+          mappedTask['assigned_freelancer'] = mappedTask['assigned_freelancer'] ?? mappedTask['assigned_user'];
+          
+          mappedTask['completed'] = mappedTask['completed'] ?? false;
+          mappedTask['employer'] = mappedTask['employer'] ?? {
+            'username': 'Unknown Client',
+            'company_name': 'Unknown Company'
+          };
+          
+          return mappedTask;
+        }).toList();
+        
+      } else if (data is List) {
+        // Handle direct List format (old format)
         if (data.isEmpty) {
           return [
             {
@@ -313,28 +336,18 @@ static Future<List<Map<String, dynamic>>> fetchTasks(http.Response response, {re
         
         return data.map((task) {
           final mappedTask = Map<String, dynamic>.from(task);
-          
-          mappedTask['id'] = mappedTask['id'] ?? mappedTask['task_id'] ?? 0;
-          mappedTask['is_taken'] = mappedTask['is_taken'] ?? false;
-          mappedTask['has_contract'] = mappedTask['has_contract'] ?? false;
-          mappedTask['overall_status'] = mappedTask['overall_status'] ?? mappedTask['status'] ?? 'open';
-          mappedTask['assigned_freelancer'] = mappedTask['assigned_freelancer'] ?? mappedTask['assigned_user'];
-          
-          mappedTask['completed'] = mappedTask['completed'] ?? false;
-          mappedTask['employer'] = mappedTask['employer'] ?? {
-            'username': 'Unknown Client',
-            'company_name': 'Unknown Company'
-          };
-          
+          // ... same mapping logic as above
           return mappedTask;
         }).toList();
         
       } else if (data is Map && data.containsKey('error')) {
         throw Exception("API Error: ${data['error']}");
       } else if (data is Map && data.containsKey('data')) {
+        // Handle {"data": [...]} format
         final List<dynamic> taskList = data['data'];
         return taskList.map((task) => Map<String, dynamic>.from(task)).toList();
       } else {
+        print('Unexpected format. Keys: ${data is Map ? data.keys : "Not a Map"}');
         throw Exception("Unexpected response format");
       }
     } else {
@@ -345,7 +358,6 @@ static Future<List<Map<String, dynamic>>> fetchTasks(http.Response response, {re
     rethrow;
   }
 }
-
  Future<Map<String, dynamic>> updateUserProfile(
     Map<String, dynamic> profile, String token) async {  // Remove userId parameter
   try {
@@ -540,8 +552,7 @@ static Future<Map<String, dynamic>?> getUserProfile() async {
 
   return await postData('/employer_ratings/', body);
 }
-
-  static Future<Proposal> submitProposal(Proposal proposal, {PlatformFile? pdfFile}) async {
+static Future<Proposal> submitProposal(Proposal proposal, {PlatformFile? pdfFile}) async {
   try {
     // Get authentication token
     final String? token = await _getUserToken();
@@ -550,12 +561,10 @@ static Future<Map<String, dynamic>?> getUserProfile() async {
       throw Exception("User not authenticated. Please log in again.");
     }
 
-    
     if (pdfFile == null) {
       throw Exception("Cover letter PDF file is required");
     }
 
-   
     if (pdfFile.bytes == null) {
       throw Exception("PDF file bytes are null - file may be corrupted");
     }
@@ -564,44 +573,47 @@ static Future<Map<String, dynamic>?> getUserProfile() async {
     print(' PDF File: ${pdfFile.name} (${pdfFile.size} bytes)');
     print(' Proposal URL: $ProposalUrl');
 
-    
     var request = http.MultipartRequest('POST', Uri.parse(ProposalUrl));
     
-   
     request.headers['Authorization'] = 'Bearer $token';
     request.headers['Accept'] = 'application/json';
    
-    // Add proposal data as fields
-    request.fields['task_id'] = proposal.taskId.toString();
-    request.fields['freelancer_id'] = proposal.freelancerId.toString();
+    // ✅ CORRECT FIELDS FOR SERIALIZER:
+    request.fields['task_id'] = proposal.taskId.toString(); // Will be mapped to 'task'
     request.fields['bid_amount'] = proposal.bidAmount.toString();
     request.fields['status'] = proposal.status;
     
+    // ✅ ADD THESE REQUIRED FIELDS:
+    request.fields['estimated_days'] = proposal.estimatedDays?.toString() ?? '7';
     
-    if (proposal.title != null && proposal.title!.isNotEmpty) {
-      request.fields['title'] = proposal.title!;
+    // ✅ Add cover letter text (optional but good to have)
+    if (proposal.coverLetter != null && proposal.coverLetter!.isNotEmpty) {
+      request.fields['cover_letter'] = proposal.coverLetter!;
     } else {
-      request.fields['title'] = 'Proposal for Task ${proposal.taskId}';
+      request.fields['cover_letter'] = 'Proposal for task ${proposal.taskId}';
     }
-
     
+    // ❌ REMOVE THESE (not in serializer):
+    // - freelancer_id (set automatically from token)
+    // - title (not in Proposal model, only in Task)
+    
+    // ✅ Add PDF file
     request.files.add(http.MultipartFile.fromBytes(
       'cover_letter_file',
-      pdfFile.bytes!, // Now safe because we checked above
+      pdfFile.bytes!,
       filename: pdfFile.name,
       contentType: MediaType('application', 'pdf'),
     ));
 
-    print(' Request prepared with fields:');
+    print(' ✅ Request prepared with fields:');
     print('   - task_id: ${proposal.taskId}');
-    print('   - freelancer_id: ${proposal.freelancerId}');
     print('   - bid_amount: ${proposal.bidAmount}');
     print('   - status: ${proposal.status}');
-    print('   - title: ${proposal.title}');
+    print('   - estimated_days: ${proposal.estimatedDays ?? 7}');
+    print('   - cover_letter: ${proposal.coverLetter?.substring(0, min(50, proposal.coverLetter?.length ?? 0))}...');
     print('   - file_field: cover_letter_file');
     print('   - file_name: ${pdfFile.name}');
 
-    
     final response = await request.send();
     final responseBody = await response.stream.bytesToString();
     
@@ -610,20 +622,29 @@ static Future<Map<String, dynamic>?> getUserProfile() async {
     print('   - Body: $responseBody');
 
     if (response.statusCode == 201 || response.statusCode == 200) {
-      print(' Proposal submitted successfully!');
+      print(' ✅ Proposal submitted successfully!');
       final responseData = json.decode(responseBody);
-      return Proposal.fromJson(responseData);
+      
+      // Handle both response formats
+      if (responseData.containsKey('proposal')) {
+        return Proposal.fromJson(responseData['proposal']);
+      } else {
+        return Proposal.fromJson(responseData);
+      }
     } else if (response.statusCode == 401) {
       throw Exception("Authentication failed. Please log in again.");
     } else if (response.statusCode == 400) {
-      throw Exception("Invalid data submitted: $responseBody");
+      // Parse error message
+      final errorData = json.decode(responseBody);
+      final errorMsg = errorData['errors'] ?? errorData['error'] ?? responseBody;
+      throw Exception("Invalid data: $errorMsg");
     } else {
       throw Exception("Failed to submit proposal: ${response.statusCode} - $responseBody");
     }
 
   } catch (e, stackTrace) {
     print('===================================');
-    print(' NULL CHECK ERROR DETAILS:');
+    print(' ERROR DETAILS:');
     print(' Error: $e');
     print(' Stack trace: $stackTrace');
     print('===================================');

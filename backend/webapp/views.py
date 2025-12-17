@@ -242,124 +242,80 @@ def apiforgot_password(request):
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)        
 
-
-
-@csrf_exempt
-@require_http_methods(["POST"])
+@api_view(['POST'])
+@authentication_classes([CustomTokenAuthentication])
+@permission_classes([IsAuthenticated])
 def apisubmit_proposal(request):
     try:
-        print(" PROPOSAL SUBMISSION STARTED")
-
-        # =======================
-        # AUTHENTICATION
-        # =======================
-        auth = CustomTokenAuthentication()
-        auth_result = auth.authenticate(request)
-
-        if auth_result is None:
-            print(" AUTHENTICATION FAILED")
-            return JsonResponse(
-                {"error": "Authentication failed"},
-                status=401
-            )
-
-        request.user, request.auth = auth_result
-
-        print(f" USER AUTHENTICATED: {request.user}")
-
-        # =======================
-        # INPUT DATA
-        # =======================
-        task_id = request.POST.get("task_id")
-        bid_amount = request.POST.get("bid_amount")
-        cover_letter_file = request.FILES.get("cover_letter_file")
-
-        if not task_id:
-            return JsonResponse(
-                {"error": "Task ID is required"},
-                status=400
-            )
-
-        if not cover_letter_file:
-            return JsonResponse(
-                {"error": "Cover letter PDF file is required"},
-                status=400
-            )
-
-        # =======================
-        # FETCH TASK
-        # =======================
-        try:
-            task = Task.objects.get(pk=task_id)
-            print(f" TASK FOUND: {task.title}")
-        except Task.DoesNotExist:
-            return JsonResponse(
-                {"error": "Task not found"},
-                status=404
-            )
-
-        # =======================
-        #  TASK LOCK CHECK
-        # =======================
-        if task.status != 'open' or not task.is_active or task.assigned_user is not None:
-            return JsonResponse(
-                {"error": "This task has already been taken"},
-                status=400
-            )
-
-        # =======================
-        # DUPLICATE PROPOSAL CHECK
-        # =======================
-        if Proposal.objects.filter(task=task, freelancer=request.user).exists():
-            return JsonResponse(
-                {"error": "You have already submitted a proposal for this task"},
-                status=400
-            )
-
-        # =======================
-        # CREATE PROPOSAL
-        # =======================
-        proposal = Proposal.objects.create(
-            task=task,
-            freelancer=request.user,
-            bid_amount=float(bid_amount) if bid_amount else 0.0,
-            submitted_at=timezone.now()
+        print("=== PROPOSAL SUBMISSION (SERIALIZER VERSION) ===")
+        print(f"User: {request.user.name} (ID: {request.user.user_id})")
+        print(f"Content-Type: {request.content_type}")
+        
+        # Handle multipart/form-data (Flutter sends this)
+        if 'multipart/form-data' in (request.content_type or ''):
+            # For file uploads, use request.data which DRF handles
+            data = request.data.copy()
+            print(f"Received data keys: {list(data.keys())}")
+            
+            # Map Flutter's 'task_id' to serializer's 'task' field
+            if 'task_id' in data and 'task' not in data:
+                data['task'] = data.pop('task_id')
+                print(f"Mapped task_id={data['task']} to task field")
+            
+            # Add required fields with defaults if missing
+            if 'cover_letter' not in data:
+                data['cover_letter'] = f"Proposal from {request.user.name}"
+            
+            if 'estimated_days' not in data:
+                data['estimated_days'] = 7
+            
+            if 'status' not in data:
+                data['status'] = 'pending'
+            
+        else:
+            # Handle JSON if needed
+            data = request.data
+        
+        print(f"Data for serializer: {data}")
+        
+        # Create serializer with request context
+        serializer = ProposalSerializer(
+            data=data,
+            context={'request': request}
         )
-
-        # =======================
-        # SAVE FILE
-        # =======================
-        proposal.cover_letter_file.save(
-            cover_letter_file.name,
-            cover_letter_file
-        )
-
-        proposal.save()
-
-        print(f" PROPOSAL CREATED: {proposal.proposal_id}")
-
-        # =======================
-        # RESPONSE
-        # =======================
-        return JsonResponse({
-            "id": proposal.proposal_id,
-            "task_id": task.task_id,
-            "freelancer_id": request.user.id,
-            "bid_amount": float(proposal.bid_amount),
-            "status": proposal.status,
-            "task_title": task.title,
-            "message": "Proposal submitted successfully"
-        }, status=201)
-
+        
+        if serializer.is_valid():
+            print("✅ Serializer validation passed")
+            proposal = serializer.save()
+            
+            print(f"✅ Proposal created: ID {proposal.proposal_id}")
+            print(f"   Task: {proposal.task.title}")
+            print(f"   Bid: ${proposal.bid_amount}")
+            print(f"   Status: {proposal.status}")
+            
+            # Return success response
+            return Response({
+                "success": True,
+                "message": "Proposal submitted successfully",
+                "proposal": ProposalSerializer(proposal).data
+            }, status=status.HTTP_201_CREATED)
+        
+        else:
+            print("❌ Serializer validation failed")
+            print(f"Errors: {serializer.errors}")
+            return Response({
+                "success": False,
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
     except Exception as e:
-        print(f" ERROR: {str(e)}")
+        print(f"❌ ERROR: {str(e)}")
         import traceback
-        print(traceback.format_exc())
-
-        return JsonResponse(
-            {"error": "Internal server error"},
-           
-            status=500)
+        traceback.print_exc()
+        return Response(
+            {"error": str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 from django.db.models import Prefetch
         
 @api_view(['GET'])

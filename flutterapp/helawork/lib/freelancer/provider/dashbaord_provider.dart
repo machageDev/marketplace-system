@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:helawork/services/api_sercice.dart';
 import 'package:http/http.dart' as http;
-
 import 'package:shared_preferences/shared_preferences.dart';
 
 class DashboardProvider with ChangeNotifier {
@@ -46,7 +45,7 @@ class DashboardProvider with ChangeNotifier {
       completed = tasks.where((t) => t["status"] == "Completed").length;
       activeTasks = tasks.take(5).toList();
 
-      _calculateDashboardStats(tasks);
+      _calculateDashboardStats(tasks); // This will work now
 
       error = null;
     } catch (e) {
@@ -58,34 +57,7 @@ class DashboardProvider with ChangeNotifier {
     }
   }
 
-  // Helper method to make the API call
-  Future<http.Response> _makeTasksApiCall() async {
-    try {
-      // Get token directly from SharedPreferences since _getUserToken is private
-      final prefs = await SharedPreferences.getInstance();
-      final String? token = prefs.getString('user_token');
-      
-      if (token == null || token.isEmpty) {
-        throw Exception('No authentication token found. Please log in.');
-      }
-
-      // Make the HTTP request - using your actual base URL
-      final response = await http.get(
-        Uri.parse('${ApiService.baseUrl}/api/tasks/'), // Adjust URL as needed
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-      );
-
-      print('Tasks API response status: ${response.statusCode}');
-      return response;
-    } catch (e) {
-      print('Error making tasks API call: $e');
-      rethrow;
-    }
-  }
-
+  // ADD THIS METHOD:
   void _calculateDashboardStats(List<Map<String, dynamic>> tasks) {
     totalTasks = tasks.length;
     
@@ -102,6 +74,32 @@ class DashboardProvider with ChangeNotifier {
     pendingProposals = 0;
     
     print('Dashboard stats - Total: $totalTasks, Ongoing: $ongoingTasks, Completed: $completedTasks, Pending Proposals: $pendingProposals');
+  }
+
+  Future<http.Response> _makeTasksApiCall() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? token = prefs.getString('user_token');
+      
+      if (token == null || token.isEmpty) {
+        throw Exception('No authentication token found. Please log in.');
+      }
+
+      // Use your actual task endpoint - make sure it matches Django
+      final response = await http.get(
+        Uri.parse('${ApiService.baseUrl}/task'),  // Changed from /api/tasks/
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      print('Tasks API response status: ${response.statusCode}');
+      return response;
+    } catch (e) {
+      print('Error making tasks API call: $e');
+      rethrow;
+    }
   }
 
   Future<void> _loadProfilePictureFromAPI() async {

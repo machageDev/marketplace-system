@@ -5,9 +5,17 @@ import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import '../models/proposal.dart';
 
-
 class ProposalsScreen extends StatefulWidget {
-  const ProposalsScreen({super.key, required int taskId, required Map<String, dynamic> task, required Map<String, dynamic> employer});
+  final int? taskId;
+  final Map<String, dynamic>? task;
+  final Map<String, dynamic>? employer;
+
+  const ProposalsScreen({
+    super.key,
+    this.taskId,
+    this.task,
+    this.employer,
+  });
 
   @override
   State<ProposalsScreen> createState() => _ProposalsScreenState();
@@ -17,9 +25,10 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
   bool showCreateForm = false;
   final _formKey = GlobalKey<FormState>();
   final _bidAmountController = TextEditingController();
+  final _coverLetterController = TextEditingController();
   int? selectedTaskId;
+  int _estimatedDays = 7;
   
-  // PDF file for cover letter
   PlatformFile? _selectedCoverLetterPdf;
   bool _isPdfPicked = false;
   bool _isPdfUploading = false;
@@ -27,31 +36,30 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
   @override
   void initState() {
     super.initState();
-    print(' ProposalsScreen initState called');
+    print('ProposalsScreen initState called');
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadInitialData();
     });
   }
 
   Future<void> _loadInitialData() async {
-    print(' _loadInitialData started');
+    print('_loadInitialData started');
     if (!mounted) return;
     
     final proposalProvider = Provider.of<ProposalProvider>(context, listen: false);
     final taskProvider = Provider.of<TaskProvider>(context, listen: false);
     
     try {
-      print(' Fetching proposals...');
+      print('Fetching proposals...');
       await proposalProvider.fetchProposals();
-      print(' Fetching tasks...');
+      print('Fetching tasks...');
       await taskProvider.fetchTasksForProposals(context);
-      print(' Initial data loaded successfully');
+      print('Initial data loaded successfully');
     } catch (e) {
-      print(' Error loading initial data: $e');
+      print('Error loading initial data: $e');
     }
   }
 
-  // PDF file picker method for cover letter
   Future<void> _pickCoverLetterPdf() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -66,10 +74,10 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
           _selectedCoverLetterPdf = result.files.single;
           _isPdfPicked = true;
         });
-        print(' Cover letter PDF selected: ${_selectedCoverLetterPdf!.name}');
-        print(' File size: ${_selectedCoverLetterPdf!.size} bytes');
+        print('Cover letter PDF selected: ${_selectedCoverLetterPdf!.name}');
+        print('File size: ${_selectedCoverLetterPdf!.size} bytes');
       } else {
-        print(' No PDF file selected');
+        print('No PDF file selected');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("No PDF file selected"),
@@ -78,7 +86,7 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
         );
       }
     } catch (e) {
-      print(' Error picking PDF file: $e');
+      print('Error picking PDF file: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text("Error selecting PDF file: $e"),
@@ -88,18 +96,18 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
     }
   }
 
-  // Clear selected PDF
   void _clearCoverLetterPdf() {
     setState(() {
       _selectedCoverLetterPdf = null;
       _isPdfPicked = false;
     });
-    print(' Cover letter PDF cleared');
+    print('Cover letter PDF cleared');
   }
 
   @override
   void dispose() {
     _bidAmountController.dispose();
+    _coverLetterController.dispose();
     super.dispose();
   }
 
@@ -112,7 +120,7 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
       appBar: AppBar(
         title: const Text("Proposals"),
         centerTitle: true,
-        automaticallyImplyLeading: false, // This removes the back arrow
+        automaticallyImplyLeading: false,
         actions: [
           IconButton(
             icon: Icon(showCreateForm ? Icons.list : Icons.add),
@@ -163,19 +171,18 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
           key: _formKey,
           child: Column(
             children: [
-              // Task Dropdown - FIXED for overflow
               DropdownButtonFormField<int>(
                 decoration: const InputDecoration(
                   labelText: "Select Task",
                   border: OutlineInputBorder(),
                 ),
-                initialValue: selectedTaskId,
+                value: selectedTaskId,
                 items: taskProvider.availableTasks
                     .map((task) => DropdownMenuItem<int>(
                           value: task['id'],
                           child: Container(
                             constraints: const BoxConstraints(
-                              minHeight: 48.0, // Increased minimum height
+                              minHeight: 48.0,
                             ),
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -186,7 +193,7 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
                                   task['title'] ?? 'Untitled Task',
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    fontSize: 14, // Slightly smaller font
+                                    fontSize: 14,
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -195,7 +202,7 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
                                   Text(
                                     'Client: ${task['employer']?['company_name']}',
                                     style: const TextStyle(
-                                      fontSize: 11, // Smaller font
+                                      fontSize: 11,
                                       color: Colors.grey,
                                     ),
                                     maxLines: 1,
@@ -215,7 +222,64 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
               ),
               const SizedBox(height: 20),
 
-              // Cover Letter PDF Section
+              TextFormField(
+                controller: _bidAmountController,
+                decoration: const InputDecoration(
+                  labelText: "Bid Amount",
+                  border: OutlineInputBorder(),
+                  prefixText: '\$ ',
+                ),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                validator: (val) {
+                  if (val == null || val.isEmpty) {
+                    return 'Please enter a bid amount';
+                  }
+                  if (double.tryParse(val) == null) {
+                    return 'Please enter a valid number';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 20),
+
+              DropdownButtonFormField<int>(
+                decoration: const InputDecoration(
+                  labelText: "Estimated Completion Days",
+                  border: OutlineInputBorder(),
+                ),
+                value: _estimatedDays,
+                items: [7, 10, 14, 21, 30, 45, 60]
+                    .map((days) => DropdownMenuItem<int>(
+                          value: days,
+                          child: Text('$days days'),
+                        ))
+                    .toList(),
+                onChanged: (val) {
+                  setState(() {
+                    _estimatedDays = val ?? 7;
+                  });
+                },
+              ),
+              const SizedBox(height: 20),
+
+              TextFormField(
+                controller: _coverLetterController,
+                decoration: const InputDecoration(
+                  labelText: "Cover Letter (Text)",
+                  border: OutlineInputBorder(),
+                  hintText: "Describe your proposal...",
+                ),
+                maxLines: 4,
+                minLines: 2,
+                validator: (val) {
+                  if (val == null || val.isEmpty) {
+                    return 'Please enter your cover letter';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 20),
+
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
@@ -227,7 +291,7 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      "Cover Letter (PDF)",
+                      "Cover Letter PDF (Optional)",
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
@@ -235,7 +299,7 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      "Upload your cover letter as a PDF document",
+                      "Upload additional cover letter as PDF",
                       style: TextStyle(
                         fontSize: 14,
                         color: Colors.grey.shade600,
@@ -287,49 +351,18 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
                         : ElevatedButton.icon(
                             onPressed: _pickCoverLetterPdf,
                             icon: const Icon(Icons.upload_file),
-                            label: const Text("Upload Cover Letter PDF"),
+                            label: const Text("Upload PDF (Optional)"),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.blue.shade50,
                               foregroundColor: Colors.blue.shade700,
                               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                             ),
                           ),
-                    
-                    if (!_isPdfPicked)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 8),
-                        child: Text(
-                          "Required: Upload your cover letter as a PDF file",
-                          style: TextStyle(fontSize: 12, color: Colors.red),
-                        ),
-                      ),
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
-
-              // Bid Amount
-              TextFormField(
-                controller: _bidAmountController,
-                decoration: const InputDecoration(
-                  labelText: "Bid Amount",
-                  border: OutlineInputBorder(),
-                  prefixText: '\$ ',
-                ),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                validator: (val) {
-                  if (val == null || val.isEmpty) {
-                    return 'Please enter a bid amount';
-                  }
-                  if (double.tryParse(val) == null) {
-                    return 'Please enter a valid number';
-                  }
-                  return null;
-                },
-              ),
               const SizedBox(height: 30),
 
-              // Submit Button
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -364,11 +397,10 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
     final proposalProvider = Provider.of<ProposalProvider>(context, listen: false);
     final taskProvider = Provider.of<TaskProvider>(context, listen: false);
     
-    print(' _submitProposal method started');
+    print('_submitProposal method started');
     
-    // Validate form
     if (!_formKey.currentState!.validate()) {
-      print(' Form validation FAILED');
+      print('Form validation FAILED');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("Please fix the form errors"),
@@ -379,21 +411,10 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
     }
 
     if (selectedTaskId == null) {
-      print(' No task selected');
+      print('No task selected');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("Please select a task"),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    if (!_isPdfPicked) {
-      print(' No cover letter PDF selected');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please upload your cover letter PDF"),
           backgroundColor: Colors.orange,
         ),
       );
@@ -405,30 +426,36 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
         _isPdfUploading = true;
       });
 
-      // Get task title
       final task = taskProvider.availableTasks.firstWhere(
         (task) => task['id'] == selectedTaskId,
         orElse: () => {'title': 'Selected Task'}
       );
       final taskTitle = task['title'] ?? 'Selected Task';
 
-      // Create proposal - cover letter is now the PDF file
       final proposal = Proposal(
         taskId: selectedTaskId!,
-        freelancerId: 1, // TODO: Get from authentication
-        coverLetter: "Cover letter provided as PDF", // Placeholder text
+        freelancerId: 1,
+        coverLetter: _coverLetterController.text,
         bidAmount: double.parse(_bidAmountController.text),
-        status: "Pending",
+        estimatedDays: _estimatedDays,
+        status: "pending",
         title: taskTitle,
-        pdfFileName: _selectedCoverLetterPdf!.name,
-        
       );
 
-      print(' Submitting proposal with PDF cover letter...');
-      await proposalProvider.addProposal(proposal, pdfFile: _selectedCoverLetterPdf);
-      print(' Proposal submitted successfully!');
+      print('Submitting proposal...');
+      print('Task ID: ${proposal.taskId}');
+      print('Bid Amount: ${proposal.bidAmount}');
+      print('Estimated Days: ${proposal.estimatedDays}');
+      print('Cover Letter: ${proposal.coverLetter}');
+      print('PDF File: ${_selectedCoverLetterPdf?.name}');
+      
+      await proposalProvider.addProposal(
+        proposal, 
+        pdfFile: _selectedCoverLetterPdf
+      );
+      
+      print('Proposal submitted successfully!');
 
-      // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("Proposal submitted successfully!"),
@@ -437,15 +464,14 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
         ),
       );
 
-      // Reset form and go back to list
       _resetForm();
       setState(() {
         showCreateForm = false;
       });
 
     } catch (e, stackTrace) {
-      print(' ERROR in _submitProposal: $e');
-      print(' Stack trace: $stackTrace');
+      print('ERROR in _submitProposal: $e');
+      print('Stack trace: $stackTrace');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text("Error submitting proposal: ${e.toString()}"),
@@ -463,8 +489,10 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
   void _resetForm() {
     _formKey.currentState?.reset();
     _bidAmountController.clear();
+    _coverLetterController.clear();
     setState(() {
       selectedTaskId = null;
+      _estimatedDays = 7;
       _selectedCoverLetterPdf = null;
       _isPdfPicked = false;
       _isPdfUploading = false;
@@ -514,20 +542,9 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
                       ),
                     ),
                   const SizedBox(height: 8),
-                  // Show PDF file name for cover letter
-                  Row(
-                    children: [
-                      const Icon(Icons.picture_as_pdf, color: Colors.red, size: 16),
-                      const SizedBox(width: 4),
-                      Text(
-                        "Cover Letter: ${proposal.pdfFileName ?? 'PDF Document'}",
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: Colors.blue,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
+                  Text(
+                    "Task ID: ${proposal.taskId}",
+                    style: const TextStyle(fontSize: 14, color: Colors.grey),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -537,18 +554,52 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
+                  const SizedBox(height: 4),
+                  Text(
+                    "Estimated Days: ${proposal.estimatedDays}",
+                    style: const TextStyle(fontSize: 14, color: Colors.blue),
+                  ),
+                  const SizedBox(height: 8),
+                  if (proposal.coverLetter != null && proposal.coverLetter!.isNotEmpty)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          "Cover Letter:",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          proposal.coverLetter!.length > 150
+                              ? "${proposal.coverLetter!.substring(0, 150)}..."
+                              : proposal.coverLetter!,
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                      ],
+                    ),
                   const SizedBox(height: 8),
                   Text(
                     "Status: ${proposal.status}",
                     style: TextStyle(
-                      color: proposal.status == "Accepted"
+                      color: proposal.status.toLowerCase() == "accepted"
                           ? Colors.green
-                          : proposal.status == "Rejected"
+                          : proposal.status.toLowerCase() == "rejected"
                               ? Colors.red
                               : Colors.orange,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
+                  if (proposal.submittedAt != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        "Submitted: ${proposal.submittedAt!.toString().split(' ')[0]}",
+                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ),
                 ],
               ),
             ),
