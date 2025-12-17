@@ -362,8 +362,6 @@ def apisubmit_proposal(request):
             status=500)
 from django.db.models import Prefetch
         
-
-        
 @api_view(['GET'])
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -375,9 +373,9 @@ def apitask_list(request):
             is_active=True
         ).select_related('employer').prefetch_related(
             Prefetch(
-                'contract',  # <-- CHANGED FROM 'contract_set' to 'contract'
+                'contract',  # ForeignKey from Task to Contract
                 queryset=Contract.objects.filter(is_active=True).select_related('freelancer'),
-                to_attr='active_contracts'
+                to_attr='active_contract'
             ),
             'employer__profile'
         )
@@ -386,18 +384,19 @@ def apitask_list(request):
         for task in tasks:
             employer_profile = getattr(task.employer, 'profile', None)
             
-            # Check active contracts (prefetched)
-            has_active_contract = len(task.active_contracts) > 0
-            active_contract = task.active_contracts[0] if has_active_contract else None
+            # Check active contract (prefetched as single object, not list)
+            has_active_contract = task.active_contract is not None
+            active_contract = task.active_contract
             
-            # Get freelancer info
+            # Get freelancer info - FIXED: Use user_id (not id)
             assigned_freelancer = None
-            if active_contract and active_contract.freelancer:
+            if has_active_contract and active_contract.freelancer:
+                user = active_contract.freelancer
                 assigned_freelancer = {
-                    'id': active_contract.freelancer.id,
-                    'name': active_contract.freelancer.get_full_name() or active_contract.freelancer.username,
-                    'username': active_contract.freelancer.username,
-                    'email': active_contract.freelancer.email,
+                    'id': user.user_id,  # CORRECT: User model uses user_id as primary key
+                    'name': user.name,  # User model has 'name' field, not 'get_full_name()'
+                    'username': user.name,  # Use name as username
+                    'email': user.email,
                 }
             
             task_data = {
@@ -410,9 +409,9 @@ def apitask_list(request):
                 'overall_status': 'taken' if has_active_contract else task.status,
                 'has_contract': has_active_contract,
                 'is_taken': has_active_contract,
-                'assigned_user': task.assigned_user.id if task.assigned_user else None,
+                'assigned_user': task.assigned_user.user_id if task.assigned_user else None,  # Use user_id
                 'assigned_freelancer': assigned_freelancer,
-                'contract_count': len(task.active_contracts),
+                'contract_count': 1 if has_active_contract else 0,
                 'created_at': task.created_at.isoformat() if task.created_at else None,
                 'completed': False,
                 'employer': {
