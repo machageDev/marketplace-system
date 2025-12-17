@@ -269,7 +269,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                             child: Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 12),
                               child: DropdownButtonFormField<String>(
-                                value: _selectedCategory,
+                                initialValue: _selectedCategory,
                                 decoration: const InputDecoration(
                                   labelText: 'Category *',
                                   border: InputBorder.none,
@@ -369,7 +369,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                               title: const Text('Mark as Urgent'),
                               subtitle: const Text('Highlight this task to freelancers'),
                               value: _isUrgent,
-                              activeColor: Colors.blueAccent,
+                              activeThumbColor: Colors.blueAccent,
                               onChanged: (v) => setState(() => _isUrgent = v),
                             ),
                           ),

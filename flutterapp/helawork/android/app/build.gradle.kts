@@ -11,12 +11,12 @@ android {
     ndkVersion =  "27.0.12077973"
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
+        jvmTarget = JavaVersion.VERSION_21.toString()
     }
 
     defaultConfig {
@@ -43,6 +43,6 @@ flutter {
     source = "../.."
 }
 dependencies {
-    implementation("com.stripe:stripe-android:20.45.0")
+    
     implementation("org.jetbrains.kotlin:kotlin-stdlib:2.1.0")
 }

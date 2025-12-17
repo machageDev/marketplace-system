@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:helawork/services/api_sercice.dart';
-
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 class TaskProvider with ChangeNotifier {
   bool _isLoading = false;
   bool get isLoading => _isLoading;
@@ -16,8 +17,28 @@ class TaskProvider with ChangeNotifier {
     _errorMessage = '';
     
     try {
-      // CORRECTED: Use positional argument, not named argument
-      final data = await ApiService.fetchTasks(context, context: null); 
+      // Get token first
+      final prefs = await SharedPreferences.getInstance();
+      final String? token = prefs.getString('user_token');
+      
+      if (token == null) {
+        throw Exception('Please log in first');
+      }
+      
+      // Make the API call
+      print('Fetching tasks from: ${ApiService.taskUrl}');
+      final response = await http.get(
+        Uri.parse(ApiService.taskUrl),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+      
+      print('Tasks API response status: ${response.statusCode}');
+      
+      // Now pass the response to fetchTasks
+      final data = await ApiService.fetchTasks(response, context: context); 
       _tasks = List<Map<String, dynamic>>.from(data);
       
       print('Successfully loaded ${_tasks.length} tasks');
@@ -46,8 +67,28 @@ class TaskProvider with ChangeNotifier {
     _errorMessage = '';
     
     try {
-      // Also corrected here
-      final data = await ApiService.fetchTasks(context, context: null); 
+      // Get token first
+      final prefs = await SharedPreferences.getInstance();
+      final String? token = prefs.getString('user_token');
+      
+      if (token == null) {
+        throw Exception('Please log in first');
+      }
+      
+      // Make the API call
+      print('Fetching tasks for proposals from: ${ApiService.taskUrl}');
+      final response = await http.get(
+        Uri.parse(ApiService.taskUrl),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+      
+      print('Tasks API response status: ${response.statusCode}');
+      
+      // Now pass the response to fetchTasks
+      final data = await ApiService.fetchTasks(response, context: context); 
       _tasks = List<Map<String, dynamic>>.from(data);
       
       print('Successfully loaded ${_tasks.length} tasks for proposals');

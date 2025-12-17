@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:helawork/services/api_sercice.dart';
+import 'package:http/http.dart' as http;
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 class DashboardProvider with ChangeNotifier {
@@ -16,8 +18,6 @@ class DashboardProvider with ChangeNotifier {
   int ongoingTasks = 0;
   int completedTasks = 0;
 
-  // Store context if needed for future use
-
   Future<void> loadData(BuildContext context) async {
     isLoading = true;
     notifyListeners();
@@ -25,8 +25,11 @@ class DashboardProvider with ChangeNotifier {
     try {
       await _loadUserData();
       
+      // Get the response first
+      final response = await _makeTasksApiCall();
       
-      final tasksRaw = await ApiService.fetchTasks(context, context: null);
+      // Now pass the response to fetchTasks
+      final tasksRaw = await ApiService.fetchTasks(response, context: context);
 
       if (userName == null || userName!.isEmpty) {
         userName = await ApiService.getLoggedInUserName();
@@ -52,6 +55,34 @@ class DashboardProvider with ChangeNotifier {
     } finally {
       isLoading = false;
       notifyListeners();
+    }
+  }
+
+  // Helper method to make the API call
+  Future<http.Response> _makeTasksApiCall() async {
+    try {
+      // Get token directly from SharedPreferences since _getUserToken is private
+      final prefs = await SharedPreferences.getInstance();
+      final String? token = prefs.getString('user_token');
+      
+      if (token == null || token.isEmpty) {
+        throw Exception('No authentication token found. Please log in.');
+      }
+
+      // Make the HTTP request - using your actual base URL
+      final response = await http.get(
+        Uri.parse('${ApiService.baseUrl}/api/tasks/'), // Adjust URL as needed
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      print('Tasks API response status: ${response.statusCode}');
+      return response;
+    } catch (e) {
+      print('Error making tasks API call: $e');
+      rethrow;
     }
   }
 
@@ -131,4 +162,14 @@ class DashboardProvider with ChangeNotifier {
     notifyListeners();
     print('User data cleared from dashboard');
   }
+
+  // Add refresh method
+  Future<void> refresh(BuildContext context) async {
+    await loadData(context);
+  }
+
+  // Add getters for UI
+  bool get hasError => error != null;
+  bool get hasTasks => activeTasks.isNotEmpty;
+  bool get isLoaded => !isLoading && error == null;
 }

@@ -15,7 +15,7 @@
     },
     {
       "name": "async",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/async-2.12.0",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/async-2.13.0",
       "packageUri": "lib/",
       "languageVersion": "3.4"
     },
@@ -33,9 +33,9 @@
     },
     {
       "name": "checked_yaml",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/checked_yaml-2.0.3",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/checked_yaml-2.0.4",
       "packageUri": "lib/",
-      "languageVersion": "2.19"
+      "languageVersion": "3.8"
     },
     {
       "name": "cli_util",
@@ -57,9 +57,9 @@
     },
     {
       "name": "cross_file",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/cross_file-0.3.4+2",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/cross_file-0.3.5+1",
       "packageUri": "lib/",
-      "languageVersion": "3.3"
+      "languageVersion": "3.8"
     },
     {
       "name": "crypto",
@@ -81,7 +81,7 @@
     },
     {
       "name": "fake_async",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/fake_async-1.3.2",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/fake_async-1.3.3",
       "packageUri": "lib/",
       "languageVersion": "3.3"
     },
@@ -99,39 +99,39 @@
     },
     {
       "name": "file_picker",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/file_picker-10.3.3",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/file_picker-10.3.7",
       "packageUri": "lib/",
       "languageVersion": "3.4"
     },
     {
       "name": "file_selector_linux",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/file_selector_linux-0.9.3+2",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/file_selector_linux-0.9.4",
       "packageUri": "lib/",
-      "languageVersion": "3.3"
+      "languageVersion": "3.8"
     },
     {
       "name": "file_selector_macos",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/file_selector_macos-0.9.4+4",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/file_selector_macos-0.9.5",
+      "packageUri": "lib/",
+      "languageVersion": "3.9"
+    },
+    {
+      "name": "file_selector_platform_interface",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/file_selector_platform_interface-2.7.0",
       "packageUri": "lib/",
       "languageVersion": "3.7"
     },
     {
-      "name": "file_selector_platform_interface",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/file_selector_platform_interface-2.6.2",
-      "packageUri": "lib/",
-      "languageVersion": "3.0"
-    },
-    {
       "name": "file_selector_windows",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/file_selector_windows-0.9.3+4",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/file_selector_windows-0.9.3+5",
       "packageUri": "lib/",
-      "languageVersion": "3.4"
+      "languageVersion": "3.8"
     },
     {
       "name": "flutter",
       "rootUri": "file:///C:/flutter/packages/flutter",
       "packageUri": "lib/",
-      "languageVersion": "3.7"
+      "languageVersion": "3.8"
     },
     {
       "name": "flutter_launcher_icons",
@@ -147,9 +147,9 @@
     },
     {
       "name": "flutter_plugin_android_lifecycle",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_plugin_android_lifecycle-2.0.31",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_plugin_android_lifecycle-2.0.33",
       "packageUri": "lib/",
-      "languageVersion": "3.7"
+      "languageVersion": "3.9"
     },
     {
       "name": "flutter_secure_storage",
@@ -191,13 +191,13 @@
       "name": "flutter_test",
       "rootUri": "file:///C:/flutter/packages/flutter_test",
       "packageUri": "lib/",
-      "languageVersion": "3.7"
+      "languageVersion": "3.8"
     },
     {
       "name": "flutter_web_plugins",
       "rootUri": "file:///C:/flutter/packages/flutter_web_plugins",
       "packageUri": "lib/",
-      "languageVersion": "3.7"
+      "languageVersion": "3.8"
     },
     {
       "name": "http",
@@ -213,33 +213,33 @@
     },
     {
       "name": "image",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/image-4.5.4",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/image-4.6.0",
       "packageUri": "lib/",
       "languageVersion": "3.0"
     },
     {
       "name": "image_picker",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/image_picker-1.2.0",
-      "packageUri": "lib/",
-      "languageVersion": "3.6"
-    },
-    {
-      "name": "image_picker_android",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/image_picker_android-0.8.13+1",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/image_picker-1.2.1",
       "packageUri": "lib/",
       "languageVersion": "3.7"
     },
     {
-      "name": "image_picker_for_web",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/image_picker_for_web-3.1.0",
+      "name": "image_picker_android",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/image_picker_android-0.8.13+10",
       "packageUri": "lib/",
-      "languageVersion": "3.6"
+      "languageVersion": "3.9"
+    },
+    {
+      "name": "image_picker_for_web",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/image_picker_for_web-3.1.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.8"
     },
     {
       "name": "image_picker_ios",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/image_picker_ios-0.8.13",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/image_picker_ios-0.8.13+3",
       "packageUri": "lib/",
-      "languageVersion": "3.6"
+      "languageVersion": "3.9"
     },
     {
       "name": "image_picker_linux",
@@ -249,15 +249,15 @@
     },
     {
       "name": "image_picker_macos",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/image_picker_macos-0.2.2",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/image_picker_macos-0.2.2+1",
       "packageUri": "lib/",
-      "languageVersion": "3.6"
+      "languageVersion": "3.9"
     },
     {
       "name": "image_picker_platform_interface",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/image_picker_platform_interface-2.11.0",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/image_picker_platform_interface-2.11.1",
       "packageUri": "lib/",
-      "languageVersion": "3.6"
+      "languageVersion": "3.7"
     },
     {
       "name": "image_picker_windows",
@@ -285,19 +285,19 @@
     },
     {
       "name": "leak_tracker",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/leak_tracker-10.0.8",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/leak_tracker-11.0.2",
       "packageUri": "lib/",
       "languageVersion": "3.2"
     },
     {
       "name": "leak_tracker_flutter_testing",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/leak_tracker_flutter_testing-3.0.9",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/leak_tracker_flutter_testing-3.0.10",
       "packageUri": "lib/",
       "languageVersion": "3.2"
     },
     {
       "name": "leak_tracker_testing",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/leak_tracker_testing-3.0.1",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/leak_tracker_testing-3.0.2",
       "packageUri": "lib/",
       "languageVersion": "3.2"
     },
@@ -321,9 +321,9 @@
     },
     {
       "name": "meta",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/meta-1.16.0",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/meta-1.17.0",
       "packageUri": "lib/",
-      "languageVersion": "2.12"
+      "languageVersion": "3.5"
     },
     {
       "name": "mime",
@@ -351,15 +351,15 @@
     },
     {
       "name": "path_provider_android",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/path_provider_android-2.2.19",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/path_provider_android-2.2.22",
       "packageUri": "lib/",
-      "languageVersion": "3.7"
+      "languageVersion": "3.9"
     },
     {
       "name": "path_provider_foundation",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/path_provider_foundation-2.4.2",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/path_provider_foundation-2.5.1",
       "packageUri": "lib/",
-      "languageVersion": "3.7"
+      "languageVersion": "3.9"
     },
     {
       "name": "path_provider_linux",
@@ -381,9 +381,9 @@
     },
     {
       "name": "petitparser",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/petitparser-6.1.0",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/petitparser-7.0.1",
       "packageUri": "lib/",
-      "languageVersion": "3.5"
+      "languageVersion": "3.8"
     },
     {
       "name": "platform",
@@ -411,21 +411,21 @@
     },
     {
       "name": "shared_preferences",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/shared_preferences-2.5.3",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/shared_preferences-2.5.4",
       "packageUri": "lib/",
-      "languageVersion": "3.5"
+      "languageVersion": "3.9"
     },
     {
       "name": "shared_preferences_android",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/shared_preferences_android-2.4.13",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/shared_preferences_android-2.4.18",
       "packageUri": "lib/",
-      "languageVersion": "3.7"
+      "languageVersion": "3.9"
     },
     {
       "name": "shared_preferences_foundation",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/shared_preferences_foundation-2.5.4",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/shared_preferences_foundation-2.5.6",
       "packageUri": "lib/",
-      "languageVersion": "3.4"
+      "languageVersion": "3.9"
     },
     {
       "name": "shared_preferences_linux",
@@ -455,7 +455,7 @@
       "name": "sky_engine",
       "rootUri": "file:///C:/flutter/bin/cache/pkg/sky_engine",
       "packageUri": "lib/",
-      "languageVersion": "3.7"
+      "languageVersion": "3.8"
     },
     {
       "name": "source_span",
@@ -489,7 +489,7 @@
     },
     {
       "name": "test_api",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/test_api-0.7.4",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/test_api-0.7.7",
       "packageUri": "lib/",
       "languageVersion": "3.5"
     },
@@ -507,27 +507,27 @@
     },
     {
       "name": "url_launcher_android",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/url_launcher_android-6.3.20",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/url_launcher_android-6.3.28",
       "packageUri": "lib/",
-      "languageVersion": "3.7"
+      "languageVersion": "3.9"
     },
     {
       "name": "url_launcher_ios",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/url_launcher_ios-6.3.4",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/url_launcher_ios-6.3.6",
       "packageUri": "lib/",
-      "languageVersion": "3.7"
+      "languageVersion": "3.9"
     },
     {
       "name": "url_launcher_linux",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/url_launcher_linux-3.2.1",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/url_launcher_linux-3.2.2",
       "packageUri": "lib/",
-      "languageVersion": "3.3"
+      "languageVersion": "3.8"
     },
     {
       "name": "url_launcher_macos",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/url_launcher_macos-3.2.3",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/url_launcher_macos-3.2.5",
       "packageUri": "lib/",
-      "languageVersion": "3.7"
+      "languageVersion": "3.9"
     },
     {
       "name": "url_launcher_platform_interface",
@@ -543,21 +543,21 @@
     },
     {
       "name": "url_launcher_windows",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/url_launcher_windows-3.1.4",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/url_launcher_windows-3.1.5",
       "packageUri": "lib/",
-      "languageVersion": "3.4"
+      "languageVersion": "3.8"
     },
     {
       "name": "vector_math",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/vector_math-2.1.4",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/vector_math-2.2.0",
       "packageUri": "lib/",
-      "languageVersion": "2.14"
+      "languageVersion": "3.1"
     },
     {
       "name": "vm_service",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/vm_service-14.3.1",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/vm_service-15.0.2",
       "packageUri": "lib/",
-      "languageVersion": "3.3"
+      "languageVersion": "3.5"
     },
     {
       "name": "web",
@@ -585,15 +585,15 @@
     },
     {
       "name": "webview_flutter_wkwebview",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/webview_flutter_wkwebview-3.23.0",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/webview_flutter_wkwebview-3.23.5",
       "packageUri": "lib/",
-      "languageVersion": "3.6"
+      "languageVersion": "3.9"
     },
     {
       "name": "win32",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/win32-5.13.0",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/win32-5.15.0",
       "packageUri": "lib/",
-      "languageVersion": "3.7"
+      "languageVersion": "3.8"
     },
     {
       "name": "xdg_directories",
@@ -603,9 +603,9 @@
     },
     {
       "name": "xml",
-      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/xml-6.5.0",
+      "rootUri": "file:///C:/Users/macha/AppData/Local/Pub/Cache/hosted/pub.dev/xml-6.6.1",
       "packageUri": "lib/",
-      "languageVersion": "3.2"
+      "languageVersion": "3.8"
     },
     {
       "name": "yaml",
@@ -620,10 +620,9 @@
       "languageVersion": "3.7"
     }
   ],
-  "generated": "2025-12-16T09:57:48.583171Z",
   "generator": "pub",
-  "generatorVersion": "3.7.2",
+  "generatorVersion": "3.10.4",
   "flutterRoot": "file:///C:/flutter",
-  "flutterVersion": "3.29.2",
+  "flutterVersion": "3.38.5",
   "pubCache": "file:///C:/Users/macha/AppData/Local/Pub/Cache"
 }

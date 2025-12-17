@@ -362,6 +362,8 @@ def apisubmit_proposal(request):
             status=500)
 from django.db.models import Prefetch
         
+
+        
 @api_view(['GET'])
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -373,7 +375,7 @@ def apitask_list(request):
             is_active=True
         ).select_related('employer').prefetch_related(
             Prefetch(
-                'contract_set',
+                'contract',  # <-- CHANGED FROM 'contract_set' to 'contract'
                 queryset=Contract.objects.filter(is_active=True).select_related('freelancer'),
                 to_attr='active_contracts'
             ),
@@ -424,7 +426,7 @@ def apitask_list(request):
             }
             data.append(task_data)
         
-        print(f"✅ Returning {len(data)} tasks with contract status")
+        print(f" Returning {len(data)} tasks with contract status")
         return Response({
             "status": True,
             "tasks": data,
@@ -432,11 +434,10 @@ def apitask_list(request):
         })
         
     except Exception as e:
-        print(f"❌ Error in apitask_list: {e}")
+        print(f" Error in apitask_list: {e}")
         import traceback
         traceback.print_exc()
         return Response({"error": str(e)}, status=500)
-
 
 @api_view(['GET', 'PUT', 'DELETE'])
 def apitask_detail(request, pk):
@@ -2036,7 +2037,7 @@ def accept_proposal(request, proposal_id):
         print(f"Freelancer: {proposal.freelancer.name} (ID: {proposal.freelancer.user_id})")
         print(f"Employer making request: {request.user.username}")
 
-        # ✅ CORRECT AUTHORIZATION
+        
         if request.user != task.employer:
             print("✗ Unauthorized - only task employer can accept proposals")
             return Response(
@@ -2070,7 +2071,7 @@ def accept_proposal(request, proposal_id):
         task.save()
         print(f"✓ Task locked and assigned to freelancer")
 
-        # ✅ FIX: Create ACTIVE contract with both parties accepted
+        #  FIX: Create ACTIVE contract with both parties accepted
         from django.utils import timezone
         contract = Contract.objects.create(
             task=task,
@@ -2085,10 +2086,7 @@ def accept_proposal(request, proposal_id):
         print(f"  Contract is_active: {contract.is_active}")
         print(f"  employer_accepted: {contract.employer_accepted}")
         print(f"  freelancer_accepted: {contract.freelancer_accepted}")
-
-        # ✅ Optional: Send notifications
-        # send_notification(proposal.freelancer, "Your proposal has been accepted!")
-        # send_notification(task.employer, "You have accepted a proposal!")
+ 
 
         print(f"\n{'='*60}")
         print("SUCCESS: Proposal accepted and ACTIVE contract created")

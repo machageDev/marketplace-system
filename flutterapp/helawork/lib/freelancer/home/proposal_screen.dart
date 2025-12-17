@@ -169,7 +169,7 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
                   labelText: "Select Task",
                   border: OutlineInputBorder(),
                 ),
-                value: selectedTaskId,
+                initialValue: selectedTaskId,
                 items: taskProvider.availableTasks
                     .map((task) => DropdownMenuItem<int>(
                           value: task['id'],

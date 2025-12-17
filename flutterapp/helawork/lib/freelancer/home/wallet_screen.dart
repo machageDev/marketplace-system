@@ -65,19 +65,13 @@ class WalletScreen extends StatelessWidget {
                 final amount = double.tryParse(amountController.text) ?? 0;
                 Navigator.pop(context);
                 String? url = await wallet.topUp(amount);
-                if (url != null) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => CheckoutPage(paymentUrl: url, onSuccess: wallet.loadWallet),
-                    ),
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Top-up failed")),
-                  );
-                }
-              },
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => CheckoutPage(paymentUrl: url ?? '', onSuccess: wallet.loadWallet),
+                  ),
+                );
+                            },
               child: const Text('Top Up'),
             ),
           ],

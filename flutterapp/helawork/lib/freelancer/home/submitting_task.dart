@@ -506,7 +506,7 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
     
     // Create test data as direct strings
     final String testTitle = 'Test Submission ${DateTime.now().millisecondsSinceEpoch}';
-    final String testDescription = 'This is a test submission from debug button';
+    const String testDescription = 'This is a test submission from debug button';
     
     print('Test title: $testTitle');
     print('Test description: $testDescription');

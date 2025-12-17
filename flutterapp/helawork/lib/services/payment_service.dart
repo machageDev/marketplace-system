@@ -86,12 +86,8 @@ class PaymentService {
       String? token = prefs.getString('user_token');
       
       // Debug: Print token status
-      if (token == null) {
-        print('NO TOKEN FOUND in SharedPreferences');
-      } else {
-        print('TOKEN FOUND: ${token.substring(0, 10)}...');
-      }
-      
+      print('TOKEN FOUND: ${token?.substring(0, 10)}...');
+          
       return token;
     } catch (e) {
       print('Error getting token: $e');

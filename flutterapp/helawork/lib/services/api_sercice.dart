@@ -1,3 +1,4 @@
+import 'package:flutter/src/widgets/framework.dart';
 import 'package:helawork/freelancer/models/contract_model.dart';
 import 'package:helawork/freelancer/models/proposal.dart';
 import 'package:http_parser/http_parser.dart';
@@ -269,15 +270,30 @@ Future<List<dynamic>> getEmployerRatings(int employerId) async {
     return json.decode(response.body);
   }
 
- // In ApiService.dart, update fetchTasks method:
-static Future<List<Map<String, dynamic>>> fetchTasks(dynamic response, {required context}) async {
+static Future<List<Map<String, dynamic>>> fetchTasks(http.Response response, {required BuildContext context}) async {
   try {
-    // ... existing code ...
+    final String? token = await _getUserToken();
+    
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
 
+    print('Fetching tasks from: $taskUrl');
+    
+    final response = await http.get(
+      Uri.parse(taskUrl),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    print('Task API Response Status: ${response.statusCode}');
+    
     if (response.statusCode == 200) {
       final dynamic data = jsonDecode(response.body);
       
-      print('📦 Task API Raw Response:');
+      print('Task API Raw Response:');
       print(data);
       
       if (data is List) {
@@ -289,8 +305,8 @@ static Future<List<Map<String, dynamic>>> fetchTasks(dynamic response, {required
               "title": "No tasks available",
               "description": "Check back later for new tasks",
               "employer": {"username": "System"},
-              "is_taken": false,  // ✅ ADD
-              "has_contract": false,  // ✅ ADD
+              "is_taken": false,  
+              "has_contract": false,  
             }
           ];
         }
@@ -298,12 +314,11 @@ static Future<List<Map<String, dynamic>>> fetchTasks(dynamic response, {required
         return data.map((task) {
           final mappedTask = Map<String, dynamic>.from(task);
           
-          // ✅ NEW: Ensure all new fields exist
           mappedTask['id'] = mappedTask['id'] ?? mappedTask['task_id'] ?? 0;
           mappedTask['is_taken'] = mappedTask['is_taken'] ?? false;
           mappedTask['has_contract'] = mappedTask['has_contract'] ?? false;
           mappedTask['overall_status'] = mappedTask['overall_status'] ?? mappedTask['status'] ?? 'open';
-          mappedTask['assigned_freelancer'] = mappedTask['assigned_freelancer'] ?? mappedTask['assigned_user'] ?? null;
+          mappedTask['assigned_freelancer'] = mappedTask['assigned_freelancer'] ?? mappedTask['assigned_user'];
           
           mappedTask['completed'] = mappedTask['completed'] ?? false;
           mappedTask['employer'] = mappedTask['employer'] ?? {
@@ -311,19 +326,14 @@ static Future<List<Map<String, dynamic>>> fetchTasks(dynamic response, {required
             'company_name': 'Unknown Company'
           };
           
-          // Debug the new fields
-          print('📋 Task ${mappedTask['title']}:');
-          print('  ID: ${mappedTask['id']}');
-          print('  Is Taken: ${mappedTask['is_taken']}');
-          print('  Has Contract: ${mappedTask['has_contract']}');
-          print('  Overall Status: ${mappedTask['overall_status']}');
-          print('  Assigned Freelancer: ${mappedTask['assigned_freelancer']}');
-          
           return mappedTask;
         }).toList();
         
       } else if (data is Map && data.containsKey('error')) {
         throw Exception("API Error: ${data['error']}");
+      } else if (data is Map && data.containsKey('data')) {
+        final List<dynamic> taskList = data['data'];
+        return taskList.map((task) => Map<String, dynamic>.from(task)).toList();
       } else {
         throw Exception("Unexpected response format");
       }
@@ -331,7 +341,7 @@ static Future<List<Map<String, dynamic>>> fetchTasks(dynamic response, {required
       throw Exception("Failed to load tasks: ${response.statusCode} - ${response.body}");
     }
   } catch (e) {
-    print('❌ Error fetching tasks: $e');
+    print('Error fetching tasks: $e');
     rethrow;
   }
 }

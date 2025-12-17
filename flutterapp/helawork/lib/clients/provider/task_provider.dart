@@ -76,7 +76,7 @@ Future<Map<String, dynamic>> createTask({
     notifyListeners();
 
     try {
-      final tasks = await ApiService.fetchTasks(context, context: null);
+      final tasks = await ApiService.fetchTasks(context, context: context);
       _tasks = tasks;
       _isLoading = false;
       notifyListeners();
