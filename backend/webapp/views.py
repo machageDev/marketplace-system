@@ -41,6 +41,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from .authentication import EmployerTokenAuthentication, IsAuthenticated
 from .models import Task, Proposal
+
 @csrf_exempt
 @api_view(['GET', 'POST', 'PUT'])
 @authentication_classes([CustomTokenAuthentication])

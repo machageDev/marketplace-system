@@ -18,6 +18,17 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   bool _isEditing = false;
   bool _isRefreshing = false;
 
+  // Define consistent dark colors
+  static const Color backgroundColor = Color(0xFF0A0A0A); // Very dark background
+  static const Color cardColor = Color(0xFF1A1A1A); // Dark cards
+  static const Color surfaceColor = Color(0xFF252525); // Surface elements
+  static const Color accentColor = Color(0xFF333333); // Subtle accent
+  static const Color borderColor = Color(0xFF444444); // Borders
+  static const Color textColor = Color(0xFFE0E0E0); // Light grey text
+  static const Color secondaryTextColor = Color(0xFF888888); // Medium grey
+  static const Color iconColor = Color(0xFFAAAAAA); // Icon color
+  static const Color highlightColor = Color(0xFF555555); // Highlights/hover
+
   @override
   void initState() {
     super.initState();
@@ -49,7 +60,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     setState(() {
       _isEditing = !_isEditing;
       if (!_isEditing) {
-        _pickedImage = null; // Clear picked image when cancelling edit
+        _pickedImage = null;
       }
     });
   }
@@ -69,7 +80,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F111A),
+      backgroundColor: backgroundColor,
       body: Consumer<UserProfileProvider>(
         builder: (context, provider, child) {
           if (provider.isLoading && provider.profile.isEmpty && !_isEditing) {
@@ -95,11 +106,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const CircularProgressIndicator(color: Colors.orange),
+          CircularProgressIndicator(color: highlightColor),
           const SizedBox(height: 20),
-          const Text(
+          Text(
             'Loading your profile...',
-            style: TextStyle(color: Colors.white, fontSize: 16),
+            style: TextStyle(color: textColor, fontSize: 16),
           ),
         ],
       ),
@@ -113,28 +124,31 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               Icons.error_outline,
-              color: Colors.orange,
+              color: highlightColor,
               size: 64,
             ),
             const SizedBox(height: 16),
             Text(
               provider.errorMessage,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: textColor,
                 fontSize: 16,
               ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
-              icon: const Icon(Icons.add),
-              label: const Text('Create Profile'),
+              icon: Icon(Icons.add, color: textColor),
+              label: Text(
+                'Create Profile',
+                style: TextStyle(color: textColor),
+              ),
               onPressed: () => setState(() => _isEditing = true),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1A73E8),
-                foregroundColor: Colors.white,
+                backgroundColor: accentColor,
+                foregroundColor: textColor,
               ),
             ),
           ],
@@ -145,17 +159,19 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
   Widget _buildEditScreen(UserProfileProvider provider, BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F111A),
+      backgroundColor: backgroundColor,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1E1E2C),
+        backgroundColor: cardColor,
+        elevation: 1,
         title: Text(
           provider.profileExists ? 'Edit Profile' : 'Create Profile',
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(color: textColor, fontWeight: FontWeight.w600),
         ),
+        iconTheme: IconThemeData(color: textColor),
         actions: [
           if (provider.profileExists)
             IconButton(
-              icon: const Icon(Icons.close, color: Colors.white),
+              icon: Icon(Icons.close, color: textColor),
               onPressed: () {
                 setState(() => _isEditing = false);
                 _loadProfile();
@@ -176,14 +192,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   children: [
                     CircleAvatar(
                       radius: 60,
-                      backgroundColor: const Color(0xFF1E1E2C),
+                      backgroundColor: surfaceColor,
                       backgroundImage: _pickedImage != null
                           ? FileImage(_pickedImage!)
                           : (provider.profile['profile_picture'] != null
                               ? NetworkImage(provider.profile['profile_picture'])
                               : null) as ImageProvider?,
                       child: _pickedImage == null && provider.profile['profile_picture'] == null
-                          ? const Icon(Icons.person, size: 60, color: Colors.grey)
+                          ? Icon(Icons.person, size: 60, color: secondaryTextColor)
                           : null,
                     ),
                     Positioned(
@@ -192,25 +208,25 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       child: Container(
                         padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF1A73E8),
+                          color: accentColor,
                           shape: BoxShape.circle,
+                          border: Border.all(color: borderColor),
                         ),
-                        child: const Icon(Icons.edit, size: 20, color: Colors.white),
+                        child: Icon(Icons.edit, size: 20, color: textColor),
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 20),
-              const Text(
+              Text(
                 'Tap to change profile picture',
-                style: TextStyle(color: Colors.grey, fontSize: 14),
+                style: TextStyle(color: secondaryTextColor, fontSize: 14),
               ),
               const SizedBox(height: 30),
 
               // Bio
               _buildTextField(
-                context,
                 label: "Bio",
                 initialValue: provider.profile['bio'] ?? '',
                 onChanged: (val) => provider.setProfileField('bio', val),
@@ -220,7 +236,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
               // Skills
               _buildTextField(
-                context,
                 label: "Skills (comma-separated)",
                 initialValue: provider.profile['skills'] ?? '',
                 onChanged: (val) => provider.setProfileField('skills', val),
@@ -229,7 +244,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
               // Experience
               _buildTextField(
-                context,
                 label: "Experience",
                 initialValue: provider.profile['experience'] ?? '',
                 onChanged: (val) => provider.setProfileField('experience', val),
@@ -239,7 +253,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
               // Portfolio Link
               _buildTextField(
-                context,
                 label: "Portfolio Link",
                 initialValue: provider.profile['portfolio_link'] ?? '',
                 onChanged: (val) => provider.setProfileField('portfolio_link', val),
@@ -248,7 +261,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
               // Hourly Rate
               _buildTextField(
-                context,
                 label: "Hourly Rate (\$ per hour)",
                 initialValue: provider.profile['hourly_rate']?.toString() ?? '',
                 keyboardType: TextInputType.number,
@@ -262,27 +274,29 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 child: ElevatedButton(
                   onPressed: provider.isLoading ? null : () => _saveProfile(context),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1A73E8),
+                    backgroundColor: accentColor,
+                    foregroundColor: textColor,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
+                    side: BorderSide(color: borderColor),
                   ),
                   child: provider.isLoading
-                      ? const SizedBox(
+                      ? SizedBox(
                           height: 24,
                           width: 24,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            valueColor: AlwaysStoppedAnimation<Color>(textColor),
                           ),
                         )
                       : Text(
                           provider.profileExists ? 'UPDATE PROFILE' : 'CREATE PROFILE',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 16,
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
+                            color: textColor,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                 ),
@@ -298,9 +312,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       setState(() => _isEditing = false);
                       _loadProfile();
                     },
-                    child: const Text(
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Text(
                       'CANCEL',
-                      style: TextStyle(color: Colors.grey, fontSize: 16),
+                      style: TextStyle(color: secondaryTextColor, fontSize: 16, fontWeight: FontWeight.w600),
                     ),
                   ),
                 ),
@@ -317,7 +337,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     return CustomScrollView(
       slivers: [
         SliverAppBar(
-          backgroundColor: const Color(0xFF1E1E2C),
+          backgroundColor: cardColor,
           expandedHeight: 200,
           pinned: true,
           floating: true,
@@ -325,15 +345,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             title: Text(
               'My Profile',
               style: TextStyle(
-                color: Colors.white,
+                color: textColor,
                 fontSize: 18,
-                fontWeight: FontWeight.bold,
-                shadows: [
-                  Shadow(
-                    color: Colors.black.withOpacity(0.8),
-                    blurRadius: 10,
-                  ),
-                ],
+                fontWeight: FontWeight.w600,
               ),
             ),
             background: Container(
@@ -342,8 +356,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    const Color(0xFF1A73E8).withOpacity(0.8),
-                    const Color(0xFF0F111A),
+                    surfaceColor.withOpacity(0.9),
+                    backgroundColor,
                   ],
                 ),
               ),
@@ -351,21 +365,31 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    CircleAvatar(
-                      radius: 50,
-                      backgroundColor: Colors.white.withOpacity(0.1),
-                      backgroundImage: profile['profile_picture'] != null
-                          ? NetworkImage(profile['profile_picture'])
-                          : null,
-                      child: profile['profile_picture'] == null
-                          ? const Icon(Icons.person, size: 50, color: Colors.white)
-                          : null,
+                    Container(
+                      width: 100,
+                      height: 100,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: borderColor, width: 2),
+                        color: surfaceColor,
+                      ),
+                      child: ClipOval(
+                        child: profile['profile_picture'] != null
+                            ? Image.network(
+                                profile['profile_picture'],
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Icon(Icons.person, size: 50, color: secondaryTextColor);
+                                },
+                              )
+                            : Icon(Icons.person, size: 50, color: secondaryTextColor),
+                      ),
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      'Freelancer',
+                      'Service Provider',
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.8),
+                        color: textColor.withOpacity(0.8),
                         fontSize: 16,
                       ),
                     ),
@@ -376,21 +400,21 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           ),
           actions: [
             IconButton(
-              icon: const Icon(Icons.edit, color: Colors.white),
+              icon: Icon(Icons.edit, color: textColor),
               onPressed: _toggleEditMode,
               tooltip: 'Edit Profile',
             ),
             IconButton(
               icon: _isRefreshing
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        valueColor: AlwaysStoppedAnimation<Color>(textColor),
                       ),
                     )
-                  : const Icon(Icons.refresh, color: Colors.white),
+                  : Icon(Icons.refresh, color: textColor),
               onPressed: _isRefreshing ? null : _refreshProfile,
               tooltip: 'Refresh',
             ),
@@ -451,8 +475,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     child: Center(
                       child: Text(
                         'Last updated: ${_formatDate(profile['updated_at'])}',
-                        style: const TextStyle(
-                          color: Colors.grey,
+                        style: TextStyle(
+                          color: secondaryTextColor,
                           fontSize: 12,
                         ),
                       ),
@@ -465,16 +489,20 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   child: SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      icon: const Icon(Icons.edit),
-                      label: const Text('Edit Profile'),
+                      icon: Icon(Icons.edit, color: textColor),
+                      label: Text(
+                        'Edit Profile',
+                        style: TextStyle(color: textColor),
+                      ),
                       onPressed: _toggleEditMode,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF1A73E8),
-                        foregroundColor: Colors.white,
+                        backgroundColor: accentColor,
+                        foregroundColor: textColor,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
+                        side: BorderSide(color: borderColor),
                       ),
                     ),
                   ),
@@ -487,8 +515,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     );
   }
 
-  Widget _buildTextField(
-    BuildContext context, {
+  Widget _buildTextField({
     required String label,
     required String initialValue,
     required Function(String) onChanged,
@@ -499,15 +526,23 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       initialValue: initialValue,
       maxLines: maxLines,
       keyboardType: keyboardType,
-      style: const TextStyle(color: Colors.white),
+      style: TextStyle(color: textColor),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: Colors.grey),
+        labelStyle: TextStyle(color: secondaryTextColor),
         filled: true,
-        fillColor: const Color(0xFF1E1E2C),
+        fillColor: surfaceColor,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
+          borderSide: BorderSide(color: borderColor),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: borderColor),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: highlightColor, width: 2),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
@@ -528,23 +563,30 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       margin: const EdgeInsets.only(bottom: 20),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E1E2C),
+        color: cardColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
+        border: Border.all(color: borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, color: const Color(0xFF1A73E8), size: 22),
+              Icon(icon, color: iconColor, size: 22),
               const SizedBox(width: 12),
               Text(
                 title,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: textColor,
                   fontSize: 18,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
@@ -560,13 +602,13 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1A73E8).withOpacity(0.2),
+                    color: surfaceColor,
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFF1A73E8)),
+                    border: Border.all(color: borderColor),
                   ),
                   child: Text(
                     trimmedSkill,
-                    style: const TextStyle(color: Colors.white),
+                    style: TextStyle(color: textColor),
                   ),
                 );
               }).toList(),
@@ -578,8 +620,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               },
               child: Text(
                 content,
-                style: const TextStyle(
-                  color: Color(0xFF1A73E8),
+                style: TextStyle(
+                  color: highlightColor,
                   fontSize: 16,
                   decoration: TextDecoration.underline,
                 ),
@@ -588,7 +630,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           else
             Text(
               content,
-              style: const TextStyle(color: Colors.white70, fontSize: 16, height: 1.5),
+              style: TextStyle(color: textColor.withOpacity(0.8), fontSize: 16, height: 1.5),
             ),
         ],
       ),

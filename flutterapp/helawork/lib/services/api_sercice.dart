@@ -404,62 +404,111 @@ static Future<String?> _getUserToken() async {
 }
 static Future<Map<String, dynamic>?> getUserProfile([String? externalToken]) async {
   try {
+    print(' =========== START getUserProfile ===========');
+    
     // Use the external token if provided, otherwise get from storage
     String? token;
     if (externalToken != null) {
       token = externalToken;
-      print('Using external token for profile');
+      print(' Using external token for profile');
+      print(' Token preview: ${token.length > 20 ? '${token.substring(0, 20)}...' : token}');
     } else {
       token = await _getUserToken();
-      print('Using stored token for profile');
+      print(' Using stored token for profile');
+      print(' Token preview: ${token != null && token.length > 20 ? '${token.substring(0, 20)}...' : token}');
     }
     
-    if (token == null) {
-      print('No authentication token found');
-      return null;
+    if (token == null || token.isEmpty) {
+      print(' No authentication token found');
+      print(' =========== END getUserProfile ===========');
+      return {
+        'success': false,
+        'message': 'No authentication token found',
+      };
     }
 
-    print('Fetching user profile...');
+    print(' Making GET request to: $baseUrl/apiuserprofile');
     
+    final stopwatch = Stopwatch()..start();
     final response = await http.get(
-      Uri.parse('$baseUrl/apiuserprofile'), // Make sure this matches your Django URL
+      Uri.parse('$baseUrl/apiuserprofile'),
       headers: {
         'Authorization': 'Bearer $token', 
         'Accept': 'application/json',
+        'Content-Type': 'application/json',
       },
     );
-
-    print('Profile API Response Status: ${response.statusCode}');
-    print('Profile API Response Body: ${response.body}');
+    stopwatch.stop();
     
-    if (response.statusCode == 200) {
+    print('  Request took: ${stopwatch.elapsedMilliseconds}ms');
+    print(' Response Status Code: ${response.statusCode}');
+    print(' Response Headers: ${response.headers}');
+    
+    // Print response body with formatting
+    print(' Raw Response Body:');
+    print('-' * 50);
+    print(response.body);
+    print('-' * 50);
+    
+    // Try to parse the JSON
+    try {
       final data = json.decode(response.body);
-      print('User profile loaded successfully');
+      print(' JSON parsed successfully');
+      print(' Response data type: ${data.runtimeType}');
       
-      // Return the full response including success, message, and profile
+      if (data is Map) {
+        print('  Response keys: ${data.keys.toList()}');
+        
+        // Check for success flag
+        if (data.containsKey('success')) {
+          print(' Has "success" key: ${data['success']}');
+        } else {
+          print(' Missing "success" key');
+        }
+        
+        // Check for profile data
+        if (data.containsKey('profile')) {
+          final profile = data['profile'];
+          print(' Has "profile" key');
+          print(' Profile type: ${profile.runtimeType}');
+          
+          if (profile == null) {
+            print('  Profile is null');
+          } else if (profile is Map) {
+            print('  Profile keys: ${profile.keys.toList()}');
+            print(' Profile data: $profile');
+          } else if (profile is String) {
+            print(' Profile is a string: $profile');
+          }
+        } else {
+          print(' Missing "profile" key');
+        }
+        
+        // Check for message
+        if (data.containsKey('message')) {
+          print(' Message: ${data['message']}');
+        }
+      } else if (data is List) {
+        print(' Response is a List with ${data.length} items');
+      }
+      
+      print(' =========== END getUserProfile ===========');
       return Map<String, dynamic>.from(data);
-    } else if (response.statusCode == 401) {
-      print('Unauthorized (401) - Token may be invalid or expired');
+      
+    } catch (e) {
+      print(' JSON parsing error: $e');
+      print(' Response body that failed to parse: ${response.body}');
+      print(' =========== END getUserProfile ===========');
       return {
         'success': false,
-        'message': 'Unauthorized - Please login again',
-      };
-    } else if (response.statusCode == 404) {
-      print('Profile not found (404)');
-      return {
-        'success': false,
-        'message': 'Profile not found',
-        'profile': null
-      };
-    } else {
-      print('Failed to load user profile: ${response.statusCode}');
-      return {
-        'success': false,
-        'message': 'Failed to load profile',
+        'message': 'Failed to parse response: $e',
+        'raw_response': response.body,
       };
     }
+    
   } catch (e) {
-    print('Network error loading user profile: $e');
+    print(' Network/HTTP error: $e');
+    print(' =========== END getUserProfile ===========');
     return {
       'success': false,
       'message': 'Network error: $e',
