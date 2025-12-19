@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:helawork/clients/home/client_proposal_view_screen.dart';
 import 'package:helawork/clients/models/client_proposal.dart';
+
 import 'package:helawork/clients/provider/client_proposal_provider.dart';
 import 'package:provider/provider.dart';
 
@@ -16,7 +17,7 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ProposalsProvider>().loadProposals();
+      context.read<ClientProposalProvider>().loadProposals();
     });
   }
 
@@ -33,15 +34,14 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
         foregroundColor: whiteColor,
         centerTitle: true,
         elevation: 1,
-        automaticallyImplyLeading: false, // This removes the back arrow
       ),
-      body: Consumer<ProposalsProvider>(
-        builder: (context, proposalsProvider, child) {
-          if (proposalsProvider.isLoading && proposalsProvider.proposals.isEmpty) {
+      body: Consumer<ClientProposalProvider>(
+        builder: (context, provider, child) {
+          if (provider.isLoading && provider.proposals.isEmpty) {
             return const Center(child: CircularProgressIndicator(color: blueColor));
           }
 
-          if (proposalsProvider.errorMessage.isNotEmpty) {
+          if (provider.errorMessage.isNotEmpty) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -56,7 +56,7 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 32.0),
                     child: Text(
-                      proposalsProvider.errorMessage,
+                      provider.errorMessage,
                       textAlign: TextAlign.center,
                       style: const TextStyle(color: Colors.grey),
                     ),
@@ -67,7 +67,7 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
                       backgroundColor: blueColor,
                       foregroundColor: whiteColor,
                     ),
-                    onPressed: () => proposalsProvider.loadProposals(),
+                    onPressed: () => provider.loadProposals(),
                     child: const Text('Retry'),
                   ),
                 ],
@@ -75,7 +75,7 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
             );
           }
 
-          final proposals = proposalsProvider.proposals;
+          final proposals = provider.proposals;
 
           if (proposals.isEmpty) {
             return _buildEmptyState();
@@ -85,7 +85,7 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
             padding: const EdgeInsets.all(16.0),
             child: RefreshIndicator(
               color: blueColor,
-              onRefresh: () => proposalsProvider.loadProposals(),
+              onRefresh: () => provider.loadProposals(),
               child: ListView.builder(
                 itemCount: proposals.length,
                 itemBuilder: (context, index) {
@@ -99,7 +99,7 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
     );
   }
 
-  Widget _buildProposalCard(Proposal proposal, BuildContext context) {
+  Widget _buildProposalCard(ClientProposal proposal, BuildContext context) {
     return Card(
       elevation: 4,
       shadowColor: Colors.blue.withOpacity(0.2),
@@ -117,7 +117,7 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    proposal.task.title,
+                    proposal.taskTitle,
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
@@ -130,18 +130,44 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
             ),
             const SizedBox(height: 10),
 
-            Text(
-              'By: ${proposal.freelancer.name}',
-              style: const TextStyle(
-                color: Colors.black87,
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-              ),
+            // Freelancer info
+            Row(
+              children: [
+                const Icon(Icons.person, size: 16, color: Colors.grey),
+                const SizedBox(width: 6),
+                Text(
+                  'Freelancer: ${proposal.freelancerName}',
+                  style: const TextStyle(
+                    color: Colors.black87,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 6),
-            Text(
-              'Bid: Ksh ${proposal.bidAmount.toStringAsFixed(2)} • ${proposal.estimatedDays} days',
-              style: const TextStyle(color: Colors.grey, fontSize: 14),
+            const SizedBox(height: 8),
+
+            // Bid and timeline
+            Row(
+              children: [
+                const Icon(Icons.attach_money, size: 16, color: Colors.grey),
+                const SizedBox(width: 6),
+                Text(
+                  'Bid: Ksh ${proposal.bidAmount.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    color: Colors.black87,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                const Icon(Icons.schedule, size: 16, color: Colors.grey),
+                const SizedBox(width: 6),
+                Text(
+                  '${proposal.estimatedDays} days',
+                  style: const TextStyle(color: Colors.grey, fontSize: 14),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
 
@@ -167,9 +193,9 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      proposal.coverLetter,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
+                      proposal.coverLetter.length > 150
+                          ? '${proposal.coverLetter.substring(0, 150)}...'
+                          : proposal.coverLetter,
                       style: const TextStyle(color: Colors.black87, height: 1.5),
                     ),
                   ],
@@ -276,12 +302,23 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
     );
   }
 
-  void _showAcceptConfirmation(BuildContext context, Proposal proposal) {
+  void _showAcceptConfirmation(BuildContext context, ClientProposal proposal) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Accept Proposal'),
-        content: const Text('Are you sure you want to accept this proposal?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Accept proposal from ${proposal.freelancerName}?'),
+            const SizedBox(height: 8),
+            Text(
+              'Bid: Ksh ${proposal.bidAmount.toStringAsFixed(2)}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -291,10 +328,22 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
             onPressed: () async {
               Navigator.pop(context);
-              final success = await context.read<ProposalsProvider>().acceptProposal(proposal.id);
+              final success = await context.read<ClientProposalProvider>().acceptProposal(proposal.id);
               if (success && context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Proposal accepted successfully')),
+                  const SnackBar(
+                    content: Text('Proposal accepted successfully'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+                // Refresh the list
+                context.read<ClientProposalProvider>().loadProposals();
+              } else if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(context.read<ClientProposalProvider>().errorMessage),
+                    backgroundColor: Colors.red,
+                  ),
                 );
               }
             },
@@ -305,7 +354,7 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
     );
   }
 
-  void _viewProposalDetails(BuildContext context, Proposal proposal) {
+  void _viewProposalDetails(BuildContext context, ClientProposal proposal) {
     Navigator.push(
       context,
       MaterialPageRoute(

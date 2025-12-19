@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:helawork/clients/provider/client_profile_provider.dart';
-import 'package:helawork/clients/screens/edit_profile_screen.dart'; // You'll need to create this
+import 'package:helawork/clients/screens/edit_profile_screen.dart'; 
 
 class ClientProfileScreen extends StatefulWidget {
   final int employerId;
@@ -34,13 +34,14 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
     setState(() => _isRefreshing = false);
   }
 
-  void _navigateToEditScreen(BuildContext context) {
+  void _navigateToEditScreen(BuildContext context, bool isNewProfile) {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => EditProfileScreen(
           employerId: widget.employerId,
           currentProfile: Provider.of<ClientProfileProvider>(context).profile,
+          isNewProfile: isNewProfile,
         ),
       ),
     ).then((value) {
@@ -56,22 +57,22 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
     final provider = Provider.of<ClientProfileProvider>(context);
     const themeBlue = Color(0xFF1976D2);
     const themeWhite = Colors.white;
-    final themeGrey = Colors.grey[200];
 
     return Scaffold(
-      backgroundColor: themeGrey,
+      backgroundColor: themeWhite,
       appBar: AppBar(
-        backgroundColor: themeBlue,
+        backgroundColor: themeWhite,
+        elevation: 0,
         title: const Text(
-          "My Profile",
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+          "Profile",
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.w600),
         ),
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: const IconThemeData(color: Colors.black),
         actions: [
           if (!provider.isLoading && provider.profile != null)
             IconButton(
               icon: const Icon(Icons.edit, size: 22),
-              onPressed: () => _navigateToEditScreen(context),
+              onPressed: () => _navigateToEditScreen(context, false),
               tooltip: 'Edit Profile',
             ),
           IconButton(
@@ -81,10 +82,10 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                     height: 20,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF1976D2)),
                     ),
                   )
-                : const Icon(Icons.refresh, size: 22),
+                : const Icon(Icons.refresh, size: 22, color: Colors.black),
             onPressed: _isRefreshing ? null : _refreshProfile,
             tooltip: 'Refresh',
           ),
@@ -96,13 +97,25 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
 
   Widget _buildBody(
       ClientProfileProvider provider, Color themeBlue, Color themeWhite) {
-    if (provider.isLoading && provider.profile == null) {
+    if (provider.isLoading && provider.profile == null && !provider.hasError) {
       return const Center(
-        child: CircularProgressIndicator(),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF1976D2)),
+            ),
+            SizedBox(height: 16),
+            Text(
+              'Loading profile...',
+              style: TextStyle(color: Colors.grey),
+            ),
+          ],
+        ),
       );
     }
 
-    if (provider.errorMessage != null && provider.profile == null) {
+    if (provider.hasError && provider.errorMessage != null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(20.0),
@@ -139,197 +152,124 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
       );
     }
 
+    // Profile doesn't exist - show create profile UI (like Instagram's empty state)
     if (provider.profile == null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.person_outline,
-              color: themeBlue,
-              size: 72,
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'No Profile Found',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
-            ),
-            const SizedBox(height: 8),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 40.0),
-              child: Text(
-                'You need to create a profile to continue',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey),
-              ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.add),
-              label: const Text('Create Profile'),
-              onPressed: () => _navigateToEditScreen(context),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: themeBlue,
-                foregroundColor: themeWhite,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              ),
-            ),
-          ],
-        ),
-      );
+      return _buildCreateProfileUI(themeBlue, themeWhite);
     }
 
+    // Profile exists - show profile UI
+    return _buildProfileUI(provider, themeBlue, themeWhite);
+  }
+
+  Widget _buildCreateProfileUI(Color themeBlue, Color themeWhite) {
     return RefreshIndicator(
       onRefresh: _refreshProfile,
       backgroundColor: themeWhite,
       color: themeBlue,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * 0.8,
           child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Profile Card
-              Card(
-                elevation: 4,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+              // Instagram-like empty state illustration
+              Container(
+                width: 150,
+                height: 150,
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.grey[300]!, width: 2),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Header with edit button
-                      Row(
-                        children: [
-                          CircleAvatar(
-                            backgroundColor: themeBlue.withOpacity(0.1),
-                            radius: 30,
-                            child: Icon(
-                              Icons.business,
-                              color: themeBlue,
-                              size: 32,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  provider.profile!['company_name'] ?? 'No Name',
-                                  style: TextStyle(
-                                    color: themeBlue,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 20,
-                                  ),
-                                ),
-                                if (provider.profile!['business_type'] != null)
-                                  const SizedBox(height: 4),
-                                if (provider.profile!['business_type'] != null)
-                                  Text(
-                                    provider.profile!['business_type'],
-                                    style: TextStyle(
-                                      color: Colors.grey[600],
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-                      
-                      // Contact Information Section
-                      _buildSectionTitle('Contact Information', themeBlue),
-                      const SizedBox(height: 12),
-                      _buildInfoRow(
-                        Icons.email,
-                        'Email',
-                        provider.profile!['contact_email'] ?? 'Not provided',
-                      ),
-                      _buildInfoRow(
-                        Icons.phone,
-                        'Phone',
-                        provider.profile!['phone_number'] ?? 'Not provided',
-                      ),
-                      _buildInfoRow(
-                        Icons.location_on,
-                        'Address',
-                        provider.profile!['address'] ?? 'Not provided',
-                      ),
-                      
-                      // Business Information Section
-                      if (provider.profile!['website'] != null || 
-                          provider.profile!['tax_id'] != null)
-                        Column(
-                          children: [
-                            const SizedBox(height: 24),
-                            _buildSectionTitle('Business Information', themeBlue),
-                            const SizedBox(height: 12),
-                            if (provider.profile!['website'] != null)
-                              _buildInfoRow(
-                                Icons.language,
-                                'Website',
-                                provider.profile!['website'],
-                              ),
-                            if (provider.profile!['tax_id'] != null)
-                              _buildInfoRow(
-                                Icons.badge,
-                                'Tax ID',
-                                provider.profile!['tax_id'],
-                              ),
-                            if (provider.profile!['industry'] != null)
-                              _buildInfoRow(
-                                Icons.category,
-                                'Industry',
-                                provider.profile!['industry'],
-                              ),
-                          ],
-                        ),
-                      
-                      // Additional Information
-                      if (provider.profile!['description'] != null)
-                        Column(
-                          children: [
-                            const SizedBox(height: 24),
-                            _buildSectionTitle('About', themeBlue),
-                            const SizedBox(height: 12),
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.grey[50],
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.grey[200]!),
-                              ),
-                              child: Text(
-                                provider.profile!['description'],
-                                style: const TextStyle(
-                                  color: Colors.black87,
-                                  fontSize: 14,
-                                  height: 1.5,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                    ],
+                child: const Icon(
+                  Icons.person_add,
+                  size: 70,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 32),
+              const Text(
+                'Complete Your Profile',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 40.0),
+                child: Text(
+                  'Create your profile to showcase your business and connect with freelancers',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: Colors.grey,
+                    height: 1.5,
                   ),
                 ),
               ),
-              
-              // Last Updated Info
+              const SizedBox(height: 32),
+              // Create Profile Button
               Padding(
-                padding: const EdgeInsets.only(top: 16.0),
+                padding: const EdgeInsets.symmetric(horizontal: 40),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: () => _navigateToEditScreen(context, true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: themeBlue,
+                      foregroundColor: themeWhite,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(25),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.add_circle_outline, size: 22),
+                        SizedBox(width: 10),
+                        Text(
+                          'Create Profile',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Learn more link
+              TextButton(
+                onPressed: () {
+                  // Show info about why profile is important
+                  showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Why Create a Profile?'),
+                      content: const Text(
+                        'A complete profile helps freelancers understand your business needs better. It increases trust and helps you find the right talent for your projects.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Got it'),
+                        ),
+                      ],
+                    ),
+                  );
+                },
                 child: Text(
-                  provider.profile!['updated_at'] != null
-                      ? 'Last updated: ${_formatDate(provider.profile!['updated_at'])}'
-                      : '',
+                  'Why is this important?',
                   style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 12,
+                    color: themeBlue,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ),
@@ -340,48 +280,266 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
     );
   }
 
-  Widget _buildSectionTitle(String title, Color color) {
-    return Row(
-      children: [
-        Container(
-          height: 2,
-          width: 20,
-          color: color,
+  Widget _buildProfileUI(ClientProfileProvider provider, Color themeBlue, Color themeWhite) {
+    return RefreshIndicator(
+      onRefresh: _refreshProfile,
+      backgroundColor: themeWhite,
+      color: themeBlue,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Profile Header (Instagram-like)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+              color: themeWhite,
+              child: Column(
+                children: [
+                  // Avatar and Stats
+                  Row(
+                    children: [
+                      // Profile Picture
+                      Container(
+                        width: 100,
+                        height: 100,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.grey[300]!, width: 2),
+                          color: themeBlue.withOpacity(0.1),
+                        ),
+                        child: Center(
+                          child: Icon(
+                            Icons.business,
+                            size: 50,
+                            color: themeBlue,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 24),
+                      // Stats (Instagram-style)
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              provider.profile!['company_name'] ?? 'Your Business',
+                              style: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            if (provider.profile!['business_type'] != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  provider.profile!['business_type'],
+                                  style: TextStyle(
+                                    color: Colors.grey[600],
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Edit Profile Button (Instagram-style)
+                  SizedBox(
+                    width: double.infinity,
+                    height: 36,
+                    child: OutlinedButton(
+                      onPressed: () => _navigateToEditScreen(context, false),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: Colors.grey[300]!),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: const Text(
+                        'Edit Profile',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            
+            // Divider
+            Container(height: 8, color: Colors.grey[100]),
+            
+            // Profile Details
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // About Section
+                  if (provider.profile!['description'] != null)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'About',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          provider.profile!['description'],
+                          style: const TextStyle(
+                            fontSize: 15,
+                            color: Colors.black87,
+                            height: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+                    ),
+                  
+                  // Contact Information
+                  const Text(
+                    'Contact Information',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Contact Cards
+                  _buildContactCard(
+                    icon: Icons.email_outlined,
+                    title: 'Email',
+                    value: provider.profile!['contact_email'] ?? 'Not provided',
+                  ),
+                  const SizedBox(height: 12),
+                  _buildContactCard(
+                    icon: Icons.phone_outlined,
+                    title: 'Phone',
+                    value: provider.profile!['phone_number'] ?? 'Not provided',
+                  ),
+                  const SizedBox(height: 12),
+                  _buildContactCard(
+                    icon: Icons.location_on_outlined,
+                    title: 'Address',
+                    value: provider.profile!['address'] ?? 'Not provided',
+                  ),
+                  
+                  // Business Information
+                  if (provider.profile!['website'] != null || 
+                      provider.profile!['tax_id'] != null)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 24),
+                        const Text(
+                          'Business Details',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        
+                        if (provider.profile!['website'] != null)
+                          _buildContactCard(
+                            icon: Icons.language_outlined,
+                            title: 'Website',
+                            value: provider.profile!['website'],
+                          ),
+                        if (provider.profile!['website'] != null) const SizedBox(height: 12),
+                        
+                        if (provider.profile!['tax_id'] != null)
+                          _buildContactCard(
+                            icon: Icons.badge_outlined,
+                            title: 'Tax ID',
+                            value: provider.profile!['tax_id'],
+                          ),
+                        if (provider.profile!['tax_id'] != null) const SizedBox(height: 12),
+                        
+                        if (provider.profile!['industry'] != null)
+                          _buildContactCard(
+                            icon: Icons.category_outlined,
+                            title: 'Industry',
+                            value: provider.profile!['industry'],
+                          ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+            
+            // Last Updated
+            if (provider.profile!['updated_at'] != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Text(
+                  'Profile updated ${_formatDate(provider.profile!['updated_at'])}',
+                  style: TextStyle(
+                    color: Colors.grey[500],
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            
+            const SizedBox(height: 32),
+          ],
         ),
-        const SizedBox(width: 8),
-        Text(
-          title,
-          style: TextStyle(
-            color: color,
-            fontWeight: FontWeight.w600,
-            fontSize: 16,
-          ),
-        ),
-      ],
+      ),
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10.0),
+  Widget _buildContactCard({
+    required IconData icon,
+    required String title,
+    required String value,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            icon,
-            color: const Color(0xFF1976D2).withOpacity(0.7),
-            size: 20,
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: const Color(0xFF1976D2).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              icon,
+              color: const Color(0xFF1976D2),
+              size: 22,
+            ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  label,
+                  title,
                   style: TextStyle(
                     color: Colors.grey[600],
-                    fontSize: 12,
+                    fontSize: 13,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -389,9 +547,9 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                 Text(
                   value,
                   style: const TextStyle(
-                    color: Colors.black87,
                     fontSize: 15,
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
                   ),
                 ),
               ],
@@ -405,7 +563,22 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
   String _formatDate(String dateString) {
     try {
       final date = DateTime.parse(dateString);
-      return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+      final now = DateTime.now();
+      final difference = now.difference(date);
+      
+      if (difference.inDays == 0) {
+        return 'today';
+      } else if (difference.inDays == 1) {
+        return 'yesterday';
+      } else if (difference.inDays < 7) {
+        return '${difference.inDays} days ago';
+      } else if (difference.inDays < 30) {
+        return '${(difference.inDays / 7).floor()} weeks ago';
+      } else if (difference.inDays < 365) {
+        return '${(difference.inDays / 30).floor()} months ago';
+      } else {
+        return '${(difference.inDays / 365).floor()} years ago';
+      }
     } catch (e) {
       return dateString;
     }

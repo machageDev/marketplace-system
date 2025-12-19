@@ -41,9 +41,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from .authentication import EmployerTokenAuthentication, IsAuthenticated
 from .models import Task, Proposal
-
 @csrf_exempt
-@api_view(['POST', 'PUT'])
+@api_view(['GET', 'POST', 'PUT'])
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def apiuserprofile(request):
@@ -53,18 +52,62 @@ def apiuserprofile(request):
     print(f"Authenticated User: {request.user.name} (ID: {request.user.user_id})")
     print(f"Method: {request.method}")
     print(f"Content-Type: {request.content_type}")
-    print(f"Request data: {request.data}")
-    print(f"Request FILES: {request.FILES}")
     
-    if request.method == 'POST':
+    # GET - Retrieve user profile
+    if request.method == 'GET':
+        print("GET - Fetching user profile...")
+        try:
+            profile = UserProfile.objects.get(user=request.user)
+            print(f"Profile found: ID={profile.profile_id}")
+            
+            # Handle profile picture URL
+            profile_data = UserProfileSerializer(profile).data
+            
+            # If profile has a profile picture, construct full URL
+            if profile.profile_picture:
+                profile_data['profile_picture'] = request.build_absolute_uri(profile.profile_picture.url)
+                print(f"Profile picture URL: {profile_data['profile_picture']}")
+            
+            return Response({
+                "success": True,
+                "message": "Profile retrieved successfully",
+                "profile": profile_data
+            }, status=status.HTTP_200_OK)
+            
+        except UserProfile.DoesNotExist:
+            print("No profile found for user")
+            return Response({
+                "success": False,
+                "message": "Profile not found. Create a profile first.",
+                "profile": None
+            }, status=status.HTTP_404_NOT_FOUND)
+            
+        except Exception as e:
+            print(f"Error fetching profile: {e}")
+            return Response({
+                "success": False,
+                "message": f"Error fetching profile: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    # POST - Create new profile
+    elif request.method == 'POST':
         print("POST - Creating new profile...")
+        print(f"Request data: {request.data}")
+        print(f"Request FILES: {request.FILES}")
+        
         serializer = UserProfileSerializer(data=request.data)
         if serializer.is_valid():
-            profile = serializer.save(user=request.user)  
+            profile = serializer.save(user=request.user)
+            
+            # Handle profile picture URL in response
+            profile_data = UserProfileSerializer(profile).data
+            if profile.profile_picture:
+                profile_data['profile_picture'] = request.build_absolute_uri(profile.profile_picture.url)
+            
             return Response({
                 "success": True,
                 "message": "Profile created successfully",
-                "profile": UserProfileSerializer(profile).data
+                "profile": profile_data
             }, status=status.HTTP_201_CREATED)
         print("POST errors:", serializer.errors)
         return Response({
@@ -72,8 +115,11 @@ def apiuserprofile(request):
             "errors": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
 
+    # PUT - Update existing profile or create if doesn't exist
     elif request.method == 'PUT':
         print("PUT - Updating profile...")
+        print(f"Request data: {request.data}")
+        print(f"Request FILES: {request.FILES}")
         
         try:
             # Try to get existing profile
@@ -85,10 +131,16 @@ def apiuserprofile(request):
             if serializer.is_valid():
                 updated_profile = serializer.save()
                 print("Profile updated successfully")
+                
+                # Handle profile picture URL in response
+                profile_data = UserProfileSerializer(updated_profile).data
+                if updated_profile.profile_picture:
+                    profile_data['profile_picture'] = request.build_absolute_uri(updated_profile.profile_picture.url)
+                
                 return Response({
                     "success": True,
                     "message": "Profile updated successfully",
-                    "profile": UserProfileSerializer(updated_profile).data
+                    "profile": profile_data
                 }, status=status.HTTP_200_OK)
             print("PUT validation errors:", serializer.errors)
             return Response({
@@ -103,10 +155,16 @@ def apiuserprofile(request):
             if serializer.is_valid():
                 new_profile = serializer.save(user=request.user)
                 print("New profile created successfully via PUT")
+                
+                # Handle profile picture URL in response
+                profile_data = UserProfileSerializer(new_profile).data
+                if new_profile.profile_picture:
+                    profile_data['profile_picture'] = request.build_absolute_uri(new_profile.profile_picture.url)
+                
                 return Response({
                     "success": True,
                     "message": "Profile created successfully",
-                    "profile": UserProfileSerializer(new_profile).data
+                    "profile": profile_data
                 }, status=status.HTTP_201_CREATED)
             print("CREATE validation errors:", serializer.errors)
             return Response({

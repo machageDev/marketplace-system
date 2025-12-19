@@ -1,12 +1,13 @@
+// client_proposal_view_screen.dart - CORRECTED VERSION
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:helawork/clients/models/client_proposal.dart';
-import 'package:helawork/clients/provider/client_proposal_provider.dart' as client_proposal;
+import 'package:helawork/clients/provider/client_proposal_provider.dart';
 import 'package:flutter/services.dart'; 
 import 'package:url_launcher/url_launcher.dart'; 
 
 class ProposalViewScreen extends StatefulWidget {
-  final Proposal proposal;
+  final ClientProposal proposal; // Changed to ClientProposal
 
   const ProposalViewScreen({super.key, required this.proposal});
 
@@ -17,9 +18,7 @@ class ProposalViewScreen extends StatefulWidget {
 class _ProposalViewScreenState extends State<ProposalViewScreen> {
   bool _isProcessing = false;
 
-  // Download/Copy cover letter functionality
   void _downloadCoverLetter() {
-    // Show options for downloading/copying
     showModalBottomSheet(
       context: context,
       builder: (context) => Container(
@@ -37,7 +36,6 @@ class _ProposalViewScreenState extends State<ProposalViewScreen> {
             ),
             const SizedBox(height: 16),
             
-            // Copy to Clipboard
             ListTile(
               leading: const Icon(Icons.copy, color: Colors.blue),
               title: const Text('Copy to Clipboard'),
@@ -48,7 +46,6 @@ class _ProposalViewScreenState extends State<ProposalViewScreen> {
               },
             ),
             
-            // Save as Text File
             ListTile(
               leading: const Icon(Icons.save_alt, color: Colors.green),
               title: const Text('Save as Text File'),
@@ -59,7 +56,6 @@ class _ProposalViewScreenState extends State<ProposalViewScreen> {
               },
             ),
             
-            // Share
             ListTile(
               leading: const Icon(Icons.share, color: Colors.orange),
               title: const Text('Share'),
@@ -96,16 +92,15 @@ class _ProposalViewScreenState extends State<ProposalViewScreen> {
 
   void _saveAsTextFile() async {
     try {
-      // Create file content with proposal details
       final fileContent = '''
 PROPOSAL COVER LETTER
 =====================
 
-Task: ${widget.proposal.task.title}
-Freelancer: ${widget.proposal.freelancer.name}
+Task: ${widget.proposal.taskTitle}
+Freelancer: ${widget.proposal.freelancerName}
 Proposed Amount: Ksh ${widget.proposal.bidAmount.toStringAsFixed(2)}
 Estimated Days: ${widget.proposal.estimatedDays} days
-Submitted: ${widget.proposal.submittedDate}
+Submitted: ${_formatDate(widget.proposal.submittedAt)}
 
 COVER LETTER:
 ${widget.proposal.coverLetter}
@@ -114,8 +109,6 @@ ${widget.proposal.coverLetter}
 Generated from HelaWork App
 ''';
 
-      // Show save dialog or use file_saver package in real implementation
-      // For now, copy to clipboard as fallback
       await Clipboard.setData(ClipboardData(text: fileContent));
       
       ScaffoldMessenger.of(context).showSnackBar(
@@ -136,9 +129,9 @@ Generated from HelaWork App
 
   void _shareCoverLetter() async {
     final shareText = '''
-Check out this proposal from ${widget.proposal.freelancer.name}:
+Check out this proposal from ${widget.proposal.freelancerName}:
 
-Task: ${widget.proposal.task.title}
+Task: ${widget.proposal.taskTitle}
 Amount: Ksh ${widget.proposal.bidAmount.toStringAsFixed(2)}
 Timeline: ${widget.proposal.estimatedDays} days
 
@@ -149,11 +142,10 @@ ${widget.proposal.coverLetter.length > 200 ?
 ''';
 
     try {
-      // For web/mobile sharing
       final Uri emailUri = Uri(
         scheme: 'mailto',
         queryParameters: {
-          'subject': 'Proposal from ${widget.proposal.freelancer.name} - ${widget.proposal.task.title}',
+          'subject': 'Proposal from ${widget.proposal.freelancerName} - ${widget.proposal.taskTitle}',
           'body': shareText,
         },
       );
@@ -161,7 +153,6 @@ ${widget.proposal.coverLetter.length > 200 ?
       if (await canLaunchUrl(emailUri)) {
         await launchUrl(emailUri);
       } else {
-        // Fallback to clipboard
         await Clipboard.setData(ClipboardData(text: shareText));
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -189,7 +180,6 @@ ${widget.proposal.coverLetter.length > 200 ?
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         actions: [
-          
           IconButton(
             icon: const Icon(Icons.download),
             onPressed: _downloadCoverLetter,
@@ -202,9 +192,9 @@ ${widget.proposal.coverLetter.length > 200 ?
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Task title
+            // Task title - FIXED: using taskTitle not task.title
             Text(
-              widget.proposal.task.title,
+              widget.proposal.taskTitle,
               style: const TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
@@ -213,15 +203,15 @@ ${widget.proposal.coverLetter.length > 200 ?
             ),
             const SizedBox(height: 10),
 
-            // Freelancer info
+            // Freelancer info - FIXED: using freelancerName
             Row(
               children: [
                 CircleAvatar(
                   radius: 28,
                   backgroundColor: Colors.blue,
                   child: Text(
-                    widget.proposal.freelancer.name.isNotEmpty
-                        ? widget.proposal.freelancer.name[0].toUpperCase()
+                    widget.proposal.freelancerName.isNotEmpty
+                        ? widget.proposal.freelancerName[0].toUpperCase()
                         : 'F',
                     style: const TextStyle(
                       fontSize: 22,
@@ -236,7 +226,7 @@ ${widget.proposal.coverLetter.length > 200 ?
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        widget.proposal.freelancer.name,
+                        widget.proposal.freelancerName,
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w600,
@@ -244,16 +234,12 @@ ${widget.proposal.coverLetter.length > 200 ?
                         ),
                       ),
                       const SizedBox(height: 6),
-                      const Row(
-                        children: [
-                          Icon(Icons.star, color: Colors.amber, size: 18),
-                          Icon(Icons.star, color: Colors.amber, size: 18),
-                          Icon(Icons.star, color: Colors.amber, size: 18),
-                          Icon(Icons.star_half, color: Colors.amber, size: 18),
-                          SizedBox(width: 4),
-                          Text('(4.5)', style: TextStyle(color: Colors.grey)),
-                        ],
-                      ),
+                      // Email if available
+                      if (widget.proposal.freelancerEmail.isNotEmpty)
+                        Text(
+                          widget.proposal.freelancerEmail,
+                          style: const TextStyle(color: Colors.grey, fontSize: 14),
+                        ),
                     ],
                   ),
                 ),
@@ -265,10 +251,14 @@ ${widget.proposal.coverLetter.length > 200 ?
             _buildStatusBadge(widget.proposal.status),
             const SizedBox(height: 20),
 
-            // Proposal details box
+            // Proposal details box - FIXED FIELDS
             _buildDetailsBox(
               label: 'Proposed Amount',
               value: 'Ksh ${widget.proposal.bidAmount.toStringAsFixed(2)}',
+            ),
+            _buildDetailsBox(
+              label: 'Task Budget',
+              value: 'Ksh ${widget.proposal.budget.toStringAsFixed(2)}',
             ),
             _buildDetailsBox(
               label: 'Estimated Days',
@@ -276,11 +266,11 @@ ${widget.proposal.coverLetter.length > 200 ?
             ),
             _buildDetailsBox(
               label: 'Submitted On',
-              value: widget.proposal.submittedDate,
+              value: _formatDate(widget.proposal.submittedAt),
             ),
             const SizedBox(height: 20),
 
-            // Cover Letter Section with Download Button
+            // Cover Letter Section
             Row(
               children: [
                 const Text(
@@ -292,7 +282,6 @@ ${widget.proposal.coverLetter.length > 200 ?
                   ),
                 ),
                 const Spacer(),
-                // Download button
                 ElevatedButton.icon(
                   onPressed: _downloadCoverLetter,
                   style: ElevatedButton.styleFrom(
@@ -319,30 +308,27 @@ ${widget.proposal.coverLetter.length > 200 ?
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Quick actions
-                  if (widget.proposal.coverLetter.isNotEmpty)
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.copy, size: 18),
-                          onPressed: _copyToClipboard,
-                          tooltip: 'Copy to clipboard',
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          icon: const Icon(Icons.share, size: 18),
-                          onPressed: _shareCoverLetter,
-                          tooltip: 'Share',
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                        ),
-                      ],
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.copy, size: 18),
+                        onPressed: _copyToClipboard,
+                        tooltip: 'Copy to clipboard',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(Icons.share, size: 18),
+                        onPressed: _shareCoverLetter,
+                        tooltip: 'Share',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  ),
                   
-                  // Cover letter text
                   Text(
                     widget.proposal.coverLetter.isNotEmpty
                         ? widget.proposal.coverLetter
@@ -358,7 +344,7 @@ ${widget.proposal.coverLetter.length > 200 ?
             ),
             const SizedBox(height: 30),
 
-            // Action Buttons - Only show if proposal is pending
+            // Action Buttons
             if (widget.proposal.status.toLowerCase() == 'pending') ...[
               _isProcessing
                   ? const Center(child: CircularProgressIndicator())
@@ -379,7 +365,6 @@ ${widget.proposal.coverLetter.length > 200 ?
                     ),
             ],
 
-            // Show message if already processed
             if (widget.proposal.status.toLowerCase() != 'pending') ...[
               Center(
                 child: Container(
@@ -411,7 +396,7 @@ ${widget.proposal.coverLetter.length > 200 ?
     });
 
     try {
-      final proposalProvider = Provider.of<client_proposal.ProposalsProvider>(
+      final proposalProvider = Provider.of<ClientProposalProvider>(
         context,
         listen: false,
       );
@@ -476,7 +461,7 @@ ${widget.proposal.coverLetter.length > 200 ?
     });
 
     try {
-      final proposalProvider = Provider.of<client_proposal.ProposalsProvider>(
+      final proposalProvider = Provider.of<ClientProposalProvider>(
         context,
         listen: false,
       );
@@ -600,5 +585,9 @@ ${widget.proposal.coverLetter.length > 200 ?
       ),
       child: Text(label, style: const TextStyle(fontSize: 16)),
     );
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
   }
 }

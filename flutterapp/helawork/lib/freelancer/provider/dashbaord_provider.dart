@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:helawork/services/api_sercice.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class DashboardProvider with ChangeNotifier {
   String? userName;
@@ -16,6 +17,9 @@ class DashboardProvider with ChangeNotifier {
   int pendingProposals = 0;
   int ongoingTasks = 0;
   int completedTasks = 0;
+
+  // Add secure storage
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
   Future<void> loadData(BuildContext context) async {
     isLoading = true;
@@ -45,7 +49,7 @@ class DashboardProvider with ChangeNotifier {
       completed = tasks.where((t) => t["status"] == "Completed").length;
       activeTasks = tasks.take(5).toList();
 
-      _calculateDashboardStats(tasks); // This will work now
+      _calculateDashboardStats(tasks);
 
       error = null;
     } catch (e) {
@@ -57,7 +61,6 @@ class DashboardProvider with ChangeNotifier {
     }
   }
 
-  // ADD THIS METHOD:
   void _calculateDashboardStats(List<Map<String, dynamic>> tasks) {
     totalTasks = tasks.length;
     
@@ -78,16 +81,15 @@ class DashboardProvider with ChangeNotifier {
 
   Future<http.Response> _makeTasksApiCall() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final String? token = prefs.getString('user_token');
+      // Get token from secure storage instead
+      final String? token = await _secureStorage.read(key: "auth_token");
       
       if (token == null || token.isEmpty) {
         throw Exception('No authentication token found. Please log in.');
       }
 
-      // Use your actual task endpoint - make sure it matches Django
       final response = await http.get(
-        Uri.parse('${ApiService.baseUrl}/task'),  // Changed from /api/tasks/
+        Uri.parse('${ApiService.baseUrl}/task'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -103,21 +105,36 @@ class DashboardProvider with ChangeNotifier {
   }
 
   Future<void> _loadProfilePictureFromAPI() async {
-    try {
-      print('Loading profile picture from API...');
-      
-      final userProfile = await ApiService.getUserProfile();
-      if (userProfile != null && userProfile['profile_picture'] != null) {
-        profilePictureUrl = userProfile['profile_picture'];
+  try {
+    print('Loading profile picture from API...');
+    
+    // Get token from secure storage
+    final token = await _secureStorage.read(key: "auth_token");
+    
+    if (token == null) {
+      print('No auth token found');
+      return;
+    }
+    
+    
+    final response = await ApiService.getUserProfile(token);
+    
+    if (response != null && response['success'] == true) {
+      final profile = response['profile'];
+      if (profile != null && profile['profile_picture'] != null) {
+        profilePictureUrl = profile['profile_picture'];
         print('Profile picture loaded: $profilePictureUrl');
         await _saveUserData();
       } else {
         print('No profile picture found in user profile');
       }
-    } catch (e) {
-      print('Error loading profile picture: $e');
+    } else {
+      print('Failed to load profile: ${response?['message']}');
     }
+  } catch (e) {
+    print('Error loading profile picture: $e');
   }
+}
 
   Future<void> refreshProfilePicture() async {
     print('Manually refreshing profile picture...');
@@ -161,12 +178,10 @@ class DashboardProvider with ChangeNotifier {
     print('User data cleared from dashboard');
   }
 
-  // Add refresh method
   Future<void> refresh(BuildContext context) async {
     await loadData(context);
   }
 
-  // Add getters for UI
   bool get hasError => error != null;
   bool get hasTasks => activeTasks.isNotEmpty;
   bool get isLoaded => !isLoading && error == null;

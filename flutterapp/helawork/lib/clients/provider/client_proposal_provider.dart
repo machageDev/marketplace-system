@@ -1,17 +1,16 @@
-
 import 'package:flutter/foundation.dart';
-import 'package:helawork/clients/models/client_proposal.dart' show Proposal;
+import 'package:helawork/clients/models/client_proposal.dart';
 import 'package:helawork/services/api_sercice.dart';
 
-class ProposalsProvider with ChangeNotifier {
-  List<Proposal> _proposals = [];
+class ClientProposalProvider with ChangeNotifier {
+  List<ClientProposal> _proposals = [];
   bool _isLoading = false;
   String _errorMessage = '';
   final ApiService _apiService;
 
-  ProposalsProvider({required ApiService apiService}) : _apiService = apiService;
+  ClientProposalProvider({required ApiService apiService}) : _apiService = apiService;
 
-  List<Proposal> get proposals => _proposals;
+  List<ClientProposal> get proposals => _proposals;
   bool get isLoading => _isLoading;
   String get errorMessage => _errorMessage;
 
@@ -21,10 +20,19 @@ class ProposalsProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final response = await _apiService.getFreelancerProposals();
-      _proposals = (response).map((json) => Proposal.fromJson(json)).toList();
+      print('Loading employer proposals...');
+      final response = await ApiService.getFreelancerProposals();
+      
+      // Convert to ClientProposal objects
+      _proposals = response.map<ClientProposal>((json) {
+        return ClientProposal.fromJson(json);
+      }).toList();
+      
+      print('Loaded ${_proposals.length} proposals for employer');
+      
     } catch (e) {
       _errorMessage = 'Failed to load proposals: $e';
+      print('Error loading proposals: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -43,6 +51,7 @@ class ProposalsProvider with ChangeNotifier {
         final index = _proposals.indexWhere((p) => p.id == proposalId);
         if (index != -1) {
           _proposals[index] = _proposals[index].copyWith(status: 'accepted');
+          notifyListeners();
         }
         return true;
       } else {
@@ -70,6 +79,7 @@ class ProposalsProvider with ChangeNotifier {
         final index = _proposals.indexWhere((p) => p.id == proposalId);
         if (index != -1) {
           _proposals[index] = _proposals[index].copyWith(status: 'rejected');
+          notifyListeners();
         }
         return true;
       } else {
@@ -88,5 +98,18 @@ class ProposalsProvider with ChangeNotifier {
   void clearError() {
     _errorMessage = '';
     notifyListeners();
+  }
+
+  // Helper methods
+  List<ClientProposal> get pendingProposals {
+    return _proposals.where((p) => p.status == 'pending').toList();
+  }
+
+  List<ClientProposal> get acceptedProposals {
+    return _proposals.where((p) => p.status == 'accepted').toList();
+  }
+
+  List<ClientProposal> get rejectedProposals {
+    return _proposals.where((p) => p.status == 'rejected').toList();
   }
 }

@@ -51,6 +51,7 @@ class ApiService{
   static const String submitRatingUrl = '$baseUrl/employer_ratings/';
   static const String employerratingsUrl ='$baseUrl/apifetchratings';
   static const String taskforratingUrl = '$baseUrl/completetask';
+  static const String clientProposalsUrl= '$baseUrl/client/proposals/';
 
 Future<Map<String, dynamic>> register(String name, String email,String phoneNO, String password,  String confirmPassword) async {
   final url = Uri.parse(registerUrl);
@@ -169,36 +170,7 @@ Future<Map<String, dynamic>> login(String name, String password) async {
     };
   }
 }
-// Add this helper method to your ApiService class
-Future<int> _getCurrentUserId() async {
-  try {
-    // Method 1: Get from user profile
-    final userProfile = await getUserProfile();
-    if (userProfile != null && userProfile['user_id'] != null) {
-      return userProfile['user_id'] as int;
-    }
-    
-    // Method 2: Get from token or auth system
-    final prefs = await SharedPreferences.getInstance();
-    final userId = prefs.getInt('user_id');
-    if (userId != null) {
-      return userId;
-    }
-    
-    // Method 3: If you have user info in token
-    final String? token = await _getUserToken();
-    if (token != null) {
-      // You might need to decode JWT token to get user ID
-      // This is a simple example - adjust based on your auth system
-      return 1; // Temporary fallback
-    }
-    
-    throw Exception('Could not determine current user ID');
-  } catch (e) {
-    print('Error getting current user ID: $e');
-    throw Exception('Please log in again');
-  }
-}
+
 
 Future<List<dynamic>> getEmployerRateableTasks() async {
   try {
@@ -430,49 +402,70 @@ static Future<String?> _getUserToken() async {
     return null;
   }
 }
- 
-static Future<Map<String, dynamic>?> getUserProfile() async {
+static Future<Map<String, dynamic>?> getUserProfile([String? externalToken]) async {
   try {
-    
-    final String? token = await _getUserToken();
+    // Use the external token if provided, otherwise get from storage
+    String? token;
+    if (externalToken != null) {
+      token = externalToken;
+      print('Using external token for profile');
+    } else {
+      token = await _getUserToken();
+      print('Using stored token for profile');
+    }
     
     if (token == null) {
-      print(' No authentication token found - user may not be logged in');
+      print('No authentication token found');
       return null;
     }
 
-    print(' Fetching user profile with token: ${token.substring(0, 10)}...');
+    print('Fetching user profile...');
     
     final response = await http.get(
-      Uri.parse('$baseUrl/apiuserprofile'),
+      Uri.parse('$baseUrl/apiuserprofile'), // Make sure this matches your Django URL
       headers: {
         'Authorization': 'Bearer $token', 
         'Accept': 'application/json',
       },
     );
 
-    print(' Profile API Response Status: ${response.statusCode}');
+    print('Profile API Response Status: ${response.statusCode}');
+    print('Profile API Response Body: ${response.body}');
     
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
-      print(' User profile loaded successfully');
-      print(' Profile data: $data');
+      print('User profile loaded successfully');
+      
+      // Return the full response including success, message, and profile
       return Map<String, dynamic>.from(data);
     } else if (response.statusCode == 401) {
-      print(' Unauthorized (401) - Token may be invalid or expired');
-      print(' Response body: ${response.body}');
-      return null;
+      print('Unauthorized (401) - Token may be invalid or expired');
+      return {
+        'success': false,
+        'message': 'Unauthorized - Please login again',
+      };
+    } else if (response.statusCode == 404) {
+      print('Profile not found (404)');
+      return {
+        'success': false,
+        'message': 'Profile not found',
+        'profile': null
+      };
     } else {
-      print(' Failed to load user profile: ${response.statusCode}');
-      print(' Response body: ${response.body}');
-      return null;
+      print('Failed to load user profile: ${response.statusCode}');
+      return {
+        'success': false,
+        'message': 'Failed to load profile',
+      };
     }
   } catch (e) {
-    print(' Network error loading user profile: $e');
-    return null;
+    print('Network error loading user profile: $e');
+    return {
+      'success': false,
+      'message': 'Network error: $e',
+    };
   }
 }
-
    
   static Future<Map<String, dynamic>> getPaymentSummary() async {
     final response = await http.get(Uri.parse(paymentsummaryUrl));
@@ -483,7 +476,6 @@ static Future<Map<String, dynamic>?> getUserProfile() async {
     }
   }
 
-  // Withdraw payment via M-PESA
   static Future<Map<String, dynamic>> withdrawMpesa() async {
     final response = await http.get(Uri.parse(withdraw_mpesaUrl));
     if (response.statusCode == 200) {
@@ -1443,32 +1435,107 @@ Future<Map<String, dynamic>> fetchTaskStats() async {
     return headers;
   }
 
-Future<List<dynamic>> getFreelancerProposals() async {
+// In ApiService.dart - Add this method
+static Future<List<dynamic>> fetchClientProposals() async {
   try {
+    // Get employer token (different from user token!)
+    final String? token = await _getEmployerToken(); // You need this method
     
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('user_token');
+    if (token == null) {
+      throw Exception('No employer authentication token found');
+    }
 
+    print('Fetching client proposals from: $clientProposalsUrl');
     
-    final headers = {
-      'Content-Type': 'application/json',
-      if (token != null) 'Authorization': 'Bearer $token',
-    };
-
-  
     final response = await http.get(
-      Uri.parse(freelancerproposalsUrl),
-      headers: headers,
+      Uri.parse(clientProposalsUrl), // Should be: http://127.0.0.1:8000/client/proposals/
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
     );
 
-  
+    print('Client Proposals API Response Status: ${response.statusCode}');
+    
     if (response.statusCode == 200) {
-      return json.decode(response.body);
+      final dynamic data = jsonDecode(response.body);
+      
+      // Debug print
+      print('Client Proposals Raw Response:');
+      print(data);
+      
+      // Your Django endpoint returns a LIST directly
+      if (data is List) {
+        return data;
+      } else if (data is Map && data.containsKey('proposals')) {
+        return data['proposals'];
+      } else {
+        throw Exception('Unexpected response format for client proposals');
+      }
     } else {
-      throw Exception('Failed to load proposals: ${response.statusCode}');
+      throw Exception('Failed to load client proposals: ${response.statusCode} - ${response.body}');
     }
   } catch (e) {
-    throw Exception('Failed to load proposals: $e');
+    print('Error fetching client proposals: $e');
+    rethrow;
+  }
+}
+
+
+static Future<List<dynamic>> getFreelancerProposals() async {
+  try {
+    // Get EMPLOYER token, not user token
+    final String? token = await _getEmployerToken();
+    
+    if (token == null) {
+      throw Exception('No employer token found. Please login as employer.');
+    }
+
+    print('Fetching employer proposals from: ${ApiService.baseUrl}/client/proposals/');
+    
+    final response = await http.get(
+      Uri.parse('${ApiService.baseUrl}/client/proposals/'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    print('Employer proposals response: ${response.statusCode}');
+    print('Response body: ${response.body}');
+
+    if (response.statusCode == 200) {
+      final dynamic data = jsonDecode(response.body);
+      
+      // Your Django returns a list directly
+      if (data is List) {
+        return data;
+      } else if (data is Map && data.containsKey('proposals')) {
+        return data['proposals'];
+      } else {
+        throw Exception('Unexpected response format');
+      }
+    } else if (response.statusCode == 401) {
+      throw Exception('Authentication failed. Invalid employer token.');
+    } else {
+      throw Exception('Failed to load proposals: ${response.statusCode} - ${response.body}');
+    }
+  } catch (e) {
+    print('Error in getFreelancerProposals: $e');
+    rethrow;
+  }
+}
+
+
+// You need this method to get employer token
+static Future<String?> _getEmployerToken() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    // You need to store employer token separately from user token
+    return prefs.getString('employer_token');
+  } catch (e) {
+    print('Error getting employer token: $e');
+    return null;
   }
 }
 
@@ -1889,12 +1956,6 @@ Future<Map<String, dynamic>> submitFreelancerRating({
     score: score,
     review: review,
   );
-}
-
-// Get current user's received ratings
- Future<List<dynamic>> getMyReceivedRatings() async {
-  final currentUserId = await _getCurrentUserId();
-  return await getUserRatings(currentUserId);
 }
 
 // Get employer's received ratings

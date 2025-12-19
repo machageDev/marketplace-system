@@ -30,7 +30,7 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
-        // Freelancer Providers
+        // Service Providers (formerly Freelancers)
          ChangeNotifierProvider(
           create: (_) => WalletProvider.create(
             walletService: WalletService(),  // Create WalletService instance
@@ -49,11 +49,11 @@ void main() async {
         
 
 
-        // Client Providers
+        // Task Posters (formerly Clients)
         ChangeNotifierProvider(create: (_) => client_dashboard.DashboardProvider(apiService: ApiService())),
         ChangeNotifierProvider(create: (_) => client_auth.AuthProvider(apiService: ApiService())), 
         ChangeNotifierProvider(create: (_) => client_task.TaskProvider()),
-        ChangeNotifierProvider(create: (_) => client_proposal.ProposalsProvider(apiService: ApiService())), 
+        ChangeNotifierProvider(create: (_) => client_proposal.ClientProposalProvider(apiService: ApiService())), 
         ChangeNotifierProvider(create: (_) => ClientProfileProvider()),
       
         //ChangeNotifierProvider(create: (_) => EmployerRatingProvider()),
@@ -229,7 +229,7 @@ class RoleSelectionScreen extends StatelessWidget {
 
                 const SizedBox(height: 30),
 
-                // Client Button
+                // Task Poster Button (People who need services)
                 Container(
                   width: double.infinity,
                   height: 140,
@@ -280,7 +280,7 @@ class RoleSelectionScreen extends StatelessWidget {
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   const Text(
-                                    'Client',
+                                    'Task Poster',
                                     style: TextStyle(
                                       fontSize: 22,
                                       fontWeight: FontWeight.bold,
@@ -289,7 +289,7 @@ class RoleSelectionScreen extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'Hire professionals for your projects',
+                                    'Post projects and hire professionals',
                                     style: TextStyle(
                                       color: Colors.black.withOpacity(0.7),
                                       fontSize: 14,
@@ -312,7 +312,7 @@ class RoleSelectionScreen extends StatelessWidget {
 
                 const SizedBox(height: 20),
 
-                // Freelancer Button
+                // Service Provider Button (People who provide services)
                 Container(
                   width: double.infinity,
                   height: 140,
@@ -363,7 +363,7 @@ class RoleSelectionScreen extends StatelessWidget {
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   const Text(
-                                    'Freelancer',
+                                    'Service Provider',
                                     style: TextStyle(
                                       fontSize: 22,
                                       fontWeight: FontWeight.bold,
@@ -372,7 +372,7 @@ class RoleSelectionScreen extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'Find work and grow your career',
+                                    'Find work and provide services',
                                     style: TextStyle(
                                       color: Colors.black.withOpacity(0.7),
                                       fontSize: 14,

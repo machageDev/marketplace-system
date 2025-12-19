@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:helawork/services/api_sercice.dart';
 
-
 class ClientProfileProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
 
@@ -22,6 +21,16 @@ class ClientProfileProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  // Check if profile exists
+  Future<bool> checkProfileExists(int employerId) async {
+    try {
+      _profile = await _apiService.getEmployerProfile(employerId);
+      return _profile != null && _profile!.isNotEmpty;
+    } catch (e) {
+      return false;
+    }
+  }
+
   // Fetch profile
   Future<void> fetchProfile(int employerId) async {
     _isLoading = true;
@@ -33,10 +42,18 @@ class ClientProfileProvider with ChangeNotifier {
       _profile = await _apiService.getEmployerProfile(employerId);
       _hasError = false;
     } catch (e) {
-      _errorMessage = "Failed to load profile: $e";
-      _profile = null;
-      _hasError = true;
-      print('Error fetching profile: $e');
+      if (e.toString().contains("Profile not found") || 
+          e.toString().contains("404")) {
+        // Profile doesn't exist yet - this is not an error
+        _profile = null;
+        _errorMessage = null;
+        _hasError = false;
+      } else {
+        _errorMessage = "Failed to load profile: $e";
+        _profile = null;
+        _hasError = true;
+        print('Error fetching profile: $e');
+      }
     }
 
     _isLoading = false;
@@ -69,15 +86,18 @@ class ClientProfileProvider with ChangeNotifier {
     }
   }
 
-  // Create profile (if doesn't exist)
-  Future<bool> createProfile(Map<String, dynamic> data) async {
+  // Create profile
+  Future<bool> createProfile(int employerId, Map<String, dynamic> data) async {
     _isLoading = true;
     _hasError = false;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      final newProfile = await _apiService.createEmployerProfile(data);
+      final newProfile = await _apiService.createEmployerProfile({
+        ...data,
+        'employer_id': employerId,
+      });
       _profile = newProfile;
       _hasError = false;
       
@@ -92,6 +112,15 @@ class ClientProfileProvider with ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       return false;
+    }
+  }
+
+  // Save profile (handles both create and update)
+  Future<bool> saveProfile(int employerId, Map<String, dynamic> data) async {
+    if (_profile == null) {
+      return await createProfile(employerId, data);
+    } else {
+      return await updateProfile(employerId, data);
     }
   }
 }

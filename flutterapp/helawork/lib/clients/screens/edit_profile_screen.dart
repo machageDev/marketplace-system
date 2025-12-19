@@ -5,11 +5,13 @@ import 'package:helawork/clients/provider/client_profile_provider.dart';
 class EditProfileScreen extends StatefulWidget {
   final int employerId;
   final Map<String, dynamic>? currentProfile;
-
+  final bool isNewProfile;
+  
   const EditProfileScreen({
     super.key,
     required this.employerId,
     this.currentProfile,
+    this.isNewProfile = false,
   });
 
   @override
@@ -18,246 +20,437 @@ class EditProfileScreen extends StatefulWidget {
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
-  late Map<String, dynamic> _formData;
-  bool _isSubmitting = false;
+  final Map<String, dynamic> _formData = {};
+  final _scaffoldKey = GlobalKey<ScaffoldMessengerState>();
+  bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
-    // Initialize form data with current profile or empty values
-    _formData = {
-      'company_name': widget.currentProfile?['company_name'] ?? '',
-      'contact_email': widget.currentProfile?['contact_email'] ?? '',
-      'phone_number': widget.currentProfile?['phone_number'] ?? '',
-      'address': widget.currentProfile?['address'] ?? '',
-      'website': widget.currentProfile?['website'] ?? '',
-      'business_type': widget.currentProfile?['business_type'] ?? '',
-      'industry': widget.currentProfile?['industry'] ?? '',
-      'tax_id': widget.currentProfile?['tax_id'] ?? '',
-      'description': widget.currentProfile?['description'] ?? '',
-    };
+    // Initialize form data with current profile values
+    if (widget.currentProfile != null) {
+      _formData.addAll(widget.currentProfile!);
+    }
   }
 
-  Future<void> _submitForm() async {
-    if (!_formKey.currentState!.validate()) return;
+  Future<void> _saveProfile() async {
+    if (_formKey.currentState!.validate()) {
+      _formKey.currentState!.save();
+      setState(() => _isSaving = true);
 
-    _formKey.currentState!.save();
-    setState(() => _isSubmitting = true);
+      final provider = Provider.of<ClientProfileProvider>(context, listen: false);
+      final success = await provider.saveProfile(widget.employerId, _formData);
 
-    final provider = Provider.of<ClientProfileProvider>(context, listen: false);
-    
-    try {
-      final success = await provider.updateProfile(widget.employerId, _formData);
-      
-      if (success) {
-        Navigator.pop(context, true); // Return success
+      setState(() => _isSaving = false);
+
+      if (success && context.mounted) {
+        Navigator.pop(context, true);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Profile updated successfully'),
+          SnackBar(
+            content: Text(widget.isNewProfile 
+                ? 'Profile created successfully!' 
+                : 'Profile updated successfully!'),
             backgroundColor: Colors.green,
           ),
         );
-      } else {
-        setState(() => _isSubmitting = false);
+      } else if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed: ${provider.errorMessage ?? "Unknown error"}'),
+            content: Text(provider.errorMessage ?? 'Failed to save profile'),
             backgroundColor: Colors.red,
           ),
         );
       }
-    } catch (e) {
-      setState(() => _isSubmitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     const themeBlue = Color(0xFF1976D2);
-    
+    const themeWhite = Colors.white;
+
     return Scaffold(
+      key: _scaffoldKey,
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: themeBlue,
+        backgroundColor: Colors.white,
+        elevation: 0,
         title: Text(
-          widget.currentProfile == null ? 'Create Profile' : 'Edit Profile',
-          style: const TextStyle(color: Colors.white),
+          widget.isNewProfile ? 'Create Profile' : 'Edit Profile',
+          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w600),
         ),
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: const IconThemeData(color: Colors.black),
         actions: [
-          if (_isSubmitting)
-            const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+          if (_isSaving)
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(themeBlue),
+                  ),
                 ),
               ),
             ),
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
+        padding: const EdgeInsets.all(16),
         child: Form(
           key: _formKey,
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Required Fields
-              _buildTextField(
-                label: 'Company Name *',
-                fieldName: 'company_name',
-                icon: Icons.business,
+              // Form Header
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.business,
+                      size: 40,
+                      color: Color(0xFF1976D2),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      widget.isNewProfile 
+                          ? 'Complete your business profile to get started'
+                          : 'Update your business information',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Required Fields Section
+              const Text(
+                'Basic Information',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Company Name
+              TextFormField(
+                initialValue: _formData['company_name'] ?? '',
+                decoration: InputDecoration(
+                  labelText: 'Company Name *',
+                  labelStyle: const TextStyle(color: Colors.grey),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Colors.grey),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFF1976D2), width: 2),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Company name is required';
                   }
                   return null;
                 },
+                onSaved: (value) => _formData['company_name'] = value,
               ),
-              _buildTextField(
-                label: 'Contact Email *',
-                fieldName: 'contact_email',
-                icon: Icons.email,
+              const SizedBox(height: 16),
+
+              // Business Type
+              TextFormField(
+                initialValue: _formData['business_type'] ?? '',
+                decoration: InputDecoration(
+                  labelText: 'Business Type (e.g., LLC, Sole Proprietorship)',
+                  labelStyle: const TextStyle(color: Colors.grey),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Colors.grey),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFF1976D2), width: 2),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                ),
+                onSaved: (value) => _formData['business_type'] = value,
+              ),
+              const SizedBox(height: 16),
+
+              // Contact Information Section
+              const Text(
+                'Contact Information',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Email
+              TextFormField(
+                initialValue: _formData['contact_email'] ?? '',
                 keyboardType: TextInputType.emailAddress,
+                decoration: InputDecoration(
+                  labelText: 'Email Address *',
+                  labelStyle: const TextStyle(color: Colors.grey),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Colors.grey),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFF1976D2), width: 2),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Email is required';
                   }
-                  if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
-                    return 'Enter a valid email';
+                  if (!value.contains('@')) {
+                    return 'Enter a valid email address';
                   }
                   return null;
                 },
+                onSaved: (value) => _formData['contact_email'] = value,
               ),
-              _buildTextField(
-                label: 'Phone Number *',
-                fieldName: 'phone_number',
-                icon: Icons.phone,
+              const SizedBox(height: 16),
+
+              // Phone
+              TextFormField(
+                initialValue: _formData['phone_number'] ?? '',
                 keyboardType: TextInputType.phone,
+                decoration: InputDecoration(
+                  labelText: 'Phone Number *',
+                  labelStyle: const TextStyle(color: Colors.grey),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Colors.grey),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFF1976D2), width: 2),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Phone number is required';
                   }
                   return null;
                 },
+                onSaved: (value) => _formData['phone_number'] = value,
               ),
-              _buildTextField(
-                label: 'Address',
-                fieldName: 'address',
-                icon: Icons.location_on,
-                maxLines: 2,
+              const SizedBox(height: 16),
+
+              // Address
+              TextFormField(
+                initialValue: _formData['address'] ?? '',
+                decoration: InputDecoration(
+                  labelText: 'Business Address',
+                  labelStyle: const TextStyle(color: Colors.grey),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Colors.grey),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFF1976D2), width: 2),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                ),
+                onSaved: (value) => _formData['address'] = value,
               ),
-              
-              // Optional Fields
-              const SizedBox(height: 20),
-              const Divider(),
-              const SizedBox(height: 20),
-              
-              _buildTextField(
-                label: 'Website',
-                fieldName: 'website',
-                icon: Icons.language,
+              const SizedBox(height: 24),
+
+              // Optional Information Section
+              const Text(
+                'Additional Information',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                '(Optional)',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Website
+              TextFormField(
+                initialValue: _formData['website'] ?? '',
                 keyboardType: TextInputType.url,
+                decoration: InputDecoration(
+                  labelText: 'Website',
+                  labelStyle: const TextStyle(color: Colors.grey),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Colors.grey),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFF1976D2), width: 2),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                ),
+                onSaved: (value) => _formData['website'] = value,
               ),
-              _buildTextField(
-                label: 'Business Type',
-                fieldName: 'business_type',
-                icon: Icons.category,
+              const SizedBox(height: 16),
+
+              // Tax ID
+              TextFormField(
+                initialValue: _formData['tax_id'] ?? '',
+                decoration: InputDecoration(
+                  labelText: 'Tax ID/VAT Number',
+                  labelStyle: const TextStyle(color: Colors.grey),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Colors.grey),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFF1976D2), width: 2),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                ),
+                onSaved: (value) => _formData['tax_id'] = value,
               ),
-              _buildTextField(
-                label: 'Industry',
-                fieldName: 'industry',
-                icon: Icons.work,
+              const SizedBox(height: 16),
+
+              // Industry
+              TextFormField(
+                initialValue: _formData['industry'] ?? '',
+                decoration: InputDecoration(
+                  labelText: 'Industry',
+                  labelStyle: const TextStyle(color: Colors.grey),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Colors.grey),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFF1976D2), width: 2),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                ),
+                onSaved: (value) => _formData['industry'] = value,
               ),
-              _buildTextField(
-                label: 'Tax ID',
-                fieldName: 'tax_id',
-                icon: Icons.badge,
-              ),
-              _buildTextField(
-                label: 'Description',
-                fieldName: 'description',
-                icon: Icons.description,
+              const SizedBox(height: 16),
+
+              // Description/About
+              TextFormField(
+                initialValue: _formData['description'] ?? '',
                 maxLines: 4,
+                decoration: InputDecoration(
+                  labelText: 'About Your Business',
+                  labelStyle: const TextStyle(color: Colors.grey),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Colors.grey),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFF1976D2), width: 2),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                  alignLabelWithHint: true,
+                ),
+                onSaved: (value) => _formData['description'] = value,
               ),
-              
-              const SizedBox(height: 40),
+              const SizedBox(height: 32),
+
+              // Save Button
               SizedBox(
                 width: double.infinity,
                 height: 50,
                 child: ElevatedButton(
-                  onPressed: _isSubmitting ? null : _submitForm,
+                  onPressed: _isSaving ? null : _saveProfile,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: themeBlue,
-                    foregroundColor: Colors.white,
+                    foregroundColor: themeWhite,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(25),
                     ),
+                    elevation: 0,
                   ),
-                  child: _isSubmitting
+                  child: _isSaving
                       ? const SizedBox(
-                          width: 20,
-                          height: 20,
+                          width: 24,
+                          height: 24,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
                             valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                           ),
                         )
                       : Text(
-                          widget.currentProfile == null 
-                              ? 'Create Profile' 
-                              : 'Update Profile',
-                          style: const TextStyle(fontSize: 16),
+                          widget.isNewProfile ? 'CREATE PROFILE' : 'SAVE CHANGES',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                 ),
               ),
+              const SizedBox(height: 20),
+
+              // Cancel Button
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: OutlinedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(25),
+                    ),
+                    side: const BorderSide(color: Colors.grey),
+                  ),
+                  child: const Text(
+                    'CANCEL',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 40),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildTextField({
-    required String label,
-    required String fieldName,
-    required IconData icon,
-    TextInputType? keyboardType,
-    int maxLines = 1,
-    String? Function(String?)? validator,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16.0),
-      child: TextFormField(
-        initialValue: _formData[fieldName],
-        decoration: InputDecoration(
-          labelText: label,
-          prefixIcon: Icon(icon, color: const Color(0xFF1976D2).withOpacity(0.7)),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: Colors.grey[400]!),
-          ),
-          filled: true,
-          fillColor: Colors.grey[50],
-          contentPadding: EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: maxLines > 1 ? 16 : 0,
-          ),
-        ),
-        keyboardType: keyboardType,
-        maxLines: maxLines,
-        validator: validator,
-        onSaved: (value) {
-          _formData[fieldName] = value?.trim() ?? '';
-        },
       ),
     );
   }

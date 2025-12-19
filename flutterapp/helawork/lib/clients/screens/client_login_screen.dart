@@ -52,6 +52,9 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    const blueColor = Color(0xFF1976D2);
+    const lightBlueColor = Color(0xFF64B5F6); // Lighter blue for loading state
+    
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -227,8 +230,7 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
                                             authProvider
                                                 .setRememberMe(value ?? false);
                                           },
-                                          activeColor:
-                                              const Color(0xFF1976D2),
+                                          activeColor: blueColor,
                                         ),
                                         const Text('Remember me'),
                                       ],
@@ -264,23 +266,37 @@ class _ClientLoginScreenState extends State<ClientLoginScreen> {
                                         ? null
                                         : _login,
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor:
-                                          const Color(0xFF1976D2),
+                                      backgroundColor: authProvider.isLoading
+                                          ? lightBlueColor // Lighter blue when loading
+                                          : blueColor, // Normal blue when not loading
                                       foregroundColor: Colors.white,
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(10),
                                       ),
                                     ),
                                     child: authProvider.isLoading
-                                        ? const SizedBox(
-                                            height: 20,
-                                            width: 20,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              valueColor:
-                                                  AlwaysStoppedAnimation<Color>(
-                                                      Colors.white),
-                                            ),
+                                        ? Row(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              SizedBox(
+                                                height: 20,
+                                                width: 20,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2.5,
+                                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                                      Colors.red),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 12),
+                                              const Text(
+                                                'LOGGING IN...',
+                                                style: TextStyle(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                            ],
                                           )
                                         : const Text(
                                             'LOGIN',

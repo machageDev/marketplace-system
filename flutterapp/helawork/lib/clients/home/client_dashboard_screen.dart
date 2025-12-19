@@ -182,7 +182,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
         ),
         ChangeNotifierProvider(
           create: (_) =>
-              client_proposal.ProposalsProvider(apiService: ApiService()),
+              client_proposal.ClientProposalProvider(apiService: ApiService()),
         ),
       ],
       child: Scaffold(
