@@ -24,7 +24,6 @@ class _DashboardPageState extends State<DashboardPage> {
     const TaskPage(), 
     const WalletScreen(token: '',),
     const ProposalsScreen(taskId: 0, task: {}, employer: {},), 
-    // REMOVED: SubmitTaskScreen from here - it needs a taskId
   ];
 
   @override
@@ -38,8 +37,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
   void _onItemTapped(int index) {
     if (index == 4) {
-      // Directly navigate to SubmitTaskScreen with empty taskId
-      // User will select task in the SubmitTaskScreen itself
+      // Directly navigate to SubmitTaskScreen
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -101,6 +99,7 @@ class _DashboardPageState extends State<DashboardPage> {
             _buildRatingsSection(),
             const SizedBox(height: 20),
             _buildContractsSection(),
+            const SizedBox(height: 20), // Extra padding at bottom
           ],
         ),
       ),
@@ -250,31 +249,35 @@ class _DashboardPageState extends State<DashboardPage> {
           crossAxisCount: 2,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
-          childAspectRatio: 1.4,
+          childAspectRatio: 1.2, // Reduced from 1.4 to fit better
           children: [
-            _buildStatCard(
+            _buildClickableStatCard(
               "Active Tasks",
               dashboard.activeTasks.length.toString(),
               Icons.task,
               Colors.green,
+              () => _onItemTapped(1), // Navigate to Tasks
             ),
-            _buildStatCard(
+            _buildClickableStatCard(
               "Total Tasks",
               dashboard.totalTasks.toString(),
               Icons.assignment,
               Colors.blue,
+              () => _onItemTapped(1), // Navigate to Tasks
             ),
-            _buildStatCard(
+            _buildClickableStatCard(
               "In Progress",
               dashboard.ongoingTasks.toString(),
               Icons.timelapse,
               Colors.orange,
+              () => _showTasksInProgress(dashboard), // Show filtered tasks
             ),
-            _buildStatCard(
+            _buildClickableStatCard(
               "Completed",
               dashboard.completedTasks.toString(),
               Icons.check_circle,
               Colors.purple,
+              () => _navigateToSubmitTask(''), // Navigate to Submit Task
             ),
           ],
         ),
@@ -296,28 +299,16 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
         ),
         const SizedBox(height: 10),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const RatingsScreen()),
-              );
-            },
-            icon: const Icon(Icons.star, color: Colors.white),
-            label: const Text(
-              "View Ratings",
-              style: TextStyle(color: Colors.white, fontSize: 16),
-            ),
-          ),
+        _buildClickableSectionCard(
+          title: "View Ratings",
+          icon: Icons.star,
+          color: Colors.green,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const RatingsScreen()),
+            );
+          },
         ),
       ],
     );
@@ -337,30 +328,124 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
         ),
         const SizedBox(height: 10),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blueGrey.shade700,
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const ContractScreen()),
-              );
-            },
-            icon: const Icon(Icons.article, color: Colors.white),
-            label: const Text(
-              "View Contracts",
-              style: TextStyle(color: Colors.white, fontSize: 16),
-            ),
-          ),
+        _buildClickableSectionCard(
+          title: "View Contracts",
+          icon: Icons.article,
+          color: Colors.blueGrey.shade700,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const ContractScreen()),
+            );
+          },
         ),
       ],
+    );
+  }
+
+  // ================= NEW CLICKABLE CARD WIDGETS =================
+
+  // Build clickable stat card
+  Widget _buildClickableStatCard(
+    String title, 
+    String value, 
+    IconData icon, 
+    Color color,
+    VoidCallback onTap,
+  ) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Card(
+        color: Colors.grey[900],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        elevation: 2,
+        child: Padding(
+          padding: const EdgeInsets.all(10), // Reduced padding
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min, // Added to prevent overflow
+            children: [
+              Icon(icon, color: color, size: 22), // Reduced size
+              const SizedBox(height: 4), // Reduced spacing
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14, // Reduced font size
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 2), // Reduced spacing
+              Text(
+                title,
+                style: TextStyle(
+                  color: Colors.grey[400],
+                  fontSize: 10, // Reduced font size
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 2, // Allow text to wrap
+              ),
+              const SizedBox(height: 2), // Reduced spacing
+              Icon(
+                Icons.chevron_right,
+                color: Colors.grey[600],
+                size: 14, // Reduced size
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Build clickable section card (for Ratings & Contracts)
+  Widget _buildClickableSectionCard({
+    required String title,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Card(
+        color: Colors.grey[900],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        elevation: 2,
+        child: Padding(
+          padding: const EdgeInsets.all(12), // Reduced padding
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8), // Reduced padding
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: color, size: 20), // Reduced size
+              ),
+              const SizedBox(width: 12), // Reduced spacing
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14, // Reduced font size
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              Icon(
+                Icons.chevron_right,
+                color: Colors.grey[400],
+                size: 20, // Reduced size
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -402,7 +487,7 @@ class _DashboardPageState extends State<DashboardPage> {
         'message': '${dashboard.ongoingTasks} task(s) are currently being worked on',
         'icon': Icons.timelapse,
         'color': Colors.blue,
-        'action': () => _onItemTapped(1), // Navigate to tasks
+        'action': () => _showTasksInProgress(dashboard), // Show filtered tasks
       });
     }
 
@@ -414,11 +499,96 @@ class _DashboardPageState extends State<DashboardPage> {
         'message': '${dashboard.completedTasks} task(s) have been completed',
         'icon': Icons.check_circle,
         'color': Colors.purple,
-        'action': () => _onItemTapped(4), // Navigate to submit task
+        'action': () => _navigateToSubmitTask(''), // Navigate to submit task
       });
     }
 
     return notifications;
+  }
+
+  // Show tasks in progress dialog
+  void _showTasksInProgress(DashboardProvider dashboard) {
+    final inProgressTasks = dashboard.activeTasks.where((task) {
+      final status = task["status"]?.toString().toLowerCase() ?? "";
+      return status == "in progress" || status.contains("progress");
+    }).toList();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        title: Text(
+          "Tasks In Progress (${inProgressTasks.length})",
+          style: const TextStyle(color: Colors.white),
+        ),
+        content: Container(
+          width: double.maxFinite,
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.5, // Limit height
+          ),
+          child: inProgressTasks.isEmpty
+              ? const Text(
+                  "No tasks in progress",
+                  style: TextStyle(color: Colors.grey),
+                )
+              : ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: inProgressTasks.length,
+                  itemBuilder: (context, index) {
+                    final task = inProgressTasks[index];
+                    return Card(
+                      color: Colors.grey[800],
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: ListTile(
+                        leading: const Icon(Icons.task, color: Colors.orange),
+                        title: Text(
+                          task["title"] ?? "Untitled Task",
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        subtitle: Text(
+                          "Status: ${task["status"] ?? "Unknown"}",
+                          style: const TextStyle(color: Colors.grey),
+                        ),
+                        trailing: Icon(Icons.chevron_right, color: Colors.grey[400]),
+                        onTap: () {
+                          Navigator.pop(context);
+                          // Navigate to task details or submit task
+                          if (task["task_id"] != null) {
+                            _navigateToSubmitTask(task["task_id"].toString());
+                          } else {
+                            _onItemTapped(1); // Fallback to tasks page
+                          }
+                        },
+                      ),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              "Close",
+              style: TextStyle(color: Colors.green),
+            ),
+          ),
+          if (inProgressTasks.isNotEmpty)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _onItemTapped(1); // Navigate to tasks page
+              },
+              child: const Text(
+                "View All Tasks",
+                style: TextStyle(color: Colors.blue),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   // Get total notification count
@@ -433,23 +603,32 @@ class _DashboardPageState extends State<DashboardPage> {
       margin: const EdgeInsets.symmetric(vertical: 4),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ListTile(
+        dense: true, // Makes tile more compact
         leading: CircleAvatar(
+          radius: 18, // Reduced size
           backgroundColor: notification['color'] as Color,
           child: Icon(
             notification['icon'] as IconData,
             color: Colors.white,
-            size: 20,
+            size: 18, // Reduced size
           ),
         ),
         title: Text(
           notification['title'] as String,
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+            color: Colors.white, 
+            fontWeight: FontWeight.bold,
+            fontSize: 14, // Reduced font size
+          ),
         ),
         subtitle: Text(
           notification['message'] as String,
-          style: const TextStyle(color: Colors.grey),
+          style: const TextStyle(
+            color: Colors.grey,
+            fontSize: 12, // Reduced font size
+          ),
         ),
-        trailing: Icon(Icons.chevron_right, color: Colors.grey[400]),
+        trailing: Icon(Icons.chevron_right, color: Colors.grey[400], size: 20),
         onTap: () {
           final action = notification['action'] as Function?;
           if (action != null) {
@@ -466,19 +645,20 @@ class _DashboardPageState extends State<DashboardPage> {
       color: Colors.grey[900],
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: const Padding(
-        padding: EdgeInsets.all(20),
+        padding: EdgeInsets.all(16), // Reduced padding
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.notifications_off, color: Colors.grey, size: 40),
-            SizedBox(height: 10),
+            Icon(Icons.notifications_off, color: Colors.grey, size: 30), // Reduced size
+            SizedBox(height: 8), // Reduced spacing
             Text(
               "No New Notifications",
-              style: TextStyle(color: Colors.grey, fontSize: 16),
+              style: TextStyle(color: Colors.grey, fontSize: 14), // Reduced font
             ),
-            SizedBox(height: 5),
+            SizedBox(height: 4), // Reduced spacing
             Text(
               "You're all caught up!",
-              style: TextStyle(color: Colors.grey, fontSize: 12),
+              style: TextStyle(color: Colors.grey, fontSize: 10), // Reduced font
             ),
           ],
         ),
@@ -496,16 +676,18 @@ class _DashboardPageState extends State<DashboardPage> {
         backgroundColor: Colors.grey[900],
         title: const Text(
           "All Notifications",
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: Colors.white, fontSize: 16), // Reduced font
         ),
-        content: notifications.isEmpty
-            ? const Text(
-                "No new notifications",
-                style: TextStyle(color: Colors.grey),
-              )
-            : SizedBox(
-                width: double.maxFinite,
-                child: ListView.builder(
+        content: Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.6, // Limit height
+          ),
+          child: notifications.isEmpty
+              ? const Text(
+                  "No new notifications",
+                  style: TextStyle(color: Colors.grey),
+                )
+              : ListView.builder(
                   shrinkWrap: true,
                   itemCount: notifications.length,
                   itemBuilder: (context, index) {
@@ -513,7 +695,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     return _buildNotificationCard(notification, dashboard);
                   },
                 ),
-              ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -523,41 +705,6 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  // Build stat card
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
-    return Card(
-      color: Colors.grey[900],
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: color, size: 24),
-            const SizedBox(height: 6),
-            Text(
-              value,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              title,
-              style: TextStyle(
-                color: Colors.grey[400],
-                fontSize: 12,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -582,9 +729,11 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
             ],
           ),
-          body: _selectedIndex == 0
-              ? _buildHomePage(dashboard)
-              : _pages[_selectedIndex],
+          body: SafeArea( // Added SafeArea to prevent overflow
+            child: _selectedIndex == 0
+                ? _buildHomePage(dashboard)
+                : _pages[_selectedIndex],
+          ),
           bottomNavigationBar: BottomNavigationBar(
             type: BottomNavigationBarType.fixed,
             backgroundColor: Colors.grey[900],
