@@ -2,17 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:helawork/client/provider/client_profile_provider.dart';
 import 'package:provider/provider.dart';
 
-
 class EditProfileScreen extends StatefulWidget {
-  final int employerId;
   final Map<String, dynamic>? currentProfile;
   final bool isNewProfile;
+  final int employerId;
   
   const EditProfileScreen({
     super.key,
-    required this.employerId,
     this.currentProfile,
     this.isNewProfile = false,
+    required this.employerId,
   });
 
   @override
@@ -22,16 +21,16 @@ class EditProfileScreen extends StatefulWidget {
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   final Map<String, dynamic> _formData = {};
-  final _scaffoldKey = GlobalKey<ScaffoldMessengerState>();
   bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
-    // Initialize form data with current profile values
     if (widget.currentProfile != null) {
       _formData.addAll(widget.currentProfile!);
     }
+    // Initialize account_type if not present
+    _formData['account_type'] = _formData['account_type'] ?? 'individual';
   }
 
   Future<void> _saveProfile() async {
@@ -40,7 +39,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       setState(() => _isSaving = true);
 
       final provider = Provider.of<ClientProfileProvider>(context, listen: false);
-      final success = await provider.saveProfile(widget.employerId, _formData);
+      final success = await provider.saveProfile(widget.employerId as Map<String, dynamic>, );
 
       setState(() => _isSaving = false);
 
@@ -71,7 +70,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     const themeWhite = Colors.white;
 
     return Scaffold(
-      key: _scaffoldKey,
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.white,
@@ -195,6 +193,87 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               ),
               const SizedBox(height: 16),
 
+              // Account Type Selection
+              const Text(
+                'Account Type *',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: _formData['account_type'] ?? 'individual',
+                decoration: InputDecoration(
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Colors.grey),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFF1976D2), width: 2),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'individual',
+                    child: Text('Individual'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'business',
+                    child: Text('Business/Company'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'agency',
+                    child: Text('Agency'),
+                  ),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _formData['account_type'] = value;
+                  });
+                },
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please select account type';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+
+              // Conditionally show full_name field for individuals
+              if (_formData['account_type'] == 'individual')
+                TextFormField(
+                  initialValue: _formData['full_name'] ?? '',
+                  decoration: InputDecoration(
+                    labelText: 'Full Name *',
+                    labelStyle: const TextStyle(color: Colors.grey),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: Colors.grey),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: Color(0xFF1976D2), width: 2),
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey[50],
+                  ),
+                  validator: (value) {
+                    if (_formData['account_type'] == 'individual' && 
+                        (value == null || value.isEmpty)) {
+                      return 'Full name is required for individuals';
+                    }
+                    return null;
+                  },
+                  onSaved: (value) => _formData['full_name'] = value,
+                ),
+              if (_formData['account_type'] == 'individual') const SizedBox(height: 16),
+
               // Contact Information Section
               const Text(
                 'Contact Information',
@@ -262,6 +341,60 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   return null;
                 },
                 onSaved: (value) => _formData['phone_number'] = value,
+              ),
+              const SizedBox(height: 16),
+
+              // Country
+              TextFormField(
+                initialValue: _formData['country'] ?? '',
+                decoration: InputDecoration(
+                  labelText: 'Country *',
+                  labelStyle: const TextStyle(color: Colors.grey),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Colors.grey),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFF1976D2), width: 2),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Country is required';
+                  }
+                  return null;
+                },
+                onSaved: (value) => _formData['country'] = value,
+              ),
+              const SizedBox(height: 16),
+
+              // City
+              TextFormField(
+                initialValue: _formData['city'] ?? '',
+                decoration: InputDecoration(
+                  labelText: 'City *',
+                  labelStyle: const TextStyle(color: Colors.grey),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Colors.grey),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFF1976D2), width: 2),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'City is required';
+                  }
+                  return null;
+                },
+                onSaved: (value) => _formData['city'] = value,
               ),
               const SizedBox(height: 16),
 
@@ -371,7 +504,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
               // Description/About
               TextFormField(
-                initialValue: _formData['description'] ?? '',
+                initialValue: _formData['bio'] ?? '',
                 maxLines: 4,
                 decoration: InputDecoration(
                   labelText: 'About Your Business',
@@ -388,7 +521,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   fillColor: Colors.grey[50],
                   alignLabelWithHint: true,
                 ),
-                onSaved: (value) => _formData['description'] = value,
+                onSaved: (value) => _formData['bio'] = value,
               ),
               const SizedBox(height: 32),
 

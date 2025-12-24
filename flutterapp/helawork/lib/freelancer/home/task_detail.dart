@@ -33,7 +33,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     if (employerId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         Provider.of<ClientProfileProvider>(context, listen: false)
-            .fetchProfile(employerId);
+            .fetchProfile();
       });
     }
   }

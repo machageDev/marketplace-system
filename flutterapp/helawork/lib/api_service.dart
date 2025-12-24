@@ -1629,8 +1629,30 @@ Future<Map<String, dynamic>> rejectProposal(String proposalId) async {
   } catch (e) {
     throw Exception('Failed to reject proposal: $e');
   }
-}
- Future<Map<String, dynamic>> getEmployerProfile(int employerId) async {
+}Future<Map<String, dynamic>> createEmployerProfile(Map<String, dynamic> data) async {
+    final token = await _getToken();
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/employers/profile/'),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+      body: jsonEncode(data),
+    );
+
+    if (response.statusCode == 201) {
+      return jsonDecode(response.body);
+    } else if (response.statusCode == 400) {
+      final errorData = jsonDecode(response.body);
+      throw Exception('Validation error: $errorData');
+    } else {
+      throw Exception('Failed to create profile. Status: ${response.statusCode}');
+    }
+  }
+
+  // GET employer profile - Exactly like your example
+  Future<Map<String, dynamic>> getEmployerProfile(int employerId) async {
     final token = await _getToken();
 
     final response = await http.get(
@@ -1650,9 +1672,11 @@ Future<Map<String, dynamic>> rejectProposal(String proposalId) async {
     }
   }
 
-  // Update employer profile
+  // UPDATE employer profile - Exactly like your example
   Future<Map<String, dynamic>> updateEmployerProfile(
-      int employerId, Map<String, dynamic> data) async {
+    int employerId, 
+    Map<String, dynamic> data,
+  ) async {
     final token = await _getToken();
 
     final response = await http.put(
@@ -1676,26 +1700,77 @@ Future<Map<String, dynamic>> rejectProposal(String proposalId) async {
     }
   }
 
-  // Create employer profile (if needed)
-  Future<Map<String, dynamic>> createEmployerProfile(Map<String, dynamic> data) async {
+  // UPLOAD ID document - NEW method for your upload endpoint
+  Future<Map<String, dynamic>> uploadIdDocument(
+    int employerId,
+    http.MultipartFile idDocumentFile,
+  ) async {
     final token = await _getToken();
 
-    final response = await http.post(
-      Uri.parse('$baseUrl/employers/profile/'),
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer $token",
-      },
-      body: jsonEncode(data),
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$baseUrl/employers/profile/upload-id/'),
     );
 
-    if (response.statusCode == 201) {
+    request.headers['Authorization'] = 'Bearer $token';
+    request.files.add(idDocumentFile);
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
       return jsonDecode(response.body);
     } else if (response.statusCode == 400) {
       final errorData = jsonDecode(response.body);
       throw Exception('Validation error: $errorData');
     } else {
-      throw Exception('Failed to create profile. Status: ${response.statusCode}');
+      throw Exception('Failed to upload ID. Status: ${response.statusCode}');
+    }
+  }
+
+  // VERIFY email - NEW method
+  Future<Map<String, dynamic>> verifyEmail(String verificationToken) async {
+    final token = await _getToken();
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/employers/profile/verify-email/'),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+      body: jsonEncode({'token': verificationToken}),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else if (response.statusCode == 400) {
+      final errorData = jsonDecode(response.body);
+      throw Exception('Verification failed: $errorData');
+    } else {
+      throw Exception('Failed to verify email. Status: ${response.statusCode}');
+    }
+  }
+
+  
+  Future<Map<String, dynamic>> verifyPhone(String verificationCode) async {
+    final token = await _getToken();
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/employers/profile/verify-phone/'),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+      body: jsonEncode({'code': verificationCode}),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else if (response.statusCode == 400) {
+      final errorData = jsonDecode(response.body);
+      throw Exception('Verification failed: $errorData');
+    } else {
+      throw Exception('Failed to verify phone. Status: ${response.statusCode}');
     }
   }
 

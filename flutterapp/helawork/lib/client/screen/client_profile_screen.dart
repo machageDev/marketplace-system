@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:helawork/client/provider/client_profile_provider.dart';
 import 'package:helawork/client/screen/edit_profile_screen.dart';
 import 'package:provider/provider.dart';
- 
 
 class ClientProfileScreen extends StatefulWidget {
   final int employerId;
+  
   const ClientProfileScreen({super.key, required this.employerId});
 
   @override
@@ -24,14 +24,14 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
   void _loadProfile() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<ClientProfileProvider>(context, listen: false)
-          .fetchProfile(widget.employerId);
+          .fetchProfile();
     });
   }
 
   Future<void> _refreshProfile() async {
     setState(() => _isRefreshing = true);
     await Provider.of<ClientProfileProvider>(context, listen: false)
-        .fetchProfile(widget.employerId);
+        .fetchProfile();
     setState(() => _isRefreshing = false);
   }
 
@@ -40,17 +40,126 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => EditProfileScreen(
-          employerId: widget.employerId,
           currentProfile: Provider.of<ClientProfileProvider>(context).profile,
           isNewProfile: isNewProfile,
+          employerId: widget.employerId,
         ),
       ),
     ).then((value) {
-      // Refresh profile after editing
       if (value == true) {
         _refreshProfile();
       }
     });
+  }
+
+  void _showEmailVerificationDialog(BuildContext context) {
+    final TextEditingController tokenController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Verify Email'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Enter the verification token sent to your email'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: tokenController,
+              decoration: const InputDecoration(
+                labelText: 'Verification Token',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final provider = Provider.of<ClientProfileProvider>(context, listen: false);
+              final success = await provider.verifyEmail(tokenController.text);
+              if (success) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Email verified successfully')),
+                );
+                _refreshProfile();
+              }
+            },
+            child: const Text('Verify'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showPhoneVerificationDialog(BuildContext context) {
+    final TextEditingController codeController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Verify Phone'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Enter the 6-digit code sent to your phone'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: codeController,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              decoration: const InputDecoration(
+                labelText: 'Verification Code',
+                border: OutlineInputBorder(),
+                counterText: '',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final provider = Provider.of<ClientProfileProvider>(context, listen: false);
+              final success = await provider.verifyPhone(codeController.text);
+              if (success) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Phone verified successfully')),
+                );
+                _refreshProfile();
+              }
+            },
+            child: const Text('Verify'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _navigateToIdUpload(BuildContext context) {
+    // Implement ID upload
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Upload ID Document'),
+        content: const Text('ID upload functionality will be implemented here.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -153,12 +262,10 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
       );
     }
 
-    // Profile doesn't exist - show create profile UI (like Instagram's empty state)
     if (provider.profile == null) {
       return _buildCreateProfileUI(themeBlue, themeWhite);
     }
 
-    // Profile exists - show profile UI
     return _buildProfileUI(provider, themeBlue, themeWhite);
   }
 
@@ -174,7 +281,6 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Instagram-like empty state illustration
               Container(
                 width: 150,
                 height: 150,
@@ -212,7 +318,6 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                 ),
               ),
               const SizedBox(height: 32),
-              // Create Profile Button
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 40),
                 child: SizedBox(
@@ -246,10 +351,8 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              // Learn more link
               TextButton(
                 onPressed: () {
-                  // Show info about why profile is important
                   showDialog(
                     context: context,
                     builder: (context) => AlertDialog(
@@ -291,16 +394,13 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Profile Header (Instagram-like)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
               color: themeWhite,
               child: Column(
                 children: [
-                  // Avatar and Stats
                   Row(
                     children: [
-                      // Profile Picture
                       Container(
                         width: 100,
                         height: 100,
@@ -318,7 +418,6 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                         ),
                       ),
                       const SizedBox(width: 24),
-                      // Stats (Instagram-style)
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -348,8 +447,6 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  
-                  // Edit Profile Button (Instagram-style)
                   SizedBox(
                     width: double.infinity,
                     height: 36,
@@ -374,17 +471,16 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
               ),
             ),
             
-            // Divider
             Container(height: 8, color: Colors.grey[100]),
             
-            // Profile Details
+            _buildVerificationStatus(provider.profile!),
+            
             Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // About Section
-                  if (provider.profile!['description'] != null)
+                  if (provider.profile!['bio'] != null)
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -398,7 +494,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          provider.profile!['description'],
+                          provider.profile!['bio'],
                           style: const TextStyle(
                             fontSize: 15,
                             color: Colors.black87,
@@ -409,7 +505,6 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                       ],
                     ),
                   
-                  // Contact Information
                   const Text(
                     'Contact Information',
                     style: TextStyle(
@@ -420,7 +515,6 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                   ),
                   const SizedBox(height: 16),
                   
-                  // Contact Cards
                   _buildContactCard(
                     icon: Icons.email_outlined,
                     title: 'Email',
@@ -436,10 +530,9 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                   _buildContactCard(
                     icon: Icons.location_on_outlined,
                     title: 'Address',
-                    value: provider.profile!['address'] ?? 'Not provided',
+                    value: '${provider.profile!['city'] ?? ''}, ${provider.profile!['country'] ?? ''}'.trim(),
                   ),
                   
-                  // Business Information
                   if (provider.profile!['website'] != null || 
                       provider.profile!['tax_id'] != null)
                     Column(
@@ -484,7 +577,6 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
               ),
             ),
             
-            // Last Updated
             if (provider.profile!['updated_at'] != null)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -501,6 +593,133 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildVerificationStatus(Map<String, dynamic> profile) {
+    final emailVerified = profile['email_verified'] ?? false;
+    final phoneVerified = profile['phone_verified'] ?? false;
+    final idVerified = profile['id_verified'] ?? false;
+    final isVerified = profile['is_verified'] ?? false;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Verification Status',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 12),
+          
+          _buildVerificationItem(
+            icon: Icons.email_outlined,
+            label: 'Email',
+            isVerified: emailVerified,
+            onVerify: emailVerified ? null : () {
+              _showEmailVerificationDialog(context);
+            },
+          ),
+          
+          const SizedBox(height: 8),
+          
+          _buildVerificationItem(
+            icon: Icons.phone_outlined,
+            label: 'Phone',
+            isVerified: phoneVerified,
+            onVerify: phoneVerified ? null : () {
+              _showPhoneVerificationDialog(context);
+            },
+          ),
+          
+          const SizedBox(height: 8),
+          
+          _buildVerificationItem(
+            icon: Icons.badge_outlined,
+            label: 'ID Document',
+            isVerified: idVerified,
+            onVerify: idVerified ? null : () {
+              _navigateToIdUpload(context);
+            },
+          ),
+          
+          if (isVerified)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Row(
+                children: [
+                  Icon(Icons.verified, color: Colors.green, size: 18),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Fully Verified',
+                    style: TextStyle(
+                      color: Colors.green,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVerificationItem({
+    required IconData icon,
+    required String label,
+    required bool isVerified,
+    VoidCallback? onVerify,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, color: isVerified ? Colors.green : Colors.grey, size: 20),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: isVerified ? Colors.black87 : Colors.grey,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+        if (!isVerified && onVerify != null)
+          ElevatedButton(
+            onPressed: onVerify,
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              backgroundColor: const Color(0xFF1976D2),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Verify'),
+          )
+        else if (isVerified)
+          Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green, size: 18),
+              const SizedBox(width: 6),
+              const Text(
+                'Verified',
+                style: TextStyle(
+                  color: Colors.green,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+      ],
     );
   }
 
