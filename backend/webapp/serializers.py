@@ -154,7 +154,8 @@ class EmployerLoginSerializer(serializers.Serializer):
     password = serializers.CharField()
 from rest_framework import serializers
 from .models import EmployerProfile
-from django.contrib.auth.models import User
+from webapp.models import User
+
 
 class EmployerProfileSerializer(serializers.ModelSerializer):
     display_name = serializers.CharField(source='get_display_name', read_only=True)
