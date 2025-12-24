@@ -32,7 +32,7 @@ from rest_framework.decorators import authentication_classes, permission_classes
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from webapp.serializers import ContractSerializer, EmployerProfileSerializer,  EmployerRegisterSerializer, EmployerSerializer, LoginSerializer, OrderSerializer, PaymentInitializeSerializer, ProposalSerializer, RatingSerializer, RegisterSerializer, SubmissionCreateSerializer, SubmissionSerializer, TaskCompletionSerializer, TaskCreateSerializer, TaskSerializer, TransactionSerializer, UserProfileSerializer, WalletSerializer
+from webapp.serializers import ContractSerializer, EmployerProfileSerializer, EmployerProfileUpdateSerializer,  EmployerRegisterSerializer, EmployerSerializer, IDDocumentUploadSerializer, LoginSerializer, OrderSerializer, PaymentInitializeSerializer, ProposalSerializer, RatingSerializer, RegisterSerializer, SubmissionCreateSerializer, SubmissionSerializer, TaskCompletionSerializer, TaskCreateSerializer, TaskSerializer, TransactionSerializer, UserProfileSerializer, WalletSerializer
 from .authentication import CustomTokenAuthentication, EmployerTokenAuthentication
 from .permissions import IsAuthenticated  
 from .models import UserProfile
@@ -41,6 +41,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from .authentication import EmployerTokenAuthentication, IsAuthenticated
 from .models import Task, Proposal
+from rest_framework.parsers import MultiPartParser, FormParser
 
 @csrf_exempt
 @api_view(['GET', 'POST', 'PUT'])
@@ -883,63 +884,62 @@ def get_employer_tasks(request):
             "error": "Error fetching tasks",
             "details": str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
- 
- 
+
+from rest_framework.parsers import MultiPartParser, FormParser
+
 @api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
-def get_employer_profile(request, employer_id):
-    """
-    Get employer profile by employer_id
-    """
+def get_employer_profile(request):
+   
     try:
-        # Add permission check to ensure user can only access their own profile
-        if request.user.id != employer_id and not request.user.is_staff:
-            return Response(
-                {'error': 'You do not have permission to access this profile'}, 
-                status=status.HTTP_403_FORBIDDEN
-            )
-            
-        profile = EmployerProfile.objects.get(employer_id=employer_id)
+        employer = Employer.objects.get(user=request.user)
+        profile = EmployerProfile.objects.get(employer=employer)
         serializer = EmployerProfileSerializer(profile)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-    except EmployerProfile.DoesNotExist:
+        return Response(serializer.data)
+    except Employer.DoesNotExist:
         return Response(
-            {'error': 'Profile not found', 'employer_id': employer_id}, 
+            {'error': 'No employer account found'}, 
             status=status.HTTP_404_NOT_FOUND
         )
-    except Exception as e:
+    except EmployerProfile.DoesNotExist:
         return Response(
-            {'error': f'Server error: {str(e)}'}, 
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            {'error': 'Profile not found. Create one first.'}, 
+            status=status.HTTP_404_NOT_FOUND
         )
-
-
+from rest_framework.decorators import api_view, authentication_classes, permission_classes, parser_classes
 @api_view(['POST'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
+@parser_classes([MultiPartParser, FormParser])
 def create_employer_profile(request):
    
     try:
-        # Ensure user can only create their own profile
-        if 'employer' in request.data and request.data['employer'] != request.user.id:
-            return Response(
-                {'error': 'You can only create your own profile'}, 
-                status=status.HTTP_403_FORBIDDEN
-            )
-            
+        # Get or create employer
+        employer, created = Employer.objects.get_or_create(user=request.user)
+        
         # Check if profile already exists
-        existing_profile = EmployerProfile.objects.filter(employer_id=request.user.id).first()
-        if existing_profile:
+        if hasattr(employer, 'profile'):
             return Response(
                 {'error': 'Profile already exists. Use update instead.'}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
-            
-        serializer = EmployerProfileSerializer(data=request.data)
+        
+        # Add employer to data
+        data = request.data.copy()
+        data['employer'] = employer.id
+        
+        serializer = EmployerProfileSerializer(data=data)
         if serializer.is_valid():
-            serializer.save()
+            profile = serializer.save()
+            
+            # Send verification emails/codes
+            send_verification_email(profile)
+            if profile.phone_number:
+                send_phone_verification_code(profile)
+                
             return Response(serializer.data, status=status.HTTP_201_CREATED)
+        
         return Response(
             {'error': 'Validation failed', 'details': serializer.errors}, 
             status=status.HTTP_400_BAD_REQUEST
@@ -949,52 +949,199 @@ def create_employer_profile(request):
             {'error': f'Server error: {str(e)}'}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
-
 
 @api_view(['PUT', 'PATCH'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
-def update_employer_profile(request, employer_id):
+@parser_classes([MultiPartParser, FormParser])
+def update_employer_profile(request):
     
     try:
-        # Permission check
-        if request.user.id != employer_id and not request.user.is_staff:
-            return Response(
-                {'error': 'You do not have permission to update this profile'}, 
-                status=status.HTTP_403_FORBIDDEN
-            )
-            
-        try:
-            profile = EmployerProfile.objects.get(employer_id=employer_id)
-        except EmployerProfile.DoesNotExist:
-            return Response(
-                {'error': 'Profile not found'}, 
-                status=status.HTTP_404_NOT_FOUND
-            )
+        employer = Employer.objects.get(user=request.user)
+        profile = EmployerProfile.objects.get(employer=employer)
         
-        # Determine if it's partial update (PATCH) or full update (PUT)
-        partial = request.method == 'PATCH'
+        # Use PATCH for partial updates, PUT for full updates
+        serializer_class = EmployerProfileUpdateSerializer if request.method == 'PATCH' else EmployerProfileSerializer
         
-        serializer = EmployerProfileSerializer(
-            profile, 
-            data=request.data, 
-            partial=partial
-        )
-        
+        serializer = serializer_class(profile, data=request.data, partial=(request.method == 'PATCH'))
         if serializer.is_valid():
             serializer.save()
-            return Response(serializer.data, status=status.HTTP_200_OK)
-            
+            return Response(serializer.data)
+        
         return Response(
             {'error': 'Validation failed', 'details': serializer.errors}, 
             status=status.HTTP_400_BAD_REQUEST
         )
-    except Exception as e:
+    except Employer.DoesNotExist:
         return Response(
-            {'error': f'Server error: {str(e)}'}, 
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            {'error': 'No employer account found'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except EmployerProfile.DoesNotExist:
+        return Response(
+            {'error': 'Profile not found. Create one first.'}, 
+            status=status.HTTP_404_NOT_FOUND
         )
 
+@api_view(['POST'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+@parser_classes([MultiPartParser, FormParser])
+def upload_id_document(request):
+    
+    try:
+        employer = Employer.objects.get(user=request.user)
+        profile = EmployerProfile.objects.get(employer=employer)
+        
+        serializer = IDDocumentUploadSerializer(profile, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            
+            # Update verification status
+            profile.verification_status = 'pending'
+            profile.save()
+            
+            return Response({
+                'message': 'ID document uploaded successfully',
+                'status': 'pending'
+            })
+        
+        return Response(
+            {'error': 'Validation failed', 'details': serializer.errors}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    except Employer.DoesNotExist:
+        return Response(
+            {'error': 'No employer account found'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except EmployerProfile.DoesNotExist:
+        return Response(
+            {'error': 'Profile not found. Create one first.'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+@api_view(['POST'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def verify_email(request):
+   
+    try:
+        employer = Employer.objects.get(user=request.user)
+        profile = EmployerProfile.objects.get(employer=employer)
+        
+        token = request.data.get('token')
+        if not token:
+            return Response(
+                {'error': 'Verification token required'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if profile.email_verification_token == token:
+            profile.email_verified = True
+            profile.email_verified_at = timezone.now()
+            profile.email_verification_token = None
+            profile.save()
+            
+            return Response({'message': 'Email verified successfully'})
+        
+        return Response(
+            {'error': 'Invalid verification token'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    except Employer.DoesNotExist:
+        return Response(
+            {'error': 'No employer account found'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except EmployerProfile.DoesNotExist:
+        return Response(
+            {'error': 'Profile not found. Create one first.'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+@api_view(['POST'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def verify_phone(request):
+    
+    try:
+        employer = Employer.objects.get(user=request.user)
+        profile = EmployerProfile.objects.get(employer=employer)
+        
+        code = request.data.get('code')
+        if not code:
+            return Response(
+                {'error': 'Verification code required'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if profile.phone_verification_code == code:
+           
+            if profile.phone_verification_sent_at:
+                time_diff = timezone.now() - profile.phone_verification_sent_at
+                if time_diff.total_seconds() > 300:  # 5 minutes
+                    return Response(
+                        {'error': 'Verification code expired'}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            
+            profile.phone_verified = True
+            profile.phone_verified_at = timezone.now()
+            profile.phone_verification_code = None
+            profile.save()
+            
+            return Response({'message': 'Phone verified successfully'})
+        
+        return Response(
+            {'error': 'Invalid verification code'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    except Employer.DoesNotExist:
+        return Response(
+            {'error': 'No employer account found'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except EmployerProfile.DoesNotExist:
+        return Response(
+            {'error': 'Profile not found. Create one first.'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+# Helper functions
+def send_verification_email(profile):
+  
+    import secrets
+    from django.core.mail import send_mail
+    from django.conf import settings
+    
+    token = secrets.token_urlsafe(32)
+    profile.email_verification_token = token
+    profile.save()
+    
+    # Send email
+    verification_url = f"{settings.FRONTEND_URL}/verify-email/{token}"
+    send_mail(
+        'Verify your email - HELAWORK',
+        f'Click here to verify your email: {verification_url}',
+        settings.DEFAULT_FROM_EMAIL,
+        [profile.contact_email],
+        fail_silently=False,
+    )
+
+def send_phone_verification_code(profile):
+    
+    import random
+    
+   
+    code = str(random.randint(100000, 999999))
+    profile.phone_verification_code = code
+    profile.phone_verification_sent_at = timezone.now()
+    profile.save()
+    
+    # TODO: Integrate with SMS gateway (Africa's Talking, Twilio, etc.)
+    # For now, just return the code (for testing)
+    print(f"Phone verification code for {profile.phone_number}: {code}") 
 
 @api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication])

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:helawork/services/api_sercice.dart';
+import 'package:helawork/api_service.dart';
+
 
 class RatingProvider with ChangeNotifier {
   List<dynamic> _ratings = [];
@@ -48,7 +49,6 @@ class RatingProvider with ChangeNotifier {
         tasks = await ApiService.getData('/freelancers/$currentUserId/completed-tasks/');
       } catch (e) {
         print(" Completed tasks endpoint not available, using fallback");
-        // Fallback: Try to get all tasks and filter completed ones
         tasks = await ApiService.getData('/tasks/?freelancer=$currentUserId&status=completed');
       }
       

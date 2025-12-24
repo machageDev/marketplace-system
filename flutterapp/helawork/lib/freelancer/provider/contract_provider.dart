@@ -1,10 +1,10 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:helawork/api_service.dart';
+import 'package:helawork/freelancer/model/contract_model.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
-import 'package:helawork/services/api_sercice.dart';
 import 'auth_provider.dart';
-import '../models/contract_model.dart';
 
 class ContractProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
@@ -41,7 +41,7 @@ class ContractProvider with ChangeNotifier {
 
       debugPrint("Fetching contracts...");
 
-      // ✅ Correct: full URL
+      
       final url = Uri.parse('${ApiService.baseUrl}/api/freelancer/contracts/');
 
       final response = await http.get(

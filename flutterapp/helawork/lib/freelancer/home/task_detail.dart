@@ -1,6 +1,5 @@
-// In TaskDetailScreen.dart
 import 'package:flutter/material.dart';
-import 'package:helawork/clients/provider/client_profile_provider.dart';
+import 'package:helawork/client/provider/client_profile_provider.dart';
 import 'package:helawork/freelancer/home/proposal_screen.dart';
 import 'package:provider/provider.dart';
 
@@ -8,14 +7,14 @@ class TaskDetailScreen extends StatefulWidget {
   final int taskId;
   final Map<String, dynamic> task;
   final Map<String, dynamic> employer;
-  final bool isTaken; // 👈 ADD THIS
+  final bool isTaken; 
 
   const TaskDetailScreen({
     super.key,
     required this.taskId,
     required this.task,
     required this.employer,
-    required this.isTaken, required bool isFromContract, Map<String, dynamic>? assignedFreelancer, // 👈 ADD THIS
+    required this.isTaken, required bool isFromContract, Map<String, dynamic>? assignedFreelancer, 
   });
 
   @override

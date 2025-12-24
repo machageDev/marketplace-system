@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:helawork/freelancer/provider/dashbaord_provider.dart';
-import 'package:helawork/services/api_sercice.dart';
+import 'package:helawork/api_service.dart';
+import 'package:helawork/freelancer/provider/dashboard_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 

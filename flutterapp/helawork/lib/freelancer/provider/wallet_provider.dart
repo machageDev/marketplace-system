@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:helawork/services/wallet_service.dart';
+import 'package:helawork/wallet_service.dart';
+
 
 class WalletProvider extends ChangeNotifier {
   final WalletService walletService;

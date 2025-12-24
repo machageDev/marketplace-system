@@ -43,21 +43,150 @@ class EmployerToken(models.Model):
     employer = models.OneToOneField(Employer, on_delete=models.CASCADE)
     key = models.UUIDField(default=uuid.uuid4, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
+from django.db import models
+from django.core.validators import MinValueValidator, MaxValueValidator
+from django.utils import timezone
+from django.contrib.auth.models import User
+
 class EmployerProfile(models.Model):
-    employer = models.OneToOneField(  
-        Employer, 
+    # User relationship
+    employer = models.OneToOneField(
+        'Employer', 
         on_delete=models.CASCADE, 
         related_name='profile',
         null=True,
         blank=True
     )
-    company_name = models.CharField(max_length=255, blank=True, null=True)
+    
+    # ============ ACCOUNT TYPE ============
+    account_type = models.CharField(
+        max_length=20,
+        default='individual',
+        choices=[
+            ('individual', 'Individual'),
+            ('business', 'Business/Company'),
+            ('agency', 'Agency'),
+        ],
+        help_text="Type of account"
+    )
+    
+    # ============ BASIC INFO ============
+    full_name = models.CharField(max_length=255, blank=True, null=True, help_text="For individuals")
+    company_name = models.CharField(max_length=255, blank=True, null=True, help_text="For businesses")
+    profile_picture = models.ImageField(upload_to='employer_profiles/', blank=True, null=True)
+    
+    # ============ CONTACT INFO ============
     contact_email = models.EmailField(unique=True)
     phone_number = models.CharField(max_length=20, blank=True, null=True)
-    profile_picture = models.ImageField(upload_to='employer_profiles/', blank=True, null=True)
-
+    alternate_phone = models.CharField(max_length=20, blank=True, null=True)
+    
+    # ============ EMAIL VERIFICATION ============
+    email_verified = models.BooleanField(default=False)
+    email_verification_token = models.CharField(max_length=100, blank=True, null=True)
+    email_verified_at = models.DateTimeField(blank=True, null=True)
+    
+    # ============ PHONE VERIFICATION ============
+    phone_verified = models.BooleanField(default=False)
+    phone_verification_code = models.CharField(max_length=6, blank=True, null=True)
+    phone_verification_sent_at = models.DateTimeField(blank=True, null=True)
+    phone_verified_at = models.DateTimeField(blank=True, null=True)
+    
+    # ============ ID VERIFICATION ============
+    id_verified = models.BooleanField(default=False)
+    id_document = models.ImageField(
+        upload_to='id_documents/', 
+        blank=True, 
+        null=True,
+        help_text="Upload your National ID or any valid ID"
+    )
+    id_verified_by = models.ForeignKey(
+        User, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='verified_employers'
+    )
+    id_verified_at = models.DateTimeField(blank=True, null=True)
+    
+    # ============ LOCATION ============
+    country = models.CharField(max_length=100, blank=True, null=True)
+    city = models.CharField(max_length=100, blank=True, null=True)
+    address = models.TextField(blank=True, null=True)
+    
+    # ============ BUSINESS INFO (For businesses only) ============
+    business_type = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        choices=[
+            ('sole_proprietorship', 'Sole Proprietorship'),
+            ('partnership', 'Partnership'),
+            ('llc', 'Limited Liability Company'),
+            ('corporation', 'Corporation'),
+            ('ngo', 'NGO/Non-profit'),
+        ]
+    )
+    industry = models.CharField(max_length=100, blank=True, null=True)
+    business_registration_number = models.CharField(max_length=100, blank=True, null=True)
+    tax_id = models.CharField(max_length=50, blank=True, null=True, verbose_name="Tax ID")
+    company_logo = models.ImageField(upload_to='company_logos/', blank=True, null=True)
+    website = models.URLField(max_length=200, blank=True, null=True)
+    
+    # ============ ABOUT/ BIO ============
+    bio = models.TextField(blank=True, null=True, help_text="Tell about yourself or your business")
+    
+    # ============ SOCIAL MEDIA ============
+    linkedin_url = models.URLField(blank=True, null=True)
+    twitter_url = models.URLField(blank=True, null=True)
+    
+    # ============ VERIFICATION STATUS ============
+    verification_status = models.CharField(
+        max_length=20,
+        default='unverified',
+        choices=[
+            ('unverified', 'Unverified'),
+            ('pending', 'Pending Review'),
+            ('verified', 'Verified'),
+            ('rejected', 'Rejected'),
+        ]
+    )
+    
+    # ============ STATS ============
+    total_projects_posted = models.IntegerField(default=0)
+    total_spent = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    avg_freelancer_rating = models.DecimalField(max_digits=3, decimal_places=2, default=0.00)
+    
+    # ============ TIMESTAMPS ============
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    # ============ HELPER METHODS ============
+    def get_display_name(self):
+        if self.account_type == 'individual':
+            return self.full_name or f"Individual #{self.id}"
+        else:
+            return self.company_name or f"Business #{self.id}"
+    
+    def is_business(self):
+        return self.account_type in ['business', 'agency']
+    
+    def is_fully_verified(self):
+        """Check if user is fully verified"""
+        return (
+            self.email_verified and 
+            self.phone_verified and 
+            self.id_verified and 
+            self.verification_status == 'verified'
+        )
+    
+    # ============ META ============
+    class Meta:
+        verbose_name = "Employer Profile"
+        verbose_name_plural = "Employer Profiles"
+        ordering = ['-created_at']
+    
     def __str__(self):
-        return self.company_name if self.company_name else self.contact_email
+        return self.get_display_name()
     
 class Task(models.Model):
     TASK_CATEGORIES = [
@@ -221,8 +350,8 @@ class Proposal(models.Model):
 class Contract(models.Model):
     contract_id = models.AutoField(primary_key=True)
     task = models.OneToOneField(Task, related_name="contract", on_delete=models.CASCADE)
-    freelancer = models.ForeignKey(User, on_delete=models.CASCADE)
-    employer = models.ForeignKey(Employer, on_delete=models.CASCADE)
+    freelancer = models.ForeignKey('User', on_delete=models.CASCADE)      
+    employer = models.ForeignKey('Employer', on_delete=models.CASCADE) 
 
     start_date = models.DateField(default=timezone.now)
     end_date = models.DateField(blank=True, null=True)

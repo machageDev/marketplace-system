@@ -4,9 +4,9 @@ import 'package:helawork/freelancer/home/proposal_screen.dart';
 import 'package:helawork/freelancer/home/rating_screen.dart';
 import 'package:helawork/freelancer/home/submitting_task.dart';
 import 'package:helawork/freelancer/home/task_page.dart';
-import 'package:helawork/freelancer/home/user_profile_screen.dart';
+import 'package:helawork/freelancer/home/userprofile_screen.dart';
 import 'package:helawork/freelancer/home/wallet_screen.dart';
-import 'package:helawork/freelancer/provider/dashbaord_provider.dart';
+import 'package:helawork/freelancer/provider/dashboard_provider.dart';
 import 'package:provider/provider.dart';
 
 class DashboardPage extends StatefulWidget {

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:helawork/freelancer/home/task_detail.dart';
-import 'package:helawork/freelancer/models/contract_model.dart';
+import 'package:helawork/freelancer/model/contract_model.dart';
 import 'package:helawork/freelancer/provider/contract_provider.dart';
 import 'package:provider/provider.dart';
 

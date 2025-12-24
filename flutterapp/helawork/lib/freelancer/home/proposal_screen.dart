@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:helawork/freelancer/model/proposal_model.dart';
 import 'package:helawork/freelancer/provider/proposal_provider.dart';
 import 'package:helawork/freelancer/provider/task_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
-import '../models/proposal.dart';
+
 
 class ProposalsScreen extends StatefulWidget {
   final int? taskId;
@@ -176,7 +177,7 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
                   labelText: "Select Task",
                   border: OutlineInputBorder(),
                 ),
-                value: selectedTaskId,
+                initialValue: selectedTaskId,
                 items: taskProvider.availableTasks
                     .map((task) => DropdownMenuItem<int>(
                           value: task['id'],
@@ -247,7 +248,7 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
                   labelText: "Estimated Completion Days",
                   border: OutlineInputBorder(),
                 ),
-                value: _estimatedDays,
+                initialValue: _estimatedDays,
                 items: [7, 10, 14, 21, 30, 45, 60]
                     .map((days) => DropdownMenuItem<int>(
                           value: days,

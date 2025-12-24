@@ -1,64 +1,54 @@
 import 'package:flutter/material.dart';
-import 'package:helawork/clients/provider/auth_provider.dart' as client_auth;
-import 'package:helawork/clients/provider/client_profile_provider.dart';
-import 'package:helawork/clients/provider/client_proposal_provider.dart' as client_proposal;
-//import 'package:helawork/clients/provider/contract_provider.dart';
-import 'package:helawork/clients/provider/dashboard_provider.dart' as client_dashboard;
-//import 'package:helawork/clients/provider/employer_rating_provider.dart';
-import 'package:helawork/clients/provider/rating_provider.dart' as client_rating;
-import 'package:helawork/clients/provider/task_provider.dart' as client_task;
-import 'package:helawork/freelancer/provider/auth_provider.dart' as freelancer_auth;
+import 'package:helawork/api_service.dart';
+import 'package:helawork/client/provider/auth_provider.dart' as client_auth;
+import 'package:helawork/client/provider/client_dashboard_provider.dart' as client_dashboard;
+import 'package:helawork/client/provider/client_profile_provider.dart';
+import 'package:helawork/client/provider/client_proposal_provider.dart' as client_proposal;
+import 'package:helawork/client/provider/client_rating_provider.dart' as client_rating;
+import 'package:helawork/client/provider/client_task_provider.dart' as client_task;
+import 'package:helawork/client/screen/client_login_screen.dart';
+import 'package:helawork/freelancer/provider/auth_provider.dart' as auth;
 import 'package:helawork/freelancer/provider/contract_provider.dart';
-import 'package:helawork/freelancer/provider/dashbaord_provider.dart' as freelancer_dashboard;
+import 'package:helawork/freelancer/provider/dashboard_provider.dart';
 import 'package:helawork/freelancer/provider/forgot_password_provider.dart';
 import 'package:helawork/freelancer/provider/proposal_provider.dart';
 import 'package:helawork/freelancer/provider/rating_provider.dart' as freelancer_rating;
 import 'package:helawork/freelancer/provider/submission_provider.dart';
-import 'package:helawork/freelancer/provider/task_provider.dart';
-import 'package:helawork/freelancer/provider/user_profile_provider.dart';
-import 'package:helawork/freelancer/screens/login_screen.dart'; 
-import 'package:helawork/clients/screens/client_login_screen.dart'; 
-import 'package:helawork/services/api_sercice.dart';
-import 'package:helawork/services/wallet_service.dart';
-import 'package:provider/provider.dart';
+import 'package:helawork/freelancer/provider/user_profile_provoder.dart';
 import 'package:helawork/freelancer/provider/wallet_provider.dart';
+import 'package:helawork/freelancer/screen/login_screen.dart';
+import 'package:helawork/wallet_service.dart';
+import 'package:provider/provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
 
   runApp(
     MultiProvider(
       providers: [
         // Service Providers (formerly Freelancers)
-         ChangeNotifierProvider(
+        ChangeNotifierProvider(
           create: (_) => WalletProvider.create(
-            walletService: WalletService(),  // Create WalletService instance
-            token: '', // You'll need to pass the actual token here or update it later
+            walletService: WalletService(),
+            token: '',
           ),
         ),
-        ChangeNotifierProvider(create: (_) => freelancer_auth.AuthProvider()),
-        ChangeNotifierProvider(create: (_) => ForgotPasswordProvider()),    
-        ChangeNotifierProvider(create: (_) => UserProfileProvider()),  
-        ChangeNotifierProvider(create: (_) => freelancer_dashboard.DashboardProvider()),
-        ChangeNotifierProvider(create: (_) => TaskProvider()), 
+        ChangeNotifierProvider(create: (_) => auth.AuthProvider()),
+        ChangeNotifierProvider(create: (_) => ForgotPasswordProvider()),
+        ChangeNotifierProvider(create: (_) => UserProfileProvider()),
+        ChangeNotifierProvider(create: (_) => DashboardProvider()),
+        ChangeNotifierProvider(create: (_) => client_task.TaskProvider()),
         ChangeNotifierProvider(create: (_) => ProposalProvider()),
         ChangeNotifierProvider(create: (_) => ContractProvider()),
         ChangeNotifierProvider(create: (_) => freelancer_rating.RatingProvider()),
         ChangeNotifierProvider(create: (_) => SubmissionProvider()),
-        
-
-
         // Task Posters (formerly Clients)
         ChangeNotifierProvider(create: (_) => client_dashboard.DashboardProvider(apiService: ApiService())),
-        ChangeNotifierProvider(create: (_) => client_auth.AuthProvider(apiService: ApiService())), 
+        ChangeNotifierProvider(create: (_) => client_auth.AuthProvider(apiService: ApiService())),
         ChangeNotifierProvider(create: (_) => client_task.TaskProvider()),
-        ChangeNotifierProvider(create: (_) => client_proposal.ClientProposalProvider(apiService: ApiService())), 
+        ChangeNotifierProvider(create: (_) => client_proposal.ClientProposalProvider(apiService: ApiService())),
         ChangeNotifierProvider(create: (_) => ClientProfileProvider()),
-      
-        //ChangeNotifierProvider(create: (_) => EmployerRatingProvider()),
         ChangeNotifierProvider(create: (_) => client_rating.ClientRatingProvider()),
-        
       ],
       child: const MyApp(),
     ),
@@ -79,7 +69,7 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// Enhanced Role Selection Screen
+// Enhanced Role Selection Screen - FIXED VERSION
 class RoleSelectionScreen extends StatelessWidget {
   const RoleSelectionScreen({super.key});
 
@@ -94,7 +84,7 @@ class RoleSelectionScreen extends StatelessWidget {
             child: Column(
               children: [
                 const SizedBox(height: 40),
-                
+
                 // Logo and Welcome Section
                 Column(
                   children: [
@@ -229,7 +219,7 @@ class RoleSelectionScreen extends StatelessWidget {
 
                 const SizedBox(height: 30),
 
-                // Task Poster Button (People who need services)
+                // Task Poster Button (People who need services) - FIXED
                 Container(
                   width: double.infinity,
                   height: 140,
@@ -275,27 +265,34 @@ class RoleSelectionScreen extends StatelessWidget {
                             ),
                             const SizedBox(width: 16),
                             Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Text(
-                                    'Task Poster',
-                                    style: TextStyle(
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.black,
+                              child: Container(
+                                constraints: const BoxConstraints(maxHeight: 100),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Text(
+                                      'Task Poster',
+                                      style: TextStyle(
+                                        fontSize: 20, // Reduced from 22
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.black,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Post projects and hire professionals',
-                                    style: TextStyle(
-                                      color: Colors.black.withOpacity(0.7),
-                                      fontSize: 14,
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Post projects and hire',
+                                      style: TextStyle(
+                                        color: Colors.black.withOpacity(0.7),
+                                        fontSize: 12, // Reduced from 14
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
                             const Icon(
@@ -312,7 +309,7 @@ class RoleSelectionScreen extends StatelessWidget {
 
                 const SizedBox(height: 20),
 
-                // Service Provider Button (People who provide services)
+                // Service Provider Button (People who provide services) - FIXED
                 Container(
                   width: double.infinity,
                   height: 140,
@@ -358,27 +355,34 @@ class RoleSelectionScreen extends StatelessWidget {
                             ),
                             const SizedBox(width: 16),
                             Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Text(
-                                    'Service Provider',
-                                    style: TextStyle(
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.black,
+                              child: Container(
+                                constraints: const BoxConstraints(maxHeight: 100),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Text(
+                                      'Service Provider',
+                                      style: TextStyle(
+                                        fontSize: 20, // Reduced from 22
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.black,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Find work and provide services',
-                                    style: TextStyle(
-                                      color: Colors.black.withOpacity(0.7),
-                                      fontSize: 14,
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Find work and provide',
+                                      style: TextStyle(
+                                        color: Colors.black.withOpacity(0.7),
+                                        fontSize: 12, // Reduced from 14
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
                             const Icon(

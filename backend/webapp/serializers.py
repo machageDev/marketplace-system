@@ -152,18 +152,124 @@ from .models import Employer, EmployerProfile
 class EmployerLoginSerializer(serializers.Serializer):
     username = serializers.CharField()
     password = serializers.CharField()
+from rest_framework import serializers
+from .models import EmployerProfile
+from django.contrib.auth.models import User
+
 class EmployerProfileSerializer(serializers.ModelSerializer):
+    display_name = serializers.CharField(source='get_display_name', read_only=True)
+    is_business = serializers.BooleanField(source='is_business', read_only=True)
+    is_fully_verified = serializers.BooleanField(source='is_fully_verified', read_only=True)
+    
     class Meta:
         model = EmployerProfile
         fields = [
-            'company_name', 
-            'contact_email', 
-            'phone_number', 
-            'profile_picture'
+            'id',
+            'employer',
+            'account_type',
+            'full_name',
+            'company_name',
+            'profile_picture',
+            'contact_email',
+            'phone_number',
+            'alternate_phone',
+            'email_verified',
+            'phone_verified',
+            'id_verified',
+            'id_document',
+            'country',
+            'city',
+            'address',
+            'business_type',
+            'industry',
+            'business_registration_number',
+            'tax_id',
+            'company_logo',
+            'website',
+            'bio',
+            'linkedin_url',
+            'twitter_url',
+            'verification_status',
+            'total_projects_posted',
+            'total_spent',
+            'avg_freelancer_rating',
+            'created_at',
+            'updated_at',
+            'display_name',
+            'is_business',
+            'is_fully_verified',
         ]
-        extra_kwargs = {
-            'profile_picture': {'required': False, 'allow_null': True}
-        }
+        read_only_fields = [
+            'id',
+            'employer',
+            'email_verified',
+            'phone_verified',
+            'id_verified',
+            'id_verified_by',
+            'id_verified_at',
+            'verification_status',
+            'total_projects_posted',
+            'total_spent',
+            'avg_freelancer_rating',
+            'created_at',
+            'updated_at',
+        ]
+
+class EmployerProfileCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating employer profile"""
+    class Meta:
+        model = EmployerProfile
+        fields = [
+            'account_type',
+            'full_name',
+            'company_name',
+            'profile_picture',
+            'contact_email',
+            'phone_number',
+            'alternate_phone',
+            'country',
+            'city',
+            'address',
+            'business_type',
+            'industry',
+            'business_registration_number',
+            'tax_id',
+            'company_logo',
+            'website',
+            'bio',
+            'linkedin_url',
+            'twitter_url',
+        ]
+
+class EmployerProfileUpdateSerializer(serializers.ModelSerializer):
+    
+    class Meta:
+        model = EmployerProfile
+        fields = [
+            'full_name',
+            'company_name',
+            'profile_picture',
+            'phone_number',
+            'alternate_phone',
+            'country',
+            'city',
+            'address',
+            'business_type',
+            'industry',
+            'business_registration_number',
+            'tax_id',
+            'company_logo',
+            'website',
+            'bio',
+            'linkedin_url',
+            'twitter_url',
+        ]
+
+class IDDocumentUploadSerializer(serializers.ModelSerializer):
+    """Serializer for uploading ID document"""
+    class Meta:
+        model = EmployerProfile
+        fields = ['id_document']
 
 class EmployerSerializer(serializers.ModelSerializer):
     profile = EmployerProfileSerializer(required=False)

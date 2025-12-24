@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:helawork/freelancer/home/submitting_rate.dart';
+import 'package:helawork/freelancer/home/submitting_rating.dart';
 import 'package:helawork/freelancer/provider/rating_provider.dart';
 import 'package:helawork/freelancer/widgets/rating_card.dart';
 import 'package:provider/provider.dart';
