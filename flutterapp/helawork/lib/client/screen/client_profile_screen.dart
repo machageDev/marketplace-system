@@ -14,33 +14,60 @@ class ClientProfileScreen extends StatefulWidget {
 
 class _ClientProfileScreenState extends State<ClientProfileScreen> {
   bool _isRefreshing = false;
+  bool _initialized = false;
 
   @override
   void initState() {
     super.initState();
-    _loadProfile();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadProfile();
+    });
   }
 
   void _loadProfile() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<ClientProfileProvider>(context, listen: false)
-          .fetchProfile();
-    });
+    if (_initialized) return;
+    
+    print('=== DEBUG: Loading profile ===');
+    print('Widget employerId: ${widget.employerId}');
+    
+    final provider = Provider.of<ClientProfileProvider>(context, listen: false);
+    print('Provider employerId before set: ${provider.employerId}');
+    
+    // FIRST: Set the employerId in the provider
+    provider.setEmployerId(widget.employerId);
+    print('Provider employerId after set: ${provider.employerId}');
+    
+    // THEN: Fetch the profile
+    provider.fetchProfile();
+    
+    _initialized = true;
   }
 
   Future<void> _refreshProfile() async {
     setState(() => _isRefreshing = true);
-    await Provider.of<ClientProfileProvider>(context, listen: false)
-        .fetchProfile();
+    
+    print('=== DEBUG: Refreshing profile ===');
+    print('Widget employerId: ${widget.employerId}');
+    
+    final provider = Provider.of<ClientProfileProvider>(context, listen: false);
+    
+    // Make sure employerId is set
+    provider.setEmployerId(widget.employerId);
+    
+    // Then fetch profile
+    await provider.fetchProfile();
+    
     setState(() => _isRefreshing = false);
   }
 
   void _navigateToEditScreen(BuildContext context, bool isNewProfile) {
+    final provider = Provider.of<ClientProfileProvider>(context, listen: false);
+    
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => EditProfileScreen(
-          currentProfile: Provider.of<ClientProfileProvider>(context).profile,
+          currentProfile: provider.profile,
           isNewProfile: isNewProfile,
           employerId: widget.employerId,
         ),

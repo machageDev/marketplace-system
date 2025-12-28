@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:helawork/api_service.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ClientProfileProvider with ChangeNotifier {
@@ -12,6 +11,7 @@ class ClientProfileProvider with ChangeNotifier {
   String? _errorMessage;
   bool _hasError = false;
   int? _employerId;
+  bool _profileExists = false;
 
   // Getters
   bool get isLoading => _isLoading;
@@ -19,19 +19,25 @@ class ClientProfileProvider with ChangeNotifier {
   String? get errorMessage => _errorMessage;
   bool get hasError => _hasError;
   int? get employerId => _employerId;
+  bool get profileExists => _profileExists;
 
   ClientProfileProvider() {
     _apiService = ApiService();
-    _loadEmployerId();
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    await _loadEmployerId();
+    await _checkProfileExistsSilent();
   }
 
   Future<void> _loadEmployerId() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       _employerId = prefs.getInt('employer_id');
-      print('Loaded employerId from storage: $_employerId');
+      print('=== ClientProfileProvider: Loaded employerId from storage: $_employerId');
     } catch (e) {
-      print('Error loading employerId: $e');
+      print('=== ClientProfileProvider: Error loading employerId: $e');
     }
   }
 
@@ -40,37 +46,60 @@ class ClientProfileProvider with ChangeNotifier {
       _employerId = id;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt('employer_id', id);
-      print('Saved employerId to storage: $id');
+      print('=== ClientProfileProvider: Saved employerId to storage: $id');
       notifyListeners();
+      
+      await _checkProfileExistsSilent();
     } catch (e) {
-      print('Error setting employerId: $e');
+      print('=== ClientProfileProvider: Error setting employerId: $e');
     }
   }
 
-  // Clear error state
   void clearError() {
     _hasError = false;
     _errorMessage = null;
     notifyListeners();
   }
 
-  // Check if profile exists
   Future<bool> checkProfileExists() async {
-    if (_employerId == null) return false;
-    
     try {
-      await _apiService.getEmployerProfile(_employerId!);
-      return true;
+      final result = await _apiService.checkProfileExists();
+      _profileExists = result['exists'] ?? false;
+      
+      if (_profileExists && result['employer_id'] != null) {
+        await setEmployerId(result['employer_id']);
+      }
+      
+      notifyListeners();
+      return _profileExists;
     } catch (e) {
+      print('=== ClientProfileProvider: Error checking profile existence: $e');
+      _profileExists = false;
+      notifyListeners();
       return false;
     }
   }
 
-  // Fetch profile - REMOVED parameter since we use stored _employerId
+  Future<void> _checkProfileExistsSilent() async {
+    if (_employerId == null) return;
+    
+    try {
+      final result = await _apiService.checkProfileExists();
+      _profileExists = result['exists'] ?? false;
+    } catch (e) {
+      print('=== ClientProfileProvider: Silent check failed: $e');
+      _profileExists = false;
+    }
+  }
+
   Future<void> fetchProfile() async {
+    print('=== ClientProfileProvider: fetchProfile called ===');
+    print('Current employerId: $_employerId');
+    
     if (_employerId == null) {
       _errorMessage = "No employer ID found. Please login again.";
       _hasError = true;
+      print('=== ClientProfileProvider: ERROR - No employerId found');
       notifyListeners();
       return;
     }
@@ -81,21 +110,26 @@ class ClientProfileProvider with ChangeNotifier {
     notifyListeners();
 
     try {
+      print('=== ClientProfileProvider: Calling API with employerId: $_employerId');
       _profile = await _apiService.getEmployerProfile(_employerId!);
       _hasError = false;
-      print('Profile fetched successfully');
+      _profileExists = true;
+      print('=== ClientProfileProvider: Profile fetched successfully');
+      print('Profile data keys: ${_profile?.keys.toList()}');
     } catch (e) {
       if (e.toString().contains("Profile not found") || 
           e.toString().contains("404")) {
         _profile = null;
         _errorMessage = null;
         _hasError = false;
-        print('Profile not found, showing create profile UI');
+        _profileExists = false;
+        print('=== ClientProfileProvider: Profile not found, showing create profile UI');
       } else {
         _errorMessage = "Failed to load profile: $e";
         _profile = null;
         _hasError = true;
-        print('Error fetching profile: $e');
+        _profileExists = false;
+        print('=== ClientProfileProvider: Error fetching profile: $e');
       }
     }
 
@@ -103,10 +137,16 @@ class ClientProfileProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // Update profile
   Future<bool> updateProfile(Map<String, dynamic> data) async {
     if (_employerId == null) {
       _errorMessage = "No employer ID found";
+      _hasError = true;
+      notifyListeners();
+      return false;
+    }
+
+    if (data.isEmpty) {
+      _errorMessage = "No data provided for update";
       _hasError = true;
       notifyListeners();
       return false;
@@ -121,12 +161,13 @@ class ClientProfileProvider with ChangeNotifier {
       final updatedProfile = await _apiService.updateEmployerProfile(_employerId!, data);
       _profile = updatedProfile;
       _hasError = false;
+      _profileExists = true;
       
       _isLoading = false;
       notifyListeners();
       return true;
     } catch (e) {
-      _errorMessage = "Failed to update profile: $e";
+      _errorMessage = "Failed to update profile: ${e.toString()}";
       _hasError = true;
       print('Error updating profile: $e');
       
@@ -136,7 +177,6 @@ class ClientProfileProvider with ChangeNotifier {
     }
   }
 
-  // Create profile
   Future<bool> createProfile(Map<String, dynamic> data) async {
     _isLoading = true;
     _hasError = false;
@@ -147,17 +187,23 @@ class ClientProfileProvider with ChangeNotifier {
       final newProfile = await _apiService.createEmployerProfile(data);
       _profile = newProfile;
       _hasError = false;
+      _profileExists = true;
       
-      // Update employerId if it's in the response
-      if (_profile != null && _profile!['employer_id'] != null) {
-        await setEmployerId(_profile!['employer_id']);
+      if (_profile != null) {
+        if (_profile!['employer'] != null) {
+          await setEmployerId(_profile!['employer']);
+        } else if (_profile!['employer_id'] != null) {
+          await setEmployerId(_profile!['employer_id']);
+        } else if (_profile!['id'] != null) {
+          print('=== Profile created with ID: ${_profile!['id']}');
+        }
       }
       
       _isLoading = false;
       notifyListeners();
       return true;
     } catch (e) {
-      _errorMessage = "Failed to create profile: $e";
+      _errorMessage = "Failed to create profile: ${e.toString()}";
       _hasError = true;
       print('Error creating profile: $e');
       
@@ -167,9 +213,8 @@ class ClientProfileProvider with ChangeNotifier {
     }
   }
 
-  // Save profile (handles both create and update) - Fixed parameter
   Future<bool> saveProfile(Map<String, dynamic> data) async {
-    if (_profile == null) {
+    if (_profile == null || !_profileExists) {
       return await createProfile(data);
     } else if (_employerId != null) {
       return await updateProfile(data);
@@ -181,43 +226,49 @@ class ClientProfileProvider with ChangeNotifier {
     }
   }
 
-  // Upload ID document
-  Future<bool> uploadIdDocument(String filePath) async {
-    if (_employerId == null) {
-      _errorMessage = "No employer ID found";
-      _hasError = true;
-      notifyListeners();
-      return false;
-    }
-
-    _isLoading = true;
-    _hasError = false;
-    _errorMessage = null;
+  Future<bool> updateIdNumber(String idNumber) async {
+  if (_employerId == null) {
+    _errorMessage = "No employer ID found";
+    _hasError = true;
     notifyListeners();
-
-    try {
-      final file = await http.MultipartFile.fromPath('id_document', filePath);
-      await _apiService.uploadIdDocument(_employerId!, file);
-      _hasError = false;
-      
-      // Refresh profile to get updated verification status
-      await fetchProfile(); // Fixed: No parameter needed
-      
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } catch (e) {
-      _errorMessage = "Failed to upload ID: $e";
-      _hasError = true;
-      print('Error uploading ID: $e');
-      
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
+    return false;
   }
 
-  // Verify email
+  // Validate ID number
+  if (idNumber.isEmpty) {
+    _errorMessage = "ID number cannot be empty";
+    _hasError = true;
+    notifyListeners();
+    return false;
+  }
+
+  _isLoading = true;
+  _hasError = false;
+  _errorMessage = null;
+  notifyListeners();
+
+  try {
+    // Call ApiService to update ID number
+    await _apiService.updateIdNumber(idNumber);
+    
+    _hasError = false;
+    
+    // Refresh profile to get updated verification status
+    await fetchProfile();
+    
+    _isLoading = false;
+    notifyListeners();
+    return true;
+  } catch (e) {
+    _errorMessage = "Failed to update ID number: ${e.toString()}";
+    _hasError = true;
+    print('Error updating ID number: $e');
+    
+    _isLoading = false;
+    notifyListeners();
+    return false;
+  }
+}
   Future<bool> verifyEmail(String token) async {
     _isLoading = true;
     _hasError = false;
@@ -228,14 +279,13 @@ class ClientProfileProvider with ChangeNotifier {
       await _apiService.verifyEmail(token);
       _hasError = false;
       
-      // Refresh profile to get updated verification status
-      await fetchProfile(); // Fixed: No parameter needed
+      await fetchProfile();
       
       _isLoading = false;
       notifyListeners();
       return true;
     } catch (e) {
-      _errorMessage = "Failed to verify email: $e";
+      _errorMessage = "Failed to verify email: ${e.toString()}";
       _hasError = true;
       print('Error verifying email: $e');
       
@@ -245,7 +295,6 @@ class ClientProfileProvider with ChangeNotifier {
     }
   }
 
-  // Verify phone
   Future<bool> verifyPhone(String code) async {
     _isLoading = true;
     _hasError = false;
@@ -256,14 +305,13 @@ class ClientProfileProvider with ChangeNotifier {
       await _apiService.verifyPhone(code);
       _hasError = false;
       
-      // Refresh profile to get updated verification status
-      await fetchProfile(); // Fixed: No parameter needed
+      await fetchProfile();
       
       _isLoading = false;
       notifyListeners();
       return true;
     } catch (e) {
-      _errorMessage = "Failed to verify phone: $e";
+      _errorMessage = "Failed to verify phone: ${e.toString()}";
       _hasError = true;
       print('Error verifying phone: $e');
       
@@ -273,16 +321,51 @@ class ClientProfileProvider with ChangeNotifier {
     }
   }
 
-  // Clear profile (for logout)
-  void clearProfile() {
+  Future<void> clearProfile() async {
     _profile = null;
-    _employerId = null;
+    _profileExists = false;
     _isLoading = false;
     _errorMessage = null;
     _hasError = false;
+    
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('employer_id');
+    } catch (e) {
+      print('Error clearing employerId: $e');
+    }
+    
     notifyListeners();
   }
 
-  // Check if profile is loaded
   bool get isProfileLoaded => _profile != null;
+
+  dynamic getProfileField(String key, {dynamic defaultValue}) {
+    if (_profile == null) return defaultValue;
+    return _profile![key] ?? defaultValue;
+  }
+
+  bool get isProfileVerified {
+    if (_profile == null) return false;
+    
+    final emailVerified = _profile!['email_verified'] ?? false;
+    final phoneVerified = _profile!['phone_verified'] ?? false;
+    final idVerified = _profile!['id_verified'] ?? false;
+    final verificationStatus = _profile!['verification_status'] ?? 'unverified';
+    
+    return emailVerified && phoneVerified && idVerified && 
+           verificationStatus == 'verified';
+  }
+
+  String get displayName {
+    if (_profile == null) return 'Unknown';
+    
+    final accountType = _profile!['account_type'] ?? 'individual';
+    
+    if (accountType == 'individual') {
+      return _profile!['full_name'] ?? 'Individual User';
+    } else {
+      return _profile!['company_name'] ?? 'Business User';
+    }
+  }
 }
