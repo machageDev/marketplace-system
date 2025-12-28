@@ -131,22 +131,7 @@ class ProposalSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['proposal_id', 'submitted_at']
 
-class ContractSerializer(serializers.ModelSerializer):
-    task_title = serializers.CharField(source="task.title", read_only=True)
-    freelancer_name = serializers.CharField(source="freelancer.username", read_only=True)
-    employer_name = serializers.CharField(source="employer.username", read_only=True)
-
-    class Meta:
-        model = Contract
-        fields = [
-            "contract_id",
-            "task_title",
-            "freelancer_name",
-            "employer_name",
-            "start_date",
-            "end_date",
-            "is_active",
-        ]        
+       
         
 from .models import Employer, EmployerProfile
 class EmployerLoginSerializer(serializers.Serializer):
@@ -291,14 +276,39 @@ class EmployerProfileUpdateSerializer(serializers.ModelSerializer):
             'address': {'required': False},
         }
 
-class IDDocumentUploadSerializer(serializers.ModelSerializer):
-    """Serializer for uploading ID document"""
+# ============ ADD THIS NEW SERIALIZER ============
+class IDNumberUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for updating ID number (REPLACES IDDocumentUploadSerializer)"""
     class Meta:
         model = EmployerProfile
-        fields = ['id_document']
+        fields = ['id_number']
         extra_kwargs = {
-            'id_document': {'required': True}
+            'id_number': {
+                'required': True,
+                'allow_null': False,
+                'allow_blank': False,
+                'error_messages': {
+                    'required': 'ID number is required.',
+                    'blank': 'ID number cannot be blank.'
+                }
+            }
         }
+    
+    def validate_id_number(self, value):
+        """Validate ID number format"""
+        if not value or value.strip() == '':
+            raise serializers.ValidationError("ID number cannot be empty.")
+        
+        # Add ID number length validation (adjust for your country)
+        if len(value) < 5:
+            raise serializers.ValidationError("ID number seems too short.")
+        
+        # Check for duplicates (optional - remove if not needed)
+        if self.instance:
+            if EmployerProfile.objects.filter(id_number=value).exclude(id=self.instance.id).exists():
+                raise serializers.ValidationError("This ID number is already registered.")
+        
+        return value.strip()
 
 
 
