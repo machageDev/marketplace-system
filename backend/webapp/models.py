@@ -48,7 +48,7 @@ from django.utils import timezone
 from django.conf import settings
 
 class EmployerProfile(models.Model):
-  
+    # User relationship
     employer = models.OneToOneField(
         'Employer', 
         on_delete=models.CASCADE, 
@@ -57,29 +57,34 @@ class EmployerProfile(models.Model):
         blank=True
     )
     
-    # Basic Info
-    full_name = models.CharField(max_length=255)
+    # ============ BASIC INFO ============
+    full_name = models.CharField(max_length=255, default='Not provided')
     profile_picture = models.ImageField(upload_to='employer_profiles/', blank=True, null=True)
     
-    # Contact Info
-    contact_email = models.EmailField()
-    phone_number = models.CharField(max_length=20)
+    # ============ CONTACT INFO ============
+    contact_email = models.EmailField(default='not-provided@example.com')
+    phone_number = models.CharField(max_length=20, default='Not provided')
     alternate_phone = models.CharField(max_length=20, blank=True, null=True)
     
-    # Email Verification
+    # ============ EMAIL VERIFICATION ============
     email_verified = models.BooleanField(default=False)
     email_verification_token = models.CharField(max_length=100, blank=True, null=True)
     email_verified_at = models.DateTimeField(blank=True, null=True)
     
-    # Phone Verification
+    # ============ PHONE VERIFICATION ============
     phone_verified = models.BooleanField(default=False)
     phone_verification_code = models.CharField(max_length=6, blank=True, null=True)
     phone_verification_sent_at = models.DateTimeField(blank=True, null=True)
     phone_verified_at = models.DateTimeField(blank=True, null=True)
     
-    # ID Verification (UPDATED: Uses ID number)
+    # ============ ID VERIFICATION (UPDATED: Uses ID number) ============
     id_verified = models.BooleanField(default=False)
-    id_number = models.CharField(max_length=50, blank=True, null=True, help_text="National ID, Passport or Driver's License number")
+    id_number = models.CharField(
+        max_length=50, 
+        blank=True, 
+        null=True, 
+        help_text="National ID, Passport or Driver's License number"
+    )
     id_verified_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, 
         on_delete=models.SET_NULL, 
@@ -89,22 +94,22 @@ class EmployerProfile(models.Model):
     )
     id_verified_at = models.DateTimeField(blank=True, null=True)
     
-    # Location (COUNTRY FIELD REMOVED)
-    city = models.CharField(max_length=100)
-    address = models.TextField()
+    # ============ LOCATION (COUNTRY FIELD REMOVED) ============
+    city = models.CharField(max_length=100, default='Not provided')
+    address = models.TextField(default='Not provided')
     
-    # Professional Info
+    # ============ PROFESSIONAL INFO ============
     profession = models.CharField(max_length=100, blank=True, null=True)
+    skills = models.TextField(blank=True, null=True, help_text="Comma-separated list of skills")
     
-    
-    # About/Bio
+    # ============ ABOUT/ BIO ============
     bio = models.TextField(blank=True, null=True, help_text="Tell about yourself and what services you need")
     
-    # Social Media
+    # ============ SOCIAL MEDIA (Optional) ============
     linkedin_url = models.URLField(blank=True, null=True)
     twitter_url = models.URLField(blank=True, null=True)
     
-    # Verification Status
+    # ============ VERIFICATION STATUS ============
     verification_status = models.CharField(
         max_length=20,
         default='unverified',
@@ -116,22 +121,22 @@ class EmployerProfile(models.Model):
         ]
     )
     
-    # Stats
+    # ============ STATS ============
     total_projects_posted = models.IntegerField(default=0)
     total_spent = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     avg_freelancer_rating = models.DecimalField(max_digits=3, decimal_places=2, default=0.00)
     
-    # Preferences
+    # ============ PREFERENCES ============
     notification_preferences = models.JSONField(
         default=dict,
         help_text="User's notification preferences"
     )
     
-    # Timestamps
+    # ============ TIMESTAMPS ============
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
-    # Helper Methods
+    # ============ HELPER METHODS ============
     def get_display_name(self):
         return self.full_name or f"User #{self.id}"
     
@@ -158,6 +163,7 @@ class EmployerProfile(models.Model):
         
         return int((steps_completed / total_steps) * 100)
     
+    # ============ META ============
     class Meta:
         verbose_name = "Employer Profile"
         verbose_name_plural = "Employer Profiles"

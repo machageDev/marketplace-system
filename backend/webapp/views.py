@@ -32,7 +32,7 @@ from rest_framework.decorators import authentication_classes, permission_classes
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from webapp.serializers import ContractSerializer, EmployerProfileCreateSerializer, EmployerProfileSerializer, EmployerProfileUpdateSerializer,  EmployerRegisterSerializer, EmployerSerializer, IDDocumentUploadSerializer, IDNumberUpdateSerializer, LoginSerializer, OrderSerializer, PaymentInitializeSerializer, ProposalSerializer, RatingSerializer, RegisterSerializer, SubmissionCreateSerializer, SubmissionSerializer, TaskCompletionSerializer, TaskCreateSerializer, TaskSerializer, TransactionSerializer, UserProfileSerializer, WalletSerializer
+from webapp.serializers import ContractSerializer, EmployerProfileCreateSerializer, EmployerProfileSerializer, EmployerProfileUpdateSerializer,  EmployerRegisterSerializer, EmployerSerializer,  IDNumberUpdateSerializer, LoginSerializer, OrderSerializer, PaymentInitializeSerializer, ProposalSerializer, RatingSerializer, RegisterSerializer, SubmissionCreateSerializer, SubmissionSerializer, TaskCompletionSerializer, TaskCreateSerializer, TaskSerializer, TransactionSerializer, UserProfileSerializer, WalletSerializer
 from .authentication import CustomTokenAuthentication, EmployerTokenAuthentication
 from .permissions import IsAuthenticated  
 from .models import UserProfile

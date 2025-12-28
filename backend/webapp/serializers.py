@@ -131,7 +131,22 @@ class ProposalSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['proposal_id', 'submitted_at']
 
-       
+class ContractSerializer(serializers.ModelSerializer):
+    task_title = serializers.CharField(source="task.title", read_only=True)
+    freelancer_name = serializers.CharField(source="freelancer.username", read_only=True)
+    employer_name = serializers.CharField(source="employer.username", read_only=True)
+
+    class Meta:
+        model = Contract
+        fields = [
+            "contract_id",
+            "task_title",
+            "freelancer_name",
+            "employer_name",
+            "start_date",
+            "end_date",
+            "is_active",
+        ]        
         
 from .models import Employer, EmployerProfile
 class EmployerLoginSerializer(serializers.Serializer):
@@ -309,8 +324,6 @@ class IDNumberUpdateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError("This ID number is already registered.")
         
         return value.strip()
-
-
 
 class EmployerSerializer(serializers.ModelSerializer):
     profile = EmployerProfileSerializer(required=False)
