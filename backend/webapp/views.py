@@ -434,7 +434,6 @@ def apitask_list(request):
                     'id': task.employer.employer_id,
                     'username': task.employer.username,
                     'contact_email': task.employer.contact_email,
-                    'company_name': employer_profile.company_name if employer_profile else None,
                     'profile_picture': employer_profile.profile_picture.url if employer_profile and employer_profile.profile_picture else None,
                     'phone_number': employer_profile.phone_number if employer_profile else None,
                 }
@@ -2214,16 +2213,16 @@ def recommended_jobs(request):
 @api_view(['POST'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
-def accept_proposal(request, proposal_id):
+def accept_proposal(request):
     print(f"\n{'='*60}")
     print("ACCEPT PROPOSAL - START")
     print(f"{'='*60}")
     
     try:
-        proposal = get_object_or_404(Proposal, proposal_id=proposal_id)
+        proposal = get_object_or_404(Proposal)
         task = proposal.task
         
-        print(f"Proposal ID: {proposal_id}")
+        print(f"Proposal ID: ")
         print(f"Task: {task.title} (ID: {task.task_id})")
         print(f"Freelancer: {proposal.freelancer.name} (ID: {proposal.freelancer.user_id})")
         print(f"Employer making request: {request.user.username}")

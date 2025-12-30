@@ -622,7 +622,7 @@ static Future<Proposal> submitProposal(Proposal proposal, {PlatformFile? pdfFile
     request.headers['Accept'] = 'application/json';
    
     // ✅ CORRECT FIELDS FOR SERIALIZER:
-    request.fields['task_id'] = proposal.taskId.toString(); // Will be mapped to 'task'
+    request.fields['task'] = proposal.taskId.toString(); // Will be mapped to 'task'
     request.fields['bid_amount'] = proposal.bidAmount.toString();
     request.fields['status'] = proposal.status;
     
@@ -1498,58 +1498,14 @@ Future<Map<String, dynamic>> fetchTaskStats() async {
     }
     return headers;
   }
+  
 
 // In ApiService.dart - Add this method
-static Future<List<dynamic>> fetchClientProposals() async {
-  try {
-    // Get employer token (different from user token!)
-    final String? token = await _getEmployerToken(); // You need this method
-    
-    if (token == null) {
-      throw Exception('No employer authentication token found');
-    }
-
-    print('Fetching client proposals from: $clientProposalsUrl');
-    
-    final response = await http.get(
-      Uri.parse(clientProposalsUrl), // Should be: http://127.0.0.1:8000/client/proposals/
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-    );
-
-    print('Client Proposals API Response Status: ${response.statusCode}');
-    
-    if (response.statusCode == 200) {
-      final dynamic data = jsonDecode(response.body);
-      
-      // Debug print
-      print('Client Proposals Raw Response:');
-      print(data);
-      
-      // Your Django endpoint returns a LIST directly
-      if (data is List) {
-        return data;
-      } else if (data is Map && data.containsKey('proposals')) {
-        return data['proposals'];
-      } else {
-        throw Exception('Unexpected response format for client proposals');
-      }
-    } else {
-      throw Exception('Failed to load client proposals: ${response.statusCode} - ${response.body}');
-    }
-  } catch (e) {
-    print('Error fetching client proposals: $e');
-    rethrow;
-  }
-}
-
-
+//
 static Future<List<dynamic>> getFreelancerProposals() async {
   try {
-    // Get EMPLOYER token, not user token
-    final String? token = await _getEmployerToken();
+    // Get token
+    final String? token = await _getUserToken();
     
     if (token == null) {
       throw Exception('No employer token found. Please login as employer.');
@@ -1571,11 +1527,25 @@ static Future<List<dynamic>> getFreelancerProposals() async {
     if (response.statusCode == 200) {
       final dynamic data = jsonDecode(response.body);
       
-      // Your Django returns a list directly
       if (data is List) {
+        print('✅ Successfully loaded ${data.length} proposals');
         return data;
       } else if (data is Map && data.containsKey('proposals')) {
-        return data['proposals'];
+        final proposals = data['proposals'];
+        print('✅ Found proposals key with ${proposals.length} item(s)');
+        return proposals;
+      } else if (data is Map && data.containsKey('data')) {
+        final proposals = data['data'];
+        print('✅ Found data key with ${proposals.length} item(s)');
+        return proposals;
+      } else if (data is Map && data.containsKey('results')) {
+        final proposals = data['results'];
+        print('✅ Found results key with ${proposals.length} item(s)');
+        return proposals;
+      } else if (data is Map) {
+        print('⚠️ Map doesn\'t contain expected keys. Full data:');
+        print(data);
+        return [];
       } else {
         throw Exception('Unexpected response format');
       }
@@ -1589,38 +1559,61 @@ static Future<List<dynamic>> getFreelancerProposals() async {
     rethrow;
   }
 }
-
-
-// You need this method to get employer token
-static Future<String?> _getEmployerToken() async {
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    // You need to store employer token separately from user token
-    return prefs.getString('employer_token');
-  } catch (e) {
-    print('Error getting employer token: $e');
-    return null;
-  }
-}
-
  
 Future<Map<String, dynamic>> acceptProposal(String proposalId) async {
   try {
+    // 1. Get the token FIRST
+    final token = await _getUserToken(); 
+    
+    // 2. Validate the token
+    if (token == null || token.isEmpty) {
+      print('❌ ERROR: Token is null or empty!');
+      return {
+        'success': false,
+        'message': 'Authentication required. Please login again.'
+      };
+    }
+    
+    print('🔐 Using token for acceptProposal: ${token.substring(0, 10)}...');
+    
+    // 3. Make the request with the validated token
     final response = await http.post(
       Uri.parse(acceptproposalUrl), 
-      headers: headers,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
       body: json.encode({
         'proposal_id': proposalId, 
       }),
     );
 
+    print('📡 Accept proposal response: ${response.statusCode}');
+    
     if (response.statusCode == 200) {
-      return json.decode(response.body);
+      final result = json.decode(response.body);
+      print('✅ Proposal accepted successfully: $result');
+      return result;
+    } else if (response.statusCode == 401) {
+      print('🔐 Unauthorized - token might be invalid');
+      return {
+        'success': false,
+        'message': 'Session expired. Please login again.'
+      };
     } else {
-      throw Exception('Failed to accept proposal: ${response.statusCode}');
+      print('❌ Failed to accept proposal: ${response.statusCode}');
+      print('Response body: ${response.body}');
+      return {
+        'success': false,
+        'message': 'Failed to accept proposal: ${response.statusCode}'
+      };
     }
   } catch (e) {
-    throw Exception('Failed to accept proposal: $e');
+    print('❌ Exception in acceptProposal: $e');
+    return {
+      'success': false,
+      'message': 'Failed to accept proposal: $e'
+    };
   }
 }
 
@@ -2682,7 +2675,7 @@ Future<List<dynamic>> getOrdersForPayment() async {
     }
 
     final response = await http.get(
-      Uri.parse('$baseUrl/api/orders/pending-payment/'),
+      Uri.parse('$baseUrl/api/payment/order/<str:order_id>/'),
       headers: {
         "Content-Type": "application/json",
         "Authorization": "Bearer $token",

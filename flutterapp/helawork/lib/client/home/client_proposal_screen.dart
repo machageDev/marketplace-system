@@ -34,6 +34,10 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
         foregroundColor: whiteColor,
         centerTitle: true,
         elevation: 1,
+        // Remove the back arrow
+        automaticallyImplyLeading: false,
+        // Alternative: explicitly set leading to null
+        // leading: Container(),
       ),
       body: Consumer<ClientProposalProvider>(
         builder: (context, provider, child) {

@@ -34,27 +34,57 @@ class ClientProposal {
     this.coverLetterFileUrl,
   });
 
-  factory ClientProposal.fromJson(Map<String, dynamic> json) {
-    return ClientProposal(
-      id: json['id']?.toString() ?? json['proposal_id']?.toString() ?? '',
-      proposalId: json['proposal_id']?.toString() ?? json['id']?.toString() ?? '',
-      taskId: json['task_id']?.toString() ?? json['task']?['task_id']?.toString() ?? '',
-      taskTitle: json['task_title'] ?? json['task']?['title'] ?? 'Unknown Task',
-      taskDescription: json['task_description'] ?? json['task']?['description'] ?? '',
-      budget: (json['budget'] ?? json['task']?['budget'] ?? 0.0).toDouble(),
-      bidAmount: (json['bid_amount'] ?? 0.0).toDouble(),
-      coverLetter: json['cover_letter'] ?? '',
-      status: json['status']?.toString().toLowerCase() ?? 'pending',
-      freelancerId: json['freelancer_id']?.toString() ?? json['freelancer']?['id']?.toString() ?? '',
-      freelancerName: json['freelancer_name'] ?? json['freelancer']?['name'] ?? 'Unknown',
-      freelancerEmail: json['freelancer_email'] ?? json['freelancer']?['email'] ?? '',
-      estimatedDays: json['estimated_days'] ?? 7,
-      submittedAt: json['submitted_at'] != null 
-          ? DateTime.parse(json['submitted_at']) 
-          : DateTime.now(),
-      coverLetterFileUrl: json['cover_letter_file_url'],
-    );
+factory ClientProposal.fromJson(Map<String, dynamic> json) {
+  return ClientProposal(
+    id: json['id']?.toString() ?? json['proposal_id']?.toString() ?? '',
+    proposalId: json['proposal_id']?.toString() ?? json['id']?.toString() ?? '',
+    taskId: json['task_id']?.toString() ?? json['task']?['task_id']?.toString() ?? '',
+    taskTitle: json['task_title'] ?? json['task']?['title'] ?? 'Unknown Task',
+    taskDescription: json['task_description'] ?? json['task']?['description'] ?? '',
+    
+    // FIXED: Parse budget safely
+    budget: _parseDouble(json['budget'] ?? json['task']?['budget']),
+    
+    // FIXED: Parse bidAmount safely
+    bidAmount: _parseDouble(json['bid_amount']),
+    
+    coverLetter: json['cover_letter'] ?? '',
+    status: json['status']?.toString().toLowerCase() ?? 'pending',
+    freelancerId: json['freelancer_id']?.toString() ?? json['freelancer']?['id']?.toString() ?? '',
+    freelancerName: json['freelancer_name'] ?? json['freelancer']?['name'] ?? 'Unknown',
+    freelancerEmail: json['freelancer_email'] ?? json['freelancer']?['email'] ?? '',
+    
+    // FIXED: Parse estimatedDays safely
+    estimatedDays: _parseInt(json['estimated_days']),
+    
+    submittedAt: json['submitted_at'] != null 
+        ? DateTime.parse(json['submitted_at']) 
+        : DateTime.now(),
+    coverLetterFileUrl: json['cover_letter_file_url'],
+  );
+}
+
+// Helper method to parse double safely
+static double _parseDouble(dynamic value) {
+  if (value == null) return 0.0;
+  if (value is double) return value;
+  if (value is int) return value.toDouble();
+  if (value is String) {
+    return double.tryParse(value) ?? 0.0;
   }
+  return 0.0;
+}
+
+// Helper method to parse int safely
+static int _parseInt(dynamic value) {
+  if (value == null) return 0;
+  if (value is int) return value;
+  if (value is double) return value.toInt();
+  if (value is String) {
+    return int.tryParse(value) ?? 0;
+  }
+  return 0;
+}
 
   ClientProposal copyWith({
     String? status,

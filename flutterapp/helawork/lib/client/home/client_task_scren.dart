@@ -172,6 +172,8 @@ class _TasksScreenState extends State<TasksScreen> {
             bottom: Radius.circular(20),
           ),
         ),
+        // Remove the back arrow
+        automaticallyImplyLeading: false,
         actions: [
           IconButton(
             icon: Container(
