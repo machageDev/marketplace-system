@@ -16,19 +16,19 @@ from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
 # CHANGED: Read from environment variable with fallback for development
-SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-ve@o6bn-j5^xfcu$g!%$k-&%%1o+ga0-fdf*oo727m=lqeirf@")
-
+#SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-ve@o6bn-j5^xfcu$g!%$k-&%%1o+ga0-fdf*oo727m=lqeirf@")
+SECRET_KEY = 'django-insecure-wnli4_56vo0r%3n)6m_qeu5k^@2@(dyry=rm+cp1ic^fw939pq'
 # SECURITY WARNING: don't run with debug turned on in production!
 # CHANGED: Read from environment variable, default to False for production
-DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
-
+#DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
+DEBUG = True
 
 # CHANGED: Read from environment variable for production
 ALLOWED_HOSTS = [
@@ -91,12 +91,16 @@ import dj_database_url
 # CHANGED: Use environment variable for database configuration
 # This will automatically use DATABASE_URL on Render, fallback to local for development
 DATABASES = {
-    'default': dj_database_url.config(
-        default='postgresql://helawork_user:pxDchEMaIRzIxmtv7Bh1qfySQ0QhgHs1@dpg-d4n7dv24d50c73f8jm80-a.oregon-postgres.render.com/helawork',
-        conn_max_age=600,
-        conn_health_checks=True,
-    )
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'systemdb',       
+        'USER': 'postgres',         
+        'PASSWORD': 'admin',
+        'HOST': 'localhost',
+        'PORT': '5432',
+    }
 }
+
 
 
 # Password validation

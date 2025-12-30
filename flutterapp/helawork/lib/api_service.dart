@@ -11,7 +11,8 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
 class ApiService{
-  static const String baseUrl = 'https://marketplace-system-1.onrender.com';
+  //static const String baseUrl = 'https://marketplace-system-1.onrender.com';
+  static const String baseUrl = 'http://192.168.100.188:8000';
  
   static const String registerUrl = '$baseUrl/apiregister';
   static const String  loginUrl ='$baseUrl/apilogin';
@@ -1062,18 +1063,31 @@ Future<List<Contract>> fetchContracts() async {
         return 'Unknown';
     }
   }
-
-  /// Get authentication token (implement based on your auth system)
-  static Future<String> _getToken() async {
-    // Implement your token retrieval logic
-    // This could be from SharedPreferences, secure storage, etc.
-    // Example:
-    // final prefs = await SharedPreferences.getInstance();
-    // return prefs.getString('auth_token') ?? '';
-    return 'your-auth-token-here'; // Replace with actual token retrieval
+/// Get authentication token for Employer API calls
+static Future<String?> _getToken() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    
+    // First try to get employer token
+    String? token = prefs.getString('employer_token');
+    
+    // If no employer token, try user token (some employers might use same token)
+    if (token == null || token.isEmpty) {
+      token = prefs.getString('user_token');
+    }
+    
+    if (token == null || token.isEmpty) {
+      print('❌ No authentication token found for employer');
+      return null;
+    }
+    
+    print('✅ Employer token found: ${token.substring(0, min(20, token.length))}...');
+    return token;
+  } catch (e) {
+    print('Error getting employer token: $e');
+    return null;
   }
- 
-
+}
 
 Future<void> saveUserToken(String token) async {
   final prefs = await SharedPreferences.getInstance();
@@ -1631,210 +1645,372 @@ Future<Map<String, dynamic>> rejectProposal(String proposalId) async {
   }
 
 }
-// CREATE profile - URL should match Django endpoint
+// CREATE employer profile - CORRECTED
 Future<Map<String, dynamic>> createEmployerProfile(Map<String, dynamic> data) async {
-  final token = await _getToken();
+  try {
+    final token = await _getToken();
+    
 
-  final response = await http.post(
-    Uri.parse('$baseUrl/employers/profile/create/'),  // Changed from '/profile/' to '/profile/create/'
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": "Bearer $token",
-    },
-    body: jsonEncode(data),
-  );
+    print('Creating employer profile...');
+    print('URL: $baseUrl/employers/profile/create/');
+    print('Data: $data');
+    
+    final response = await http.post(
+      Uri.parse('$baseUrl/employers/profile/create/'),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+      body: jsonEncode(data),
+    );
 
-  if (response.statusCode == 201) {
-    return jsonDecode(response.body);
-  } else if (response.statusCode == 400) {
-    final errorData = jsonDecode(response.body);
-    throw Exception('Validation error: $errorData');
-  } else {
-    throw Exception('Failed to create profile. Status: ${response.statusCode}');
+    print('Response status: ${response.statusCode}');
+    print('Response body: ${response.body}');
+
+    if (response.statusCode == 201) {
+      final responseData = jsonDecode(response.body);
+      return {
+        'success': true,
+        'message': 'Profile created successfully',
+        'data': responseData,
+      };
+    } else if (response.statusCode == 401) {
+      throw Exception('Unauthorized - Invalid or expired token. Please login again.');
+    } else if (response.statusCode == 400) {
+      final errorData = jsonDecode(response.body);
+      String errorMessage = 'Validation error';
+      if (errorData is Map) {
+        if (errorData.containsKey('error')) {
+          errorMessage = errorData['error'];
+        } else if (errorData.containsKey('detail')) {
+          errorMessage = errorData['detail'];
+        } else {
+          final errors = <String>[];
+          errorData.forEach((key, value) {
+            if (value is List) {
+              errors.add('$key: ${value.join(", ")}');
+            } else {
+              errors.add('$key: $value');
+            }
+          });
+          errorMessage = errors.join("\n");
+        }
+      }
+      throw Exception(errorMessage);
+    } else {
+      throw Exception('Failed to create profile. Status: ${response.statusCode} - ${response.body}');
+    }
+  } catch (e) {
+    print('Error creating employer profile: $e');
+    rethrow;
+  }
+}
+// GET employer profile - FIXED to match Django response
+Future<Map<String, dynamic>> getEmployerProfile() async {
+  try {
+    final token = await _getToken();
+ 
+
+    final response = await http.get(
+      Uri.parse('$baseUrl/profile/'),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return {
+        'success': true,
+        'data': data,
+      };
+    } else if (response.statusCode == 404) {
+      // Django returns {'error': 'Profile not found. Create one first.'}
+      final errorData = jsonDecode(response.body);
+      throw Exception(errorData['error'] ?? 'Profile not found');
+    } else {
+      throw Exception('Failed to load profile: ${response.statusCode}');
+    }
+  } catch (e) {
+    print('Error getting employer profile: $e');
+    return {
+      'success': false,
+      'error': e.toString(),
+    };
   }
 }
 
-// GET profile - Django doesn't need employerId, it gets from auth
-Future<Map<String, dynamic>> getEmployerProfile(int employerId) async {
-  final token = await _getToken();
-
-  final response = await http.get(
-    Uri.parse('$baseUrl/employers/profile/'),  // Changed - no employerId in URL
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": "Bearer $token",
-    },
-  );
-
-  if (response.statusCode == 200) {
-    return jsonDecode(response.body);
-  } else if (response.statusCode == 404) {
-    throw Exception('Profile not found');
-  } else {
-    throw Exception('Failed to load profile. Status: ${response.statusCode}');
-  }
-}
-
-// UPDATE profile - Django doesn't need employerId
-Future<Map<String, dynamic>> updateEmployerProfile(
-  int employerId, 
-  Map<String, dynamic> data,
-) async {
-  final token = await _getToken();
-
-  final response = await http.put(  // Or PATCH for partial updates
-    Uri.parse('$baseUrl/employers/profile/update/'),  // Changed - no employerId
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": "Bearer $token",
-    },
-    body: jsonEncode(data),
-  );
-
-  if (response.statusCode == 200) {
-    return jsonDecode(response.body);
-  } else if (response.statusCode == 404) {
-    throw Exception('Profile not found');
-  } else if (response.statusCode == 400) {
-    final errorData = jsonDecode(response.body);
-    throw Exception('Validation error: $errorData');
-  } else {
-    throw Exception('Failed to update profile. Status: ${response.statusCode}');
-  }
-}
-
-// PATCH for partial updates (optional)
-Future<Map<String, dynamic>> patchEmployerProfile(Map<String, dynamic> data) async {
-  final token = await _getToken();
-
-  final response = await http.patch(
-    Uri.parse('$baseUrl/employers/profile/update/'),
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": "Bearer $token",
-    },
-    body: jsonEncode(data),
-  );
-
-  if (response.statusCode == 200) {
-    return jsonDecode(response.body);
-  } else if (response.statusCode == 404) {
-    throw Exception('Profile not found');
-  } else if (response.statusCode == 400) {
-    final errorData = jsonDecode(response.body);
-    throw Exception('Validation error: $errorData');
-  } else {
-    throw Exception('Failed to update profile. Status: ${response.statusCode}');
-  }
-}
-
-// Check if profile exists
+// Check if profile exists - FIXED to match Django view
 Future<Map<String, dynamic>> checkProfileExists() async {
-  final token = await _getToken();
+  try {
+    final token = await _getToken();
+    
+  
+    final response = await http.get(
+      Uri.parse('$baseUrl/check_profile_exists/'), // CORRECT ENDPOINT
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+    );
 
-  final response = await http.get(
-    Uri.parse('$baseUrl/employers/profile/check-exists/'),  // Updated URL
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": "Bearer $token",
-    },
-  );
-
-  if (response.statusCode == 200) {
-    return jsonDecode(response.body);
-  } else {
-    throw Exception('Failed to check profile existence. Status: ${response.statusCode}');
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return {
+        'exists': data['exists'] ?? false,
+        'profile': data['profile'],
+        'success': true,
+      };
+    } else {
+      return {
+        'exists': false,
+        'success': false,
+        'error': 'Failed to check: ${response.statusCode}',
+      };
+    }
+  } catch (e) {
+    print('Error checking profile existence: $e');
+    return {
+      'exists': false,
+      'success': false,
+      'error': e.toString(),
+    };
   }
 }
 
+// UPDATE ID number - FIXED to match Django response
 Future<Map<String, dynamic>> updateIdNumber(String idNumber) async {
-  final token = await _getToken();
+  try {
+    final token = await _getToken();
+  
 
-  final response = await http.post(
-    Uri.parse('$baseUrl/employers/profile/update-id-number/'),
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": "Bearer $token",
-    },
-    body: jsonEncode({'id_number': idNumber}),
-  );
+    final response = await http.post(
+      Uri.parse('$baseUrl/profile/upload-id/'),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+      body: jsonEncode({'id_number': idNumber}),
+    );
 
-  if (response.statusCode == 200) {
-    return jsonDecode(response.body);
-  } else if (response.statusCode == 400) {
-    final errorData = jsonDecode(response.body);
-    throw Exception('Validation error: $errorData');
-  } else {
-    throw Exception('Failed to update ID number. Status: ${response.statusCode}');
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return {
+        'success': true,
+        'message': data['message'] ?? 'ID number updated successfully',
+        'data': data,
+      };
+    } else if (response.statusCode == 400) {
+      final errorData = jsonDecode(response.body);
+      throw Exception(errorData['error'] ?? 'Validation failed');
+    } else {
+      throw Exception('Failed to update ID number: ${response.statusCode}');
+    }
+  } catch (e) {
+    print('Error updating ID number: $e');
+    rethrow;
   }
 }
 
-// VERIFY email
+// VERIFY email - FIXED to match Django view
 Future<Map<String, dynamic>> verifyEmail(String verificationToken) async {
-  final token = await _getToken();
+  try {
+    final token = await _getToken();
+    
+   
 
-  final response = await http.post(
-    Uri.parse('$baseUrl/employers/profile/verify-email/'),
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": "Bearer $token",
-    },
-    body: jsonEncode({'token': verificationToken}),
-  );
+    final response = await http.post(
+      Uri.parse('$baseUrl/profile/verify-email/'),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+      body: jsonEncode({'token': verificationToken}),
+    );
 
-  if (response.statusCode == 200) {
-    return jsonDecode(response.body);
-  } else if (response.statusCode == 400) {
-    final errorData = jsonDecode(response.body);
-    throw Exception('Verification failed: $errorData');
-  } else {
-    throw Exception('Failed to verify email. Status: ${response.statusCode}');
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return {
+        'success': true,
+        'message': data['message'] ?? 'Email verified successfully',
+        'data': data['profile'],
+      };
+    } else if (response.statusCode == 400) {
+      final errorData = jsonDecode(response.body);
+      throw Exception(errorData['error'] ?? 'Verification failed');
+    } else {
+      throw Exception('Failed to verify email: ${response.statusCode}');
+    }
+  } catch (e) {
+    print('Error verifying email: $e');
+    rethrow;
   }
 }
 
-// VERIFY phone
+// VERIFY phone - FIXED to match Django view
 Future<Map<String, dynamic>> verifyPhone(String verificationCode) async {
-  final token = await _getToken();
+  try {
+    final token = await _getToken();
+    
+   
 
-  final response = await http.post(
-    Uri.parse('$baseUrl/employers/profile/verify-phone/'),
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": "Bearer $token",
-    },
-    body: jsonEncode({'code': verificationCode}),
-  );
+    final response = await http.post(
+      Uri.parse('$baseUrl/profile/verify-phone/'),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+      body: jsonEncode({'code': verificationCode}),
+    );
 
-  if (response.statusCode == 200) {
-    return jsonDecode(response.body);
-  } else if (response.statusCode == 400) {
-    final errorData = jsonDecode(response.body);
-    throw Exception('Verification failed: $errorData');
-  } else {
-    throw Exception('Failed to verify phone. Status: ${response.statusCode}');
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return {
+        'success': true,
+        'message': data['message'] ?? 'Phone verified successfully',
+        'data': data['profile'],
+      };
+    } else if (response.statusCode == 400) {
+      final errorData = jsonDecode(response.body);
+      throw Exception(errorData['error'] ?? 'Verification failed');
+    } else {
+      throw Exception('Failed to verify phone: ${response.statusCode}');
+    }
+  } catch (e) {
+    print('Error verifying phone: $e');
+    rethrow;
   }
 }
 
-// Get verification status
-Future<Map<String, dynamic>> getVerificationStatus() async {
-  final token = await _getToken();
+// UPLOAD profile picture - CORRECTED (use correct method name)
+Future<Map<String, dynamic>> uploadProfilePicture(File imageFile) async {
+  try {
+    final token = await _getToken();
 
-  final response = await http.get(
-    Uri.parse('$baseUrl/employers/profile/verification-status/'),
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": "Bearer $token",
-    },
-  );
+    print('Uploading profile picture...');
+    
+    var request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$baseUrl/profile/update/'),
+    );
 
-  if (response.statusCode == 200) {
-    return jsonDecode(response.body);
-  } else if (response.statusCode == 404) {
-    throw Exception('Profile not found');
-  } else {
-    throw Exception('Failed to get verification status. Status: ${response.statusCode}');
+    request.headers['Authorization'] = 'Bearer $token';
+    
+    final fileExtension = imageFile.path.split('.').last.toLowerCase();
+    final contentType = fileExtension == 'png' 
+        ? MediaType('image', 'png')
+        : MediaType('image', 'jpeg');
+    
+    request.files.add(
+      await http.MultipartFile.fromPath(
+        'profile_picture',
+        imageFile.path,
+        contentType: contentType,
+      ),
+    );
+
+    print('Sending upload request...');
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+
+    print('Upload response status: ${response.statusCode}');
+    print('Upload response body: ${response.body}');
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final responseData = jsonDecode(response.body);
+      return {
+        'success': true,
+        'message': 'Profile picture uploaded successfully',
+        'data': responseData,
+      };
+    } else if (response.statusCode == 401) {
+      throw Exception('Unauthorized - Please login again.');
+    } else if (response.statusCode == 400) {
+      final errorData = jsonDecode(response.body);
+      throw Exception('Upload failed: ${errorData.toString()}');
+    } else {
+      throw Exception('Failed to upload picture: ${response.statusCode} - ${response.body}');
+    }
+  } catch (e) {
+    print('Error uploading profile picture: $e');
+    rethrow;
   }
 }
+
+// UPDATE employer profile - CORRECTED (remove duplicate parameter)
+Future<Map<String, dynamic>> updateEmployerProfile(Map<String, dynamic> data) async {
+  try {
+    final token = await _getToken();
+
+    print('Updating employer profile...');
+    print('URL: $baseUrl/profile/update/');
+    print('Update data: $data');
+    
+    final response = await http.patch(
+      Uri.parse('$baseUrl/profile/update/'),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+      body: jsonEncode(data),
+    );
+
+    print('Update response status: ${response.statusCode}');
+    print('Update response body: ${response.body}');
+    
+    if (response.statusCode == 200) {
+      final responseData = jsonDecode(response.body);
+      return {
+        'success': true,
+        'message': 'Profile updated successfully',
+        'data': responseData,
+      };
+    } else if (response.statusCode == 404) {
+      throw Exception('Profile not found. Create profile first.');
+    } else if (response.statusCode == 400) {
+      final errorData = jsonDecode(response.body);
+      throw Exception('Validation error: ${errorData.toString()}');
+    } else if (response.statusCode == 401) {
+      throw Exception('Unauthorized - Invalid token. Please login again.');
+    } else {
+      throw Exception('Failed to update profile. Status: ${response.statusCode}');
+    }
+    
+  } catch (e) {
+    print('Error updating employer profile: $e');
+    rethrow;
+  }
+}
+  // Test connection and get correct endpoints
+  Future<Map<String, dynamic>> testApiConnection() async {
+    try {
+      // Test base URL
+      final response = await http.get(Uri.parse('$baseUrl/dashboard'));
+      
+      if (response.statusCode == 200) {
+        print('Server is reachable at: $baseUrl');
+        
+        // Try to discover API endpoints
+        final apiResponse = await http.get(
+          Uri.parse('$baseUrl/api/'),
+          headers: {
+            "Authorization": "Bearer ${await _getToken()}",
+          },
+        );
+        
+        if (apiResponse.statusCode == 200) {
+          final apiData = jsonDecode(apiResponse.body);
+          print('Available API endpoints: $apiData');
+          return apiData;
+        }
+      }
+      
+      return {'status': 'Server reachable but API structure unknown'};
+    } catch (e) {
+      throw Exception('Cannot connect to server: $e');
+    }
+  }
 Future<bool> apisubmitRating(Map<String, dynamic> data) async {
   final response = await http.post(
     Uri.parse(freelancerrateUrl),
@@ -2643,36 +2819,70 @@ Future<List<dynamic>> getUserOrders() async {
       throw Exception('Failed to fetch transactions');
     }
   }
- static Future<List<dynamic>> fetchRecommendedJobs(String token) async {
+  
+
+  static Future<List<dynamic>> fetchRecommendedJobs(String token) async {
     try {
+      print("🔍 Starting fetchRecommendedJobs");
+      print("📡 Base URL: $baseUrl");
+      print("📡 Endpoint: /freelancer/recommended-jobs/");
+      print("🔑 Token length: ${token.length}");
+      
       final response = await http.get(
         Uri.parse("$baseUrl/freelancer/recommended-jobs/"),
         headers: {
           "Authorization": "Bearer $token",
           "Content-Type": "application/json",
         },
-      );
+      ).timeout(Duration(seconds: 30));
 
-      print("Recommended jobs API status: ${response.statusCode}");
+      print("✅ Response status: ${response.statusCode}");
+      print("📦 Response body length: ${response.body.length}");
       
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        print("Recommended jobs API response: $data");
+        print("📊 Parsed data type: ${data.runtimeType}");
+        print("📊 Data keys: ${data.keys.toList()}");
+        
+        // Debug: Print the structure
+        if (data.containsKey("status")) {
+          print("📊 Status: ${data["status"]}");
+        }
+        if (data.containsKey("message")) {
+          print("📊 Message: ${data["message"]}");
+        }
+        if (data.containsKey("freelancer_profile")) {
+          print("📊 Freelancer profile exists");
+        }
         
         if (data["status"] == true) {
-          return data["recommended"] ?? [];
+          final recommended = data["recommended"] ?? [];
+          print("🎯 Recommended type: ${recommended.runtimeType}");
+          print("🎯 Recommended length: ${recommended is List ? recommended.length : 'not a list'}");
+          
+          // Debug first few items
+          if (recommended is List && recommended.isNotEmpty) {
+            for (int i = 0; i < min(3, recommended.length); i++) {
+              print("🎯 Item $i: ${recommended[i]["title"]}");
+              print("🎯   Match Score: ${recommended[i]["match_score"]}");
+              print("🎯   Skill Overlap: ${recommended[i]["skill_overlap"]}");
+              print("🎯   Common Skills: ${recommended[i]["common_skills"]}");
+            }
+          }
+          
+          return recommended;
         } else {
-          print("API returned false status: ${data['message']}");
+          print("⚠️ API returned false status: ${data['message']}");
           return [];
         }
       } else {
-        print("API error: ${response.statusCode}");
+        print("❌ API error ${response.statusCode}: ${response.body}");
         throw Exception('Failed to load recommended jobs: ${response.statusCode}');
       }
     } catch (error) {
-      print("API exception: $error");
+      print("💥 Exception: $error");
       rethrow;
     }
   }
-
-}  
+}
+ 

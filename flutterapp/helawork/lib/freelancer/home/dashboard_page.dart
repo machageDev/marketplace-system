@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:helawork/freelancer/home/contract_screen.dart';
-import 'package:helawork/freelancer/home/proposal_screen.dart';
 import 'package:helawork/freelancer/home/rating_screen.dart';
 import 'package:helawork/freelancer/home/submitting_task.dart';
 import 'package:helawork/freelancer/home/task_page.dart';
@@ -20,10 +19,9 @@ class _DashboardPageState extends State<DashboardPage> {
   int _selectedIndex = 0;
 
   final List<Widget> _pages = [
-    const SizedBox(), 
-    const TaskPage(), 
-    const WalletScreen(token: '',),
-    const ProposalsScreen(taskId: 0, task: {}, employer: {},), 
+    const SizedBox(), // Home/Dashboard
+    const TaskPage(), // Tasks
+    const WalletScreen(token: '',), // Wallet
   ];
 
   @override
@@ -36,7 +34,7 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   void _onItemTapped(int index) {
-    if (index == 4) {
+    if (index == 3) { // Now index 3 is for Submit Task
       // Directly navigate to SubmitTaskScreen
       Navigator.push(
         context,
@@ -249,7 +247,7 @@ class _DashboardPageState extends State<DashboardPage> {
           crossAxisCount: 2,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
-          childAspectRatio: 1.2, // Reduced from 1.4 to fit better
+          childAspectRatio: 1.2,
           children: [
             _buildClickableStatCard(
               "Active Tasks",
@@ -270,14 +268,14 @@ class _DashboardPageState extends State<DashboardPage> {
               dashboard.ongoingTasks.toString(),
               Icons.timelapse,
               Colors.orange,
-              () => _showTasksInProgress(dashboard), // Show filtered tasks
+              () => _showTasksInProgress(dashboard),
             ),
             _buildClickableStatCard(
               "Completed",
               dashboard.completedTasks.toString(),
               Icons.check_circle,
               Colors.purple,
-              () => _navigateToSubmitTask(''), // Navigate to Submit Task
+              () => _navigateToSubmitTask(''),
             ),
           ],
         ),
@@ -344,8 +342,6 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   // ================= NEW CLICKABLE CARD WIDGETS =================
-
-  // Build clickable stat card
   Widget _buildClickableStatCard(
     String title, 
     String value, 
@@ -361,36 +357,36 @@ class _DashboardPageState extends State<DashboardPage> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         elevation: 2,
         child: Padding(
-          padding: const EdgeInsets.all(10), // Reduced padding
+          padding: const EdgeInsets.all(10),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min, // Added to prevent overflow
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, color: color, size: 22), // Reduced size
-              const SizedBox(height: 4), // Reduced spacing
+              Icon(icon, color: color, size: 22),
+              const SizedBox(height: 4),
               Text(
                 value,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 14, // Reduced font size
+                  fontSize: 14,
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 2), // Reduced spacing
+              const SizedBox(height: 2),
               Text(
                 title,
                 style: TextStyle(
                   color: Colors.grey[400],
-                  fontSize: 10, // Reduced font size
+                  fontSize: 10,
                 ),
                 textAlign: TextAlign.center,
-                maxLines: 2, // Allow text to wrap
+                maxLines: 2,
               ),
-              const SizedBox(height: 2), // Reduced spacing
+              const SizedBox(height: 2),
               Icon(
                 Icons.chevron_right,
                 color: Colors.grey[600],
-                size: 14, // Reduced size
+                size: 14,
               ),
             ],
           ),
@@ -414,25 +410,25 @@ class _DashboardPageState extends State<DashboardPage> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         elevation: 2,
         child: Padding(
-          padding: const EdgeInsets.all(12), // Reduced padding
+          padding: const EdgeInsets.all(12),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                padding: const EdgeInsets.all(8), // Reduced padding
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: color.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(icon, color: color, size: 20), // Reduced size
+                child: Icon(icon, color: color, size: 20),
               ),
-              const SizedBox(width: 12), // Reduced spacing
+              const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   title,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 14, // Reduced font size
+                    fontSize: 14,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -440,7 +436,7 @@ class _DashboardPageState extends State<DashboardPage> {
               Icon(
                 Icons.chevron_right,
                 color: Colors.grey[400],
-                size: 20, // Reduced size
+                size: 20,
               ),
             ],
           ),
@@ -450,23 +446,12 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   // ================= NOTIFICATION METHODS =================
-
-  // Generate notifications based on dashboard data
   List<Map<String, dynamic>> _generateNotifications(DashboardProvider dashboard) {
     final notifications = <Map<String, dynamic>>[];
     
-    // New proposals notification
-    if (dashboard.pendingProposals > 0) {
-      notifications.add({
-        'type': 'proposal',
-        'title': 'New Proposals',
-        'message': 'You have ${dashboard.pendingProposals} new proposal(s) waiting for review',
-        'icon': Icons.person_add,
-        'color': Colors.orange,
-        'action': () => _onItemTapped(3), // Navigate to proposals
-      });
-    }
-
+    // New proposals notification (removed since Proposals tab is gone)
+    // You can keep this if you want notifications but remove the action
+    
     // Active tasks notification
     if (dashboard.activeTasks.isNotEmpty) {
       notifications.add({
@@ -475,7 +460,7 @@ class _DashboardPageState extends State<DashboardPage> {
         'message': 'You have ${dashboard.activeTasks.length} active task(s)',
         'icon': Icons.task,
         'color': Colors.green,
-        'action': () => _onItemTapped(1), // Navigate to tasks
+        'action': () => _onItemTapped(1),
       });
     }
 
@@ -487,7 +472,7 @@ class _DashboardPageState extends State<DashboardPage> {
         'message': '${dashboard.ongoingTasks} task(s) are currently being worked on',
         'icon': Icons.timelapse,
         'color': Colors.blue,
-        'action': () => _showTasksInProgress(dashboard), // Show filtered tasks
+        'action': () => _showTasksInProgress(dashboard),
       });
     }
 
@@ -499,7 +484,7 @@ class _DashboardPageState extends State<DashboardPage> {
         'message': '${dashboard.completedTasks} task(s) have been completed',
         'icon': Icons.check_circle,
         'color': Colors.purple,
-        'action': () => _navigateToSubmitTask(''), // Navigate to submit task
+        'action': () => _navigateToSubmitTask(''),
       });
     }
 
@@ -524,7 +509,7 @@ class _DashboardPageState extends State<DashboardPage> {
         content: Container(
           width: double.maxFinite,
           constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.5, // Limit height
+            maxHeight: MediaQuery.of(context).size.height * 0.5,
           ),
           child: inProgressTasks.isEmpty
               ? const Text(
@@ -555,11 +540,10 @@ class _DashboardPageState extends State<DashboardPage> {
                         trailing: Icon(Icons.chevron_right, color: Colors.grey[400]),
                         onTap: () {
                           Navigator.pop(context);
-                          // Navigate to task details or submit task
                           if (task["task_id"] != null) {
                             _navigateToSubmitTask(task["task_id"].toString());
                           } else {
-                            _onItemTapped(1); // Fallback to tasks page
+                            _onItemTapped(1);
                           }
                         },
                       ),
@@ -579,7 +563,7 @@ class _DashboardPageState extends State<DashboardPage> {
             TextButton(
               onPressed: () {
                 Navigator.pop(context);
-                _onItemTapped(1); // Navigate to tasks page
+                _onItemTapped(1);
               },
               child: const Text(
                 "View All Tasks",
@@ -603,14 +587,14 @@ class _DashboardPageState extends State<DashboardPage> {
       margin: const EdgeInsets.symmetric(vertical: 4),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ListTile(
-        dense: true, // Makes tile more compact
+        dense: true,
         leading: CircleAvatar(
-          radius: 18, // Reduced size
+          radius: 18,
           backgroundColor: notification['color'] as Color,
           child: Icon(
             notification['icon'] as IconData,
             color: Colors.white,
-            size: 18, // Reduced size
+            size: 18,
           ),
         ),
         title: Text(
@@ -618,14 +602,14 @@ class _DashboardPageState extends State<DashboardPage> {
           style: const TextStyle(
             color: Colors.white, 
             fontWeight: FontWeight.bold,
-            fontSize: 14, // Reduced font size
+            fontSize: 14,
           ),
         ),
         subtitle: Text(
           notification['message'] as String,
           style: const TextStyle(
             color: Colors.grey,
-            fontSize: 12, // Reduced font size
+            fontSize: 12,
           ),
         ),
         trailing: Icon(Icons.chevron_right, color: Colors.grey[400], size: 20),
@@ -645,20 +629,20 @@ class _DashboardPageState extends State<DashboardPage> {
       color: Colors.grey[900],
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: const Padding(
-        padding: EdgeInsets.all(16), // Reduced padding
+        padding: EdgeInsets.all(16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.notifications_off, color: Colors.grey, size: 30), // Reduced size
-            SizedBox(height: 8), // Reduced spacing
+            Icon(Icons.notifications_off, color: Colors.grey, size: 30),
+            SizedBox(height: 8),
             Text(
               "No New Notifications",
-              style: TextStyle(color: Colors.grey, fontSize: 14), // Reduced font
+              style: TextStyle(color: Colors.grey, fontSize: 14),
             ),
-            SizedBox(height: 4), // Reduced spacing
+            SizedBox(height: 4),
             Text(
               "You're all caught up!",
-              style: TextStyle(color: Colors.grey, fontSize: 10), // Reduced font
+              style: TextStyle(color: Colors.grey, fontSize: 10),
             ),
           ],
         ),
@@ -676,11 +660,11 @@ class _DashboardPageState extends State<DashboardPage> {
         backgroundColor: Colors.grey[900],
         title: const Text(
           "All Notifications",
-          style: TextStyle(color: Colors.white, fontSize: 16), // Reduced font
+          style: TextStyle(color: Colors.white, fontSize: 16),
         ),
         content: Container(
           constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.6, // Limit height
+            maxHeight: MediaQuery.of(context).size.height * 0.6,
           ),
           child: notifications.isEmpty
               ? const Text(
@@ -729,7 +713,7 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
             ],
           ),
-          body: SafeArea( // Added SafeArea to prevent overflow
+          body: SafeArea(
             child: _selectedIndex == 0
                 ? _buildHomePage(dashboard)
                 : _pages[_selectedIndex],
@@ -753,10 +737,6 @@ class _DashboardPageState extends State<DashboardPage> {
               BottomNavigationBarItem(
                 icon: Icon(Icons.payment),
                 label: "Payments",
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.article),
-                label: "Proposals",
               ),
               BottomNavigationBarItem(
                 icon: Icon(Icons.check_circle_outline),

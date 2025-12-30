@@ -5,6 +5,7 @@ import 'package:helawork/freelancer/home/task_detail.dart';
 import 'package:helawork/freelancer/home/submitting_task.dart';
 import 'package:helawork/freelancer/provider/task_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class TaskPage extends StatefulWidget {
   const TaskPage({super.key});
@@ -18,7 +19,6 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   List<Map<String, dynamic>> _filteredTasks = [];
-  List<Map<String, dynamic>> _filteredRecommendedJobs = [];
   
   bool _loadingRecommendedJobs = true;
   bool _hasError = false;
@@ -26,34 +26,55 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
   List<dynamic> _recommendedJobs = [];
   String? _userToken;
   
-  final String baseUrl = "YOUR_BASE_URL_HERE";
+  final String baseUrl = 'http://192.168.100.188:8000';
+  
+  bool _tasksLoaded = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    
-    // Fetch tasks
-    Future.microtask(() =>
-        Provider.of<TaskProvider>(context, listen: false).fetchTasks(context));
-    
-    _searchController.addListener(() {
-      setState(() {
-        _searchQuery = _searchController.text.trim();
-      });
-    });
+    _searchController.addListener(_onSearchChanged);
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    
+    if (!_tasksLoaded) {
+      _tasksLoaded = true;
+      _loadTasks();
+    }
+    
     _getTokenAndLoadRecommendedJobs();
   }
 
+  void _onSearchChanged() {
+    setState(() {
+      _searchQuery = _searchController.text.trim();
+    });
+  }
+
+  Future<void> _loadTasks() async {
+    try {
+      await Provider.of<TaskProvider>(context, listen: false).fetchTasks(context);
+    } catch (e) {
+      print('Error loading tasks: $e');
+    }
+  }
+
   Future<void> _getTokenAndLoadRecommendedJobs() async {
-    // Implement token retrieval
+    final prefs = await SharedPreferences.getInstance();
+    _userToken = prefs.getString('user_token');
+    
     if (_userToken != null) {
       await _loadRecommendedJobs();
+    } else {
+      setState(() {
+        _loadingRecommendedJobs = false;
+        _hasError = true;
+        _errorMessage = 'Please login to see recommended jobs';
+      });
     }
   }
 
@@ -74,15 +95,10 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
     });
 
     try {
-      final results = await fetchRecommendedJobs(_userToken!);
-      
+      final results = await _fetchRecommendedJobs(_userToken!);
       setState(() {
         _recommendedJobs = results;
         _loadingRecommendedJobs = false;
-        _filteredRecommendedJobs = _filterTasks(
-          _recommendedJobs.cast<Map<String, dynamic>>(), 
-          _searchQuery
-        );
       });
     } catch (error) {
       setState(() {
@@ -93,95 +109,52 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
     }
   }
 
-  // ✅ UPDATED: Use backend fields to check if task is taken
-  bool _isTaskTaken(Map<String, dynamic> task) {
-    // Get values from task (provided by backend)
-    final isTaken = task['is_taken'] == true;
-    final hasContract = task['has_contract'] == true;
-    final overallStatus = (task['overall_status'] ?? '').toString().toLowerCase();
-    final assignedFreelancer = task['assigned_freelancer'];
-    final assignedUser = task['assigned_user'];
-    
-    // Debug
-    print('\n🔍 Checking if task "${task['title']}" is taken:');
-    print('  is_taken: $isTaken');
-    print('  has_contract: $hasContract');
-    print('  overall_status: $overallStatus');
-    print('  assigned_freelancer: ${assignedFreelancer != null ? "Exists" : "None"}');
-    print('  assigned_user: ${assignedUser != null ? "Exists" : "None"}');
-    
-    // Task is taken if ANY of these are true
-    final bool taken = isTaken || 
-                       hasContract || 
-                       overallStatus == 'taken' || 
-                       assignedFreelancer != null ||
-                       assignedUser != null;
-    
-    print('  Result: ${taken ? "✅ TAKEN" : "❌ OPEN"}');
-    return taken;
-  }
+  Future<List<dynamic>> _fetchRecommendedJobs(String token) async {
+    try {
+      final response = await http.get(
+        Uri.parse("$baseUrl/freelancer/recommended-jobs/"),
+        headers: {"Authorization": "Bearer $token"},
+      ).timeout(const Duration(seconds: 30));
 
-  bool _isTaskAssignedToMe(Map<String, dynamic> task) {
-    final status = (task['status'] ?? '').toString().toLowerCase();
-    return status == 'in_progress' || status == 'assigned';
-  }
-
-  // ✅ UPDATED: Get freelancer from task data (provided by backend)
-  Map<String, dynamic>? _getAssignedFreelancer(Map<String, dynamic> task) {
-    // First try assigned_freelancer (from backend)
-    final assignedFreelancer = task['assigned_freelancer'];
-    if (assignedFreelancer is Map<String, dynamic>) {
-      print('✅ Using assigned_freelancer from task API');
-      return assignedFreelancer;
-    }
-    
-    // Then try assigned_user
-    final assignedUser = task['assigned_user'];
-    if (assignedUser is Map<String, dynamic>) {
-      return assignedUser;
-    }
-    
-    // Fallback: check if we can get name from employer
-    final employer = task['employer'] ?? {};
-    if (employer['username'] != null) {
-      return {'name': employer['username']};
-    }
-    
-    return null;
-  }
-
-  String _getFreelancerName(Map<String, dynamic>? freelancer) {
-    if (freelancer == null) return 'Another freelancer';
-    
-    return freelancer['name']?.toString() ?? 
-           freelancer['username']?.toString() ?? 
-           freelancer['email']?.toString().split('@').first ?? 
-           'Another freelancer';
-  }
-
-  Future<List<dynamic>> fetchRecommendedJobs(String token) async {
-    final response = await http.get(
-      Uri.parse("$baseUrl/freelancer/recommended-jobs/"),
-      headers: {"Authorization": "Bearer $token"},
-    );
-
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      if (data["status"] == true) {
-        return data["recommended"];
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        print("Recommended jobs response: $data");
+        
+        if (data["status"] == true) {
+          final recommended = data["recommended"] ?? [];
+          print("Found ${recommended.length} recommended jobs");
+          
+          // Debug first few jobs
+          for (int i = 0; i < (recommended.length < 3 ? recommended.length : 3); i++) {
+            print("Job $i - Title: ${recommended[i]['title']}");
+            print("   Match Score: ${recommended[i]['match_score'] ?? 'N/A'}");
+            print("   Skills: ${recommended[i]['required_skills']}");
+          }
+          
+          return recommended;
+        } else {
+          print("API returned false status: ${data['message']}");
+          return [];
+        }
+      } else {
+        print('Error fetching recommended jobs: ${response.statusCode} - ${response.body}');
+        return [];
       }
+    } catch (e) {
+      print('Exception fetching recommended jobs: $e');
+      return [];
     }
-    return [];
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
     super.dispose();
   }
 
-  List<Map<String, dynamic>> _filterTasks(List<Map<String, dynamic>> allTasks, String query) {
+  List<Map<String, dynamic>> _filterTasksList(List<Map<String, dynamic>> allTasks, String query) {
     if (query.isEmpty) return allTasks;
     
     return allTasks.where((task) {
@@ -197,12 +170,17 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
     }).toList();
   }
 
+  List<Map<String, dynamic>> _getRecommendedJobsFiltered() {
+    final jobs = _recommendedJobs.whereType<Map<String, dynamic>>().toList();
+    return _filterTasksList(jobs, _searchQuery);
+  }
+
   @override
   Widget build(BuildContext context) {
     final taskProvider = Provider.of<TaskProvider>(context);
     
     if (taskProvider.tasks.isNotEmpty) {
-      _filteredTasks = _filterTasks(taskProvider.tasks, _searchQuery);
+      _filteredTasks = _filterTasksList(taskProvider.tasks, _searchQuery);
     }
 
     return Scaffold(
@@ -247,7 +225,12 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
                   suffixIcon: _searchQuery.isNotEmpty
                       ? IconButton(
                           icon: const Icon(Icons.clear, color: Colors.grey),
-                          onPressed: () { _searchController.clear(); },
+                          onPressed: () { 
+                            _searchController.clear();
+                            setState(() {
+                              _searchQuery = '';
+                            });
+                          },
                         )
                       : null,
                   border: InputBorder.none,
@@ -268,37 +251,116 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
             child: TabBarView(
               controller: _tabController,
               children: [
-                // ✅ SIMPLIFIED: No need for ContractProvider
-                RefreshIndicator(
-                  onRefresh: () async {
-                    await Provider.of<TaskProvider>(context, listen: false).fetchTasks(context);
-                  },
-                  child: taskProvider.isLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : taskProvider.tasks.isEmpty
-                          ? Center(
-                              child: Text(
-                                taskProvider.errorMessage.isNotEmpty
-                                    ? taskProvider.errorMessage
-                                    : 'No tasks available',
-                                style: const TextStyle(fontSize: 18),
-                              ),
-                            )
-                          : _filteredTasks.isEmpty && _searchQuery.isNotEmpty
-                              ? _buildNoResults('tasks')
-                              : ListView.builder(
-                                  padding: const EdgeInsets.all(16),
-                                  itemCount: _filteredTasks.length,
-                                  itemBuilder: (context, index) {
-                                    return _buildTaskCard(_filteredTasks[index]);
-                                  },
-                                ),
-                ),
+                _buildAllTasksTab(taskProvider),
                 _buildRecommendedJobsTab(),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildAllTasksTab(TaskProvider taskProvider) {
+    return RefreshIndicator(
+      onRefresh: () async {
+        await taskProvider.fetchTasks(context);
+      },
+      child: taskProvider.isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : taskProvider.tasks.isEmpty
+              ? Center(
+                  child: Text(
+                    taskProvider.errorMessage.isNotEmpty
+                        ? taskProvider.errorMessage
+                        : 'No tasks available',
+                    style: const TextStyle(fontSize: 18),
+                  ),
+                )
+              : _filteredTasks.isEmpty && _searchQuery.isNotEmpty
+                  ? _buildNoResults('tasks')
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _filteredTasks.length,
+                      itemBuilder: (context, index) {
+                        return _buildTaskCard(_filteredTasks[index]);
+                      },
+                    ),
+    );
+  }
+
+  Widget _buildRecommendedJobsTab() {
+    if (_loadingRecommendedJobs) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_hasError) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 80, color: Colors.red[300]),
+            const SizedBox(height: 20),
+            const Text(
+              'Error Loading Recommendations',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              child: Text(
+                _errorMessage,
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: _loadRecommendedJobs,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Try Again'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final filteredJobs = _getRecommendedJobsFiltered();
+
+    if (filteredJobs.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.star_border, size: 80, color: Colors.grey[300]),
+            const SizedBox(height: 20),
+            const Text(
+              'No recommended jobs',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Complete your profile to get personalized recommendations',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: _loadRecommendedJobs,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Refresh Recommendations'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadRecommendedJobs,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: filteredJobs.length,
+        itemBuilder: (context, index) {
+          return _buildTaskCard(filteredJobs[index], isRecommended: true);
+        },
       ),
     );
   }
@@ -310,17 +372,6 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
     final assignedFreelancer = _getAssignedFreelancer(task);
     final freelancerName = _getFreelancerName(assignedFreelancer);
     
-    // ✅ UPDATED Debug print
-    print('\n🎯 Building Task Card: ${task['title']}');
-    print('   Task ID: ${task['id']}');
-    print('   Backend Fields:');
-    print('     - is_taken: ${task['is_taken']}');
-    print('     - has_contract: ${task['has_contract']}');
-    print('     - overall_status: ${task['overall_status']}');
-    print('   Calculated:');
-    print('     - Final Is Taken: $isTaken');
-    print('     - Freelancer Name: $freelancerName');
-    
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       elevation: 3,
@@ -330,7 +381,6 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header
             Row(
               children: [
                 Expanded(
@@ -369,7 +419,6 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
               ],
             ),
             
-            // SHOW WHO IT'S ASSIGNED TO (if taken by someone else)
             if (isTaken && !isAssignedToMe)
               Container(
                 margin: const EdgeInsets.only(top: 8),
@@ -394,22 +443,18 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
             
             const SizedBox(height: 8),
             
-            // Task Description
             Text(task['description'] ?? '',
               maxLines: 3, overflow: TextOverflow.ellipsis,
               style: TextStyle(color: Colors.grey[700], fontSize: 14),
             ),
             const SizedBox(height: 12),
             
-            // Client Information
             _buildClientSection(employer),
             
             const SizedBox(height: 12),
             
-            // BUTTON ROW
             Row(
               children: [
-                // View Details Button
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () {
@@ -440,7 +485,6 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
                 
                 const SizedBox(width: 8),
                 
-                // SUBMIT TASK BUTTON
                 if (isAssignedToMe)
                   ElevatedButton.icon(
                     onPressed: () {
@@ -475,79 +519,6 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
     );
   }
 
-  Widget _buildRecommendedJobsTab() {
-    return RefreshIndicator(
-      onRefresh: _loadRecommendedJobs,
-      child: _loadingRecommendedJobs
-          ? const Center(child: CircularProgressIndicator())
-          : _hasError
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.error_outline, size: 80, color: Colors.red[300]),
-                      const SizedBox(height: 20),
-                      Text('Error Loading Recommendations',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500, color: Colors.grey[600]),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(_errorMessage, textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 16, color: Colors.grey[500]),
-                      ),
-                      const SizedBox(height: 20),
-                      ElevatedButton.icon(
-                        onPressed: _loadRecommendedJobs,
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('Try Again'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Theme.of(context).colorScheme.primary,
-                          foregroundColor: Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : _recommendedJobs.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.star_border, size: 80, color: Colors.grey[300]),
-                          const SizedBox(height: 20),
-                          Text('No recommended jobs',
-                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500, color: Colors.grey[600]),
-                          ),
-                          const SizedBox(height: 10),
-                          Text('Complete your profile to get personalized recommendations',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 16, color: Colors.grey[500]),
-                          ),
-                          const SizedBox(height: 20),
-                          ElevatedButton.icon(
-                            onPressed: _loadRecommendedJobs,
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('Refresh Recommendations'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Theme.of(context).colorScheme.primary,
-                              foregroundColor: Colors.white,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : _filteredRecommendedJobs.isEmpty && _searchQuery.isNotEmpty
-                      ? _buildNoResults('recommended jobs')
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: _filteredRecommendedJobs.length,
-                          itemBuilder: (context, index) {
-                            final job = _filteredRecommendedJobs[index];
-                            return _buildTaskCard(job, isRecommended: true);
-                          },
-                        ),
-    );
-  }
-
   Widget _buildNoResults(String type) {
     return Center(
       child: Column(
@@ -564,7 +535,12 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
           ),
           const SizedBox(height: 20),
           ElevatedButton.icon(
-            onPressed: () { _searchController.clear(); },
+            onPressed: () { 
+              _searchController.clear();
+              setState(() {
+                _searchQuery = '';
+              });
+            },
             icon: const Icon(Icons.clear_all),
             label: const Text('Clear Search'),
             style: ElevatedButton.styleFrom(
@@ -618,7 +594,6 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
           ),
         ),
         
-        // Show freelancer name for taken tasks
         if (isTaken && !isAssignedToMe)
           Padding(
             padding: const EdgeInsets.only(top: 4),
@@ -780,5 +755,52 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
         ),
       ],
     );
+  }
+
+  bool _isTaskTaken(Map<String, dynamic> task) {
+    final isTaken = task['is_taken'] == true;
+    final hasContract = task['has_contract'] == true;
+    final overallStatus = (task['overall_status'] ?? '').toString().toLowerCase();
+    final assignedFreelancer = task['assigned_freelancer'];
+    final assignedUser = task['assigned_user'];
+    
+    return isTaken || 
+           hasContract || 
+           overallStatus == 'taken' || 
+           assignedFreelancer != null ||
+           assignedUser != null;
+  }
+
+  bool _isTaskAssignedToMe(Map<String, dynamic> task) {
+    final status = (task['status'] ?? '').toString().toLowerCase();
+    return status == 'in_progress' || status == 'assigned';
+  }
+
+  Map<String, dynamic>? _getAssignedFreelancer(Map<String, dynamic> task) {
+    final assignedFreelancer = task['assigned_freelancer'];
+    if (assignedFreelancer is Map<String, dynamic>) {
+      return assignedFreelancer;
+    }
+    
+    final assignedUser = task['assigned_user'];
+    if (assignedUser is Map<String, dynamic>) {
+      return assignedUser;
+    }
+    
+    final employer = task['employer'] ?? {};
+    if (employer['username'] != null) {
+      return {'name': employer['username']};
+    }
+    
+    return null;
+  }
+
+  String _getFreelancerName(Map<String, dynamic>? freelancer) {
+    if (freelancer == null) return 'Another freelancer';
+    
+    return freelancer['name']?.toString() ?? 
+           freelancer['username']?.toString() ?? 
+           freelancer['email']?.toString().split('@').first ?? 
+           'Another freelancer';
   }
 }

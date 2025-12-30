@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:helawork/api_service.dart';
 
@@ -15,17 +17,30 @@ class RecommendedJobsProvider with ChangeNotifier {
   // Fetch recommended jobs
   Future<void> fetchRecommendedJobs(String token) async {
     try {
+      print("🔄 Starting fetchRecommendedJobs in provider");
+      
       _loading = true;
       _hasError = false;
       _errorMessage = '';
       notifyListeners();
 
+      print("🔄 Calling ApiService.fetchRecommendedJobs");
       final results = await ApiService.fetchRecommendedJobs(token);
       
+      print("🔄 Received ${results.length} jobs from API");
       _jobs = results;
       _loading = false;
+      
+      // Debug: Print job details
+      for (int i = 0; i < min(3, _jobs.length); i++) {
+        print("📋 Job $i: ${_jobs[i]["title"]}");
+        print("📋   Match Score: ${_jobs[i]["match_score"]}");
+        print("📋   Skills: ${_jobs[i]["required_skills"]}");
+      }
+      
       notifyListeners();
     } catch (error) {
+      print("💥 Provider error: $error");
       _loading = false;
       _hasError = true;
       _errorMessage = error.toString();

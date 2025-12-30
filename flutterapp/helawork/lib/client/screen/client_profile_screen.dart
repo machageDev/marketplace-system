@@ -1,12 +1,12 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:helawork/client/provider/client_profile_provider.dart';
 import 'package:helawork/client/screen/edit_profile_screen.dart';
 import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
 
 class ClientProfileScreen extends StatefulWidget {
-  final int employerId;
-  
-  const ClientProfileScreen({super.key, required this.employerId});
+  const ClientProfileScreen({super.key, required int profile});
 
   @override
   State<ClientProfileScreen> createState() => _ClientProfileScreenState();
@@ -15,6 +15,16 @@ class ClientProfileScreen extends StatefulWidget {
 class _ClientProfileScreenState extends State<ClientProfileScreen> {
   bool _isRefreshing = false;
   bool _initialized = false;
+  
+  // Profile Picture Upload Variables
+  File? _selectedProfileImage;
+  bool _isUploadingImage = false;
+  final ImagePicker _picker = ImagePicker();
+  
+  // Verification Controllers
+  final TextEditingController _idNumberController = TextEditingController();
+  final TextEditingController _emailTokenController = TextEditingController();
+  final TextEditingController _phoneCodeController = TextEditingController();
 
   @override
   void initState() {
@@ -27,17 +37,9 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
   void _loadProfile() {
     if (_initialized) return;
     
-    print('=== DEBUG: Loading profile ===');
-    print('Widget employerId: ${widget.employerId}');
-    
     final provider = Provider.of<ClientProfileProvider>(context, listen: false);
-    print('Provider employerId before set: ${provider.employerId}');
     
-    // FIRST: Set the employerId in the provider
-    provider.setEmployerId(widget.employerId);
-    print('Provider employerId after set: ${provider.employerId}');
-    
-    // THEN: Fetch the profile
+    // Just fetch the profile - no need to set employerId
     provider.fetchProfile();
     
     _initialized = true;
@@ -46,15 +48,8 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
   Future<void> _refreshProfile() async {
     setState(() => _isRefreshing = true);
     
-    print('=== DEBUG: Refreshing profile ===');
-    print('Widget employerId: ${widget.employerId}');
-    
     final provider = Provider.of<ClientProfileProvider>(context, listen: false);
     
-    // Make sure employerId is set
-    provider.setEmployerId(widget.employerId);
-    
-    // Then fetch profile
     await provider.fetchProfile();
     
     setState(() => _isRefreshing = false);
@@ -69,7 +64,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
         builder: (context) => EditProfileScreen(
           currentProfile: provider.profile,
           isNewProfile: isNewProfile,
-          employerId: widget.employerId,
+          employerId: provider.profile?['id'] ?? 0,
         ),
       ),
     ).then((value) {
@@ -79,9 +74,115 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
     });
   }
 
+  // ================== PROFILE PICTURE UPLOAD METHODS ==================
+  
+  Future<void> _pickProfileImage() async {
+    final pickedFile = await _picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 800,
+      maxHeight: 800,
+      imageQuality: 85,
+    );
+
+    if (pickedFile != null) {
+      setState(() {
+        _selectedProfileImage = File(pickedFile.path);
+      });
+      
+      await _uploadProfileImage();
+    }
+  }
+
+  Future<void> _takeProfilePhoto() async {
+    final pickedFile = await _picker.pickImage(
+      source: ImageSource.camera,
+      maxWidth: 800,
+      maxHeight: 800,
+      imageQuality: 85,
+    );
+
+    if (pickedFile != null) {
+      setState(() {
+        _selectedProfileImage = File(pickedFile.path);
+      });
+      
+      await _uploadProfileImage();
+    }
+  }
+
+  Future<void> _uploadProfileImage() async {
+    if (_selectedProfileImage == null) return;
+
+    setState(() => _isUploadingImage = true);
+
+    try {
+      final provider = Provider.of<ClientProfileProvider>(context, listen: false);
+      final success = await provider.uploadProfilePicture(_selectedProfileImage!.path);
+      
+      if (success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profile picture updated successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        
+        await _refreshProfile();
+        setState(() => _selectedProfileImage = null);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to upload image: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+
+    setState(() => _isUploadingImage = false);
+  }
+
+  void _showImageSourceDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Update Profile Picture'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Choose from Gallery'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickProfileImage();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Take Photo'),
+              onTap: () {
+                Navigator.pop(context);
+                _takeProfilePhoto();
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ================== VERIFICATION METHODS ==================
+  
   void _showEmailVerificationDialog(BuildContext context) {
-    final TextEditingController tokenController = TextEditingController();
-    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -92,7 +193,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
             const Text('Enter the verification token sent to your email'),
             const SizedBox(height: 16),
             TextField(
-              controller: tokenController,
+              controller: _emailTokenController,
               decoration: const InputDecoration(
                 labelText: 'Verification Token',
                 border: OutlineInputBorder(),
@@ -102,18 +203,22 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () {
+              Navigator.pop(context);
+              _emailTokenController.clear();
+            },
             child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () async {
               final provider = Provider.of<ClientProfileProvider>(context, listen: false);
-              final success = await provider.verifyEmail(tokenController.text);
-              if (success) {
+              final success = await provider.verifyEmail(_emailTokenController.text);
+              if (success && mounted) {
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Email verified successfully')),
                 );
+                _emailTokenController.clear();
                 _refreshProfile();
               }
             },
@@ -125,8 +230,6 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
   }
 
   void _showPhoneVerificationDialog(BuildContext context) {
-    final TextEditingController codeController = TextEditingController();
-    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -137,7 +240,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
             const Text('Enter the 6-digit code sent to your phone'),
             const SizedBox(height: 16),
             TextField(
-              controller: codeController,
+              controller: _phoneCodeController,
               keyboardType: TextInputType.number,
               maxLength: 6,
               decoration: const InputDecoration(
@@ -150,18 +253,22 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () {
+              Navigator.pop(context);
+              _phoneCodeController.clear();
+            },
             child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () async {
               final provider = Provider.of<ClientProfileProvider>(context, listen: false);
-              final success = await provider.verifyPhone(codeController.text);
-              if (success) {
+              final success = await provider.verifyPhone(_phoneCodeController.text);
+              if (success && mounted) {
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Phone verified successfully')),
                 );
+                _phoneCodeController.clear();
                 _refreshProfile();
               }
             },
@@ -172,17 +279,56 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
     );
   }
 
-  void _navigateToIdUpload(BuildContext context) {
-    // Implement ID upload
+  void _showIdNumberDialog(BuildContext context) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Upload ID Document'),
-        content: const Text('ID upload functionality will be implemented here.'),
+        title: const Text('Update ID Number'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Enter your National ID, Passport, or Driver\'s License number'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _idNumberController,
+              decoration: const InputDecoration(
+                labelText: 'ID Number',
+                border: OutlineInputBorder(),
+                hintText: 'e.g., 1234567890',
+              ),
+            ),
+          ],
+        ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
+            onPressed: () {
+              Navigator.pop(context);
+              _idNumberController.clear();
+            },
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (_idNumberController.text.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please enter ID number')),
+                );
+                return;
+              }
+              
+              final provider = Provider.of<ClientProfileProvider>(context, listen: false);
+              final success = await provider.updateIdNumber(_idNumberController.text);
+              
+              if (success && mounted) {
+                Navigator.pop(context);
+                _idNumberController.clear();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('ID number updated successfully')),
+                );
+                _refreshProfile();
+              }
+            },
+            child: const Text('Update'),
           ),
         ],
       ),
@@ -412,6 +558,8 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
   }
 
   Widget _buildProfileUI(ClientProfileProvider provider, Color themeBlue, Color themeWhite) {
+    final profile = provider.profile!;
+    
     return RefreshIndicator(
       onRefresh: _refreshProfile,
       backgroundColor: themeWhite,
@@ -426,53 +574,110 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
               color: themeWhite,
               child: Column(
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 100,
-                        height: 100,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.grey[300]!, width: 2),
-                          color: themeBlue.withOpacity(0.1),
+                  // PROFILE PICTURE WITH UPLOAD FUNCTIONALITY
+                  GestureDetector(
+                    onTap: _showImageSourceDialog,
+                    child: Stack(
+                      children: [
+                        Container(
+                          width: 120,
+                          height: 120,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.grey[300]!, width: 2),
+                            color: themeBlue.withOpacity(0.1),
+                          ),
+                          child: _isUploadingImage
+                              ? const Center(
+                                  child: CircularProgressIndicator(
+                                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF1976D2)),
+                                  ),
+                                )
+                              : provider.profilePictureUrl != null && provider.profilePictureUrl!.isNotEmpty
+                                  ? ClipRRect(
+                                      borderRadius: BorderRadius.circular(60),
+                                      child: Image.network(
+                                        provider.profilePictureUrl!,
+                                        width: 120,
+                                        height: 120,
+                                        fit: BoxFit.cover,
+                                        loadingBuilder: (context, child, loadingProgress) {
+                                          if (loadingProgress == null) return child;
+                                          return Center(
+                                            child: CircularProgressIndicator(
+                                              value: loadingProgress.expectedTotalBytes != null
+                                                  ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                                                  : null,
+                                              strokeWidth: 2,
+                                            ),
+                                          );
+                                        },
+                                        errorBuilder: (context, error, stackTrace) {
+                                          print('Error loading profile picture: $error');
+                                          print('URL attempted: ${provider.profilePictureUrl}');
+                                          return Center(
+                                            child: Icon(
+                                              Icons.person,
+                                              size: 60,
+                                              color: themeBlue,
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    )
+                                  : Center(
+                                      child: Icon(
+                                        Icons.person,
+                                        size: 60,
+                                        color: themeBlue,
+                                      ),
+                                    ),
                         ),
-                        child: Center(
-                          child: Icon(
-                            Icons.business,
-                            size: 50,
-                            color: themeBlue,
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: themeBlue,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                            ),
+                            child: const Icon(
+                              Icons.camera_alt,
+                              color: Colors.white,
+                              size: 18,
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 24),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              provider.profile!['company_name'] ?? 'Your Business',
-                              style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.black87,
-                              ),
-                            ),
-                            if (provider.profile!['business_type'] != null)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child: Text(
-                                  provider.profile!['business_type'],
-                                  style: TextStyle(
-                                    color: Colors.grey[600],
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ),
-                          ],
+                      ],
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  Text(
+                    provider.displayName,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  
+                  if (profile['profession'] != null && profile['profession'].isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        profile['profession'],
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 14,
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  
                   const SizedBox(height: 16),
                   SizedBox(
                     width: double.infinity,
@@ -500,14 +705,16 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
             
             Container(height: 8, color: Colors.grey[100]),
             
-            _buildVerificationStatus(provider.profile!),
+            // VERIFICATION STATUS SECTION
+            _buildVerificationStatus(profile),
             
             Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (provider.profile!['bio'] != null)
+                  // BIO SECTION - Removed if empty or null
+                  if (profile['bio'] != null && profile['bio'].isNotEmpty)
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -521,7 +728,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          provider.profile!['bio'],
+                          profile['bio'],
                           style: const TextStyle(
                             fontSize: 15,
                             color: Colors.black87,
@@ -542,32 +749,86 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                   ),
                   const SizedBox(height: 16),
                   
+                  // EMAIL - Required field
                   _buildContactCard(
                     icon: Icons.email_outlined,
                     title: 'Email',
-                    value: provider.profile!['contact_email'] ?? 'Not provided',
+                    value: provider.contactEmail,
+                    isVerified: profile['email_verified'] ?? false,
                   ),
                   const SizedBox(height: 12),
+                  
+                  // PHONE - Required field
                   _buildContactCard(
                     icon: Icons.phone_outlined,
                     title: 'Phone',
-                    value: provider.profile!['phone_number'] ?? 'Not provided',
-                  ),
-                  const SizedBox(height: 12),
-                  _buildContactCard(
-                    icon: Icons.location_on_outlined,
-                    title: 'Address',
-                    value: '${provider.profile!['city'] ?? ''}, ${provider.profile!['country'] ?? ''}'.trim(),
+                    value: provider.phoneNumber,
+                    isVerified: profile['phone_verified'] ?? false,
                   ),
                   
-                  if (provider.profile!['website'] != null || 
-                      provider.profile!['tax_id'] != null)
+                  // ALTERNATE PHONE - Only show if exists
+                  if (profile['alternate_phone'] != null && profile['alternate_phone'].isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: _buildContactCard(
+                        icon: Icons.phone_outlined,
+                        title: 'Alternate Phone',
+                        value: profile['alternate_phone'],
+                        isVerified: false,
+                      ),
+                    ),
+                  
+                  // ADDRESS AND CITY - Combined
+                  if (provider.city.isNotEmpty || provider.address.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: _buildContactCard(
+                        icon: Icons.location_on_outlined,
+                        title: 'Location',
+                        value: '${provider.city}${provider.city.isNotEmpty && provider.address.isNotEmpty ? ', ' : ''}${provider.address}',
+                      ),
+                    ),
+                  
+                  // SKILLS - Show if exists
+                  if (profile['skills'] != null && profile['skills'].isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: _buildContactCard(
+                        icon: Icons.work_outline,
+                        title: 'Skills',
+                        value: profile['skills'],
+                      ),
+                    ),
+                  
+                  // SOCIAL MEDIA LINKS - Show if exists
+                  if (profile['linkedin_url'] != null && profile['linkedin_url'].isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: _buildContactCard(
+                        icon: Icons.link,
+                        title: 'LinkedIn',
+                        value: profile['linkedin_url'],
+                      ),
+                    ),
+                  
+                  if (profile['twitter_url'] != null && profile['twitter_url'].isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: _buildContactCard(
+                        icon: Icons.link,
+                        title: 'Twitter',
+                        value: profile['twitter_url'],
+                      ),
+                    ),
+                  
+                  // ID NUMBER - Show only if exists
+                  if (profile['id_number'] != null && profile['id_number'].isNotEmpty)
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const SizedBox(height: 24),
                         const Text(
-                          'Business Details',
+                          'Verification Details',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
@@ -576,39 +837,68 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                         ),
                         const SizedBox(height: 16),
                         
-                        if (provider.profile!['website'] != null)
-                          _buildContactCard(
-                            icon: Icons.language_outlined,
-                            title: 'Website',
-                            value: provider.profile!['website'],
-                          ),
-                        if (provider.profile!['website'] != null) const SizedBox(height: 12),
-                        
-                        if (provider.profile!['tax_id'] != null)
-                          _buildContactCard(
-                            icon: Icons.badge_outlined,
-                            title: 'Tax ID',
-                            value: provider.profile!['tax_id'],
-                          ),
-                        if (provider.profile!['tax_id'] != null) const SizedBox(height: 12),
-                        
-                        if (provider.profile!['industry'] != null)
-                          _buildContactCard(
-                            icon: Icons.category_outlined,
-                            title: 'Industry',
-                            value: provider.profile!['industry'],
-                          ),
+                        _buildContactCard(
+                          icon: Icons.badge_outlined,
+                          title: 'ID Number',
+                          value: profile['id_number'],
+                          isVerified: profile['id_verified'] ?? false,
+                        ),
                       ],
                     ),
+                  
+                  // STATS SECTION - FIXED: Using provider getters
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 24),
+                      const Text(
+                        'Statistics',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      
+                      // Stats Grid - FIXED OVERFLOW
+                      GridView.count(
+                        crossAxisCount: 3,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        childAspectRatio: 1.4, // Adjusted for better fit
+                        crossAxisSpacing: 8,
+                        mainAxisSpacing: 8,
+                        children: [
+                          _buildStatCard(
+                            title: 'Projects',
+                            value: '${profile['total_projects_posted'] ?? 0}',
+                            icon: Icons.work_outline,
+                          ),
+                          _buildStatCard(
+                            title: 'Total Spent',
+                            value: 'KSh ${provider.totalSpent.toStringAsFixed(2)}',
+                            icon: Icons.monetization_on_outlined,
+                          ),
+                          _buildStatCard(
+                            title: 'Avg Rating',
+                            value: '${provider.avgFreelancerRating.toStringAsFixed(1)}/5',
+                            icon: Icons.star_outline,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
             
-            if (provider.profile!['updated_at'] != null)
+            // LAST UPDATED TIMESTAMP
+            if (profile['updated_at'] != null)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Text(
-                  'Profile updated ${_formatDate(provider.profile!['updated_at'])}',
+                  'Profile updated ${_formatDate(profile['updated_at'])}',
                   style: TextStyle(
                     color: Colors.grey[500],
                     fontSize: 12,
@@ -627,7 +917,16 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
     final emailVerified = profile['email_verified'] ?? false;
     final phoneVerified = profile['phone_verified'] ?? false;
     final idVerified = profile['id_verified'] ?? false;
-    final isVerified = profile['is_verified'] ?? false;
+    final verificationStatus = profile['verification_status'] ?? 'unverified';
+    final idNumber = profile['id_number'];
+    
+    // Calculate progress based on verification status
+    int total = 3; // email, phone, id
+    int verified = 0;
+    if (emailVerified) verified++;
+    if (phoneVerified) verified++;
+    if (idVerified) verified++;
+    int progress = ((verified / total) * 100).round();
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -640,64 +939,95 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Verification Status',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: Colors.black87,
-            ),
+          Row(
+            children: [
+              const Text(
+                'Verification Status',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.black87,
+                ),
+              ),
+              const Spacer(),
+              Chip(
+                label: Text(verificationStatus.toUpperCase()),
+                backgroundColor: verificationStatus == 'verified'
+                    ? Colors.green
+                    : verificationStatus == 'pending'
+                        ? Colors.orange
+                        : Colors.grey,
+                labelStyle: const TextStyle(color: Colors.white, fontSize: 10),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           
+          // Progress Bar
+          LinearProgressIndicator(
+            value: progress / 100,
+            backgroundColor: Colors.grey[200],
+            valueColor: AlwaysStoppedAnimation<Color>(
+              progress == 100 ? Colors.green : const Color(0xFF1976D2),
+            ),
+            minHeight: 6,
+            borderRadius: BorderRadius.circular(3),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Verification Progress',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                ),
+              ),
+              Text(
+                '$progress%',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: progress == 100 ? Colors.green : const Color(0xFF1976D2),
+                ),
+              ),
+            ],
+          ),
+          
+          const SizedBox(height: 16),
+          
           _buildVerificationItem(
             icon: Icons.email_outlined,
-            label: 'Email',
+            label: 'Email Verification',
             isVerified: emailVerified,
             onVerify: emailVerified ? null : () {
               _showEmailVerificationDialog(context);
             },
           ),
           
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           
           _buildVerificationItem(
             icon: Icons.phone_outlined,
-            label: 'Phone',
+            label: 'Phone Verification',
             isVerified: phoneVerified,
             onVerify: phoneVerified ? null : () {
               _showPhoneVerificationDialog(context);
             },
           ),
           
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           
           _buildVerificationItem(
             icon: Icons.badge_outlined,
-            label: 'ID Document',
+            label: 'ID Number Verification',
             isVerified: idVerified,
+            value: idNumber,
             onVerify: idVerified ? null : () {
-              _navigateToIdUpload(context);
+              _showIdNumberDialog(context);
             },
           ),
-          
-          if (isVerified)
-            Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: Row(
-                children: [
-                  Icon(Icons.verified, color: Colors.green, size: 18),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Fully Verified',
-                    style: TextStyle(
-                      color: Colors.green,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
         ],
       ),
     );
@@ -707,45 +1037,88 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
     required IconData icon,
     required String label,
     required bool isVerified,
+    String? value,
     VoidCallback? onVerify,
   }) {
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, color: isVerified ? Colors.green : Colors.grey, size: 20),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            label,
-            style: TextStyle(
-              color: isVerified ? Colors.black87 : Colors.grey,
-              fontWeight: FontWeight.w500,
+        Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: isVerified ? Colors.green.withOpacity(0.1) : Colors.grey.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                icon,
+                color: isVerified ? Colors.green : Colors.grey,
+                size: 20,
+              ),
             ),
-          ),
-        ),
-        if (!isVerified && onVerify != null)
-          ElevatedButton(
-            onPressed: onVerify,
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              backgroundColor: const Color(0xFF1976D2),
-              foregroundColor: Colors.white,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: isVerified ? Colors.black87 : Colors.grey,
+                    ),
+                  ),
+                  if (value != null && value.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        value,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
-            child: const Text('Verify'),
-          )
-        else if (isVerified)
-          Row(
-            children: [
-              Icon(Icons.check_circle, color: Colors.green, size: 18),
-              const SizedBox(width: 6),
-              const Text(
-                'Verified',
-                style: TextStyle(
-                  color: Colors.green,
-                  fontWeight: FontWeight.w500,
+            if (!isVerified && onVerify != null)
+              ElevatedButton(
+                onPressed: onVerify,
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  backgroundColor: const Color(0xFF1976D2),
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Verify'),
+              )
+            else if (isVerified)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.check, color: Colors.green, size: 14),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Verified',
+                      style: TextStyle(
+                        color: Colors.green,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
+          ],
+        ),
       ],
     );
   }
@@ -754,6 +1127,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
     required IconData icon,
     required String title,
     required String value,
+    bool isVerified = false,
   }) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -768,12 +1142,12 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: const Color(0xFF1976D2).withOpacity(0.1),
+              color: isVerified ? Colors.green.withOpacity(0.1) : const Color(0xFF1976D2).withOpacity(0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
               icon,
-              color: const Color(0xFF1976D2),
+              color: isVerified ? Colors.green : const Color(0xFF1976D2),
               size: 22,
             ),
           ),
@@ -782,13 +1156,24 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
+                Row(
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    if (isVerified)
+                      Row(
+                        children: [
+                          const SizedBox(width: 8),
+                          Icon(Icons.verified, color: Colors.green, size: 14),
+                        ],
+                      ),
+                  ],
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -800,6 +1185,59 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                   ),
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatCard({
+    required String title,
+    required String value,
+    required IconData icon,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(
+            icon,
+            color: const Color(0xFF1976D2),
+            size: 22, // Reduced from 24
+          ),
+          const SizedBox(height: 6),
+          Flexible(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 14, // Reduced from 16
+                fontWeight: FontWeight.w700,
+                color: Colors.black87,
+              ),
+              textAlign: TextAlign.center,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 2,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Flexible(
+            child: Text(
+              title,
+              style: TextStyle(
+                fontSize: 11, // Reduced from 12
+                color: Colors.grey[600],
+              ),
+              textAlign: TextAlign.center,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
           ),
         ],
@@ -829,5 +1267,13 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
     } catch (e) {
       return dateString;
     }
+  }
+
+  @override
+  void dispose() {
+    _idNumberController.dispose();
+    _emailTokenController.dispose();
+    _phoneCodeController.dispose();
+    super.dispose();
   }
 }

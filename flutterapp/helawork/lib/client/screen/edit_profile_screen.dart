@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:helawork/client/provider/client_profile_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 
 class EditProfileScreen extends StatefulWidget {
   final Map<String, dynamic>? currentProfile;
@@ -22,15 +24,155 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   final Map<String, dynamic> _formData = {};
   bool _isSaving = false;
+  
+  // ADD THESE FOR PICTURE UPLOAD
+  File? _selectedProfileImage;
+  bool _isUploadingImage = false;
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
     if (widget.currentProfile != null) {
       _formData.addAll(widget.currentProfile!);
+      // Remove 'country' if it exists in currentProfile
+      _formData.remove('country');
     }
-    // Initialize account_type if not present
-    _formData['account_type'] = _formData['account_type'] ?? 'individual';
+  }
+
+  // ADD THESE PICTURE UPLOAD METHODS
+  Future<void> _pickProfileImage() async {
+    try {
+      final pickedFile = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 85,
+      );
+
+      if (pickedFile != null) {
+        setState(() {
+          _selectedProfileImage = File(pickedFile.path);
+        });
+        
+        // Automatically upload after selection
+        await _uploadProfileImage();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to pick image: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _takeProfilePhoto() async {
+    try {
+      final pickedFile = await _picker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 85,
+      );
+
+      if (pickedFile != null) {
+        setState(() {
+          _selectedProfileImage = File(pickedFile.path);
+        });
+        
+        await _uploadProfileImage();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to take photo: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _uploadProfileImage() async {
+    if (_selectedProfileImage == null) return;
+
+    setState(() => _isUploadingImage = true);
+
+    try {
+      final provider = Provider.of<ClientProfileProvider>(context, listen: false);
+      final success = await provider.uploadProfilePicture(_selectedProfileImage!.path);
+      
+      if (success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profile picture updated successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        
+        // Refresh the current profile data
+        setState(() {
+          _selectedProfileImage = null;
+          _isUploadingImage = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to upload image: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+
+    setState(() => _isUploadingImage = false);
+  }
+
+  void _showImageSourceDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Update Profile Picture'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_library, color: Color(0xFF1976D2)),
+                title: const Text('Choose from Gallery'),
+                onTap: () {
+                  Navigator.of(context).pop(); // Close dialog
+                  _pickProfileImage();
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.camera_alt, color: Color(0xFF1976D2)),
+                title: const Text('Take Photo'),
+                onTap: () {
+                  Navigator.of(context).pop(); // Close dialog
+                  _takeProfilePhoto();
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _saveProfile() async {
@@ -39,7 +181,46 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       setState(() => _isSaving = true);
 
       final provider = Provider.of<ClientProfileProvider>(context, listen: false);
-      final success = await provider.saveProfile(widget.employerId as Map<String, dynamic>, );
+      
+      // Remove fields that don't exist in Django model
+      final cleanFormData = Map<String, dynamic>.from(_formData);
+      
+      // EXPLICITLY REMOVE 'country' field
+      cleanFormData.remove('country');
+      
+      // Keep only fields that exist in Django model
+      final validFields = [
+        'full_name',
+        'contact_email',
+        'phone_number',
+        'alternate_phone',
+        'city',
+        'address',
+        'profession',
+        'skills',
+        'bio',
+        'linkedin_url',
+        'twitter_url',
+        'id_number'  // For verification
+      ];
+      
+      // Create filtered data with only valid fields
+      final filteredData = <String, dynamic>{};
+      for (final field in validFields) {
+        if (cleanFormData.containsKey(field)) {
+          filteredData[field] = cleanFormData[field] ?? '';
+        }
+      }
+      
+      // Handle skills as comma-separated string
+      if (filteredData.containsKey('skills') && filteredData['skills'] is List) {
+        filteredData['skills'] = (filteredData['skills'] as List).join(', ');
+      }
+
+      // DEBUG: Print what's being sent
+      print('DEBUG: Sending data to Django: $filteredData');
+      
+      final success = await provider.saveProfile(filteredData);
 
       setState(() => _isSaving = false);
 
@@ -80,7 +261,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         ),
         iconTheme: const IconThemeData(color: Colors.black),
         actions: [
-          if (_isSaving)
+          if (_isSaving || _isUploadingImage)
             Padding(
               padding: const EdgeInsets.only(right: 16),
               child: Center(
@@ -103,7 +284,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Form Header
+              // ADDED: PROFILE PICTURE SECTION
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -111,22 +292,102 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(
-                      Icons.business,
-                      size: 40,
-                      color: Color(0xFF1976D2),
+                    // Profile Picture with upload functionality
+                    GestureDetector(
+                      onTap: _showImageSourceDialog,
+                      child: Stack(
+                        children: [
+                          Container(
+                            width: 120,
+                            height: 120,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.grey[300]!, width: 2),
+                              color: themeBlue.withOpacity(0.1),
+                            ),
+                            child: _isUploadingImage
+                                ? const Center(
+                                    child: CircularProgressIndicator(
+                                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF1976D2)),
+                                    ),
+                                  )
+                                : _selectedProfileImage != null
+                                    ? ClipRRect(
+                                        borderRadius: BorderRadius.circular(60),
+                                        child: Image.file(
+                                          _selectedProfileImage!,
+                                          width: 120,
+                                          height: 120,
+                                          fit: BoxFit.cover,
+                                        ),
+                                      )
+                                    : widget.currentProfile?['profile_picture'] != null && 
+                                      widget.currentProfile!['profile_picture'].isNotEmpty
+                                        ? ClipRRect(
+                                            borderRadius: BorderRadius.circular(60),
+                                            child: Image.network(
+                                              widget.currentProfile!['profile_picture'],
+                                              width: 120,
+                                              height: 120,
+                                              fit: BoxFit.cover,
+                                              loadingBuilder: (context, child, loadingProgress) {
+                                                if (loadingProgress == null) return child;
+                                                return Center(
+                                                  child: CircularProgressIndicator(
+                                                    value: loadingProgress.expectedTotalBytes != null
+                                                        ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                                                        : null,
+                                                  ),
+                                                );
+                                              },
+                                              errorBuilder: (context, error, stackTrace) {
+                                                return Center(
+                                                  child: Icon(
+                                                    Icons.person,
+                                                    size: 60,
+                                                    color: themeBlue,
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                          )
+                                        : Center(
+                                            child: Icon(
+                                              Icons.person,
+                                              size: 60,
+                                              color: themeBlue,
+                                            ),
+                                          ),
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: themeBlue,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 2),
+                              ),
+                              child: const Icon(
+                                Icons.camera_alt,
+                                color: Colors.white,
+                                size: 18,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 12),
+                    
+                    const SizedBox(height: 16),
                     Text(
-                      widget.isNewProfile 
-                          ? 'Complete your business profile to get started'
-                          : 'Update your business information',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.black87,
+                      'Tap to change profile picture',
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 14,
                       ),
                     ),
                   ],
@@ -134,7 +395,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               ),
               const SizedBox(height: 24),
 
-              // Required Fields Section
+              // Basic Information Section
               const Text(
                 'Basic Information',
                 style: TextStyle(
@@ -145,11 +406,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Company Name
+              // Full Name (Required in Django model)
               TextFormField(
-                initialValue: _formData['company_name'] ?? '',
+                initialValue: _formData['full_name'] ?? '',
                 decoration: InputDecoration(
-                  labelText: 'Company Name *',
+                  labelText: 'Full Name *',
                   labelStyle: const TextStyle(color: Colors.grey),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
@@ -157,26 +418,26 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: Color(0xFF1976D2), width: 2),
+                    borderSide: const BorderSide(color: themeBlue, width: 2),
                   ),
                   filled: true,
                   fillColor: Colors.grey[50],
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'Company name is required';
+                    return 'Full name is required';
                   }
                   return null;
                 },
-                onSaved: (value) => _formData['company_name'] = value,
+                onSaved: (value) => _formData['full_name'] = value?.trim(),
               ),
               const SizedBox(height: 16),
 
-              // Business Type
+              // Profession
               TextFormField(
-                initialValue: _formData['business_type'] ?? '',
+                initialValue: _formData['profession'] ?? '',
                 decoration: InputDecoration(
-                  labelText: 'Business Type (e.g., LLC, Sole Proprietorship)',
+                  labelText: 'Profession/Role',
                   labelStyle: const TextStyle(color: Colors.grey),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
@@ -184,95 +445,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: Color(0xFF1976D2), width: 2),
+                    borderSide: const BorderSide(color: themeBlue, width: 2),
                   ),
                   filled: true,
                   fillColor: Colors.grey[50],
                 ),
-                onSaved: (value) => _formData['business_type'] = value,
+                onSaved: (value) => _formData['profession'] = value?.trim(),
               ),
               const SizedBox(height: 16),
-
-              // Account Type Selection
-              const Text(
-                'Account Type *',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black87,
-                ),
-              ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                initialValue: _formData['account_type'] ?? 'individual',
-                decoration: InputDecoration(
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: Colors.grey),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: Color(0xFF1976D2), width: 2),
-                  ),
-                  filled: true,
-                  fillColor: Colors.grey[50],
-                ),
-                items: const [
-                  DropdownMenuItem(
-                    value: 'individual',
-                    child: Text('Individual'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'business',
-                    child: Text('Business/Company'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'agency',
-                    child: Text('Agency'),
-                  ),
-                ],
-                onChanged: (value) {
-                  setState(() {
-                    _formData['account_type'] = value;
-                  });
-                },
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please select account type';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Conditionally show full_name field for individuals
-              if (_formData['account_type'] == 'individual')
-                TextFormField(
-                  initialValue: _formData['full_name'] ?? '',
-                  decoration: InputDecoration(
-                    labelText: 'Full Name *',
-                    labelStyle: const TextStyle(color: Colors.grey),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: Colors.grey),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: Color(0xFF1976D2), width: 2),
-                    ),
-                    filled: true,
-                    fillColor: Colors.grey[50],
-                  ),
-                  validator: (value) {
-                    if (_formData['account_type'] == 'individual' && 
-                        (value == null || value.isEmpty)) {
-                      return 'Full name is required for individuals';
-                    }
-                    return null;
-                  },
-                  onSaved: (value) => _formData['full_name'] = value,
-                ),
-              if (_formData['account_type'] == 'individual') const SizedBox(height: 16),
 
               // Contact Information Section
               const Text(
@@ -285,7 +465,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Email
+              // Email (Required in Django model)
               TextFormField(
                 initialValue: _formData['contact_email'] ?? '',
                 keyboardType: TextInputType.emailAddress,
@@ -298,7 +478,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: Color(0xFF1976D2), width: 2),
+                    borderSide: const BorderSide(color: themeBlue, width: 2),
                   ),
                   filled: true,
                   fillColor: Colors.grey[50],
@@ -307,16 +487,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   if (value == null || value.isEmpty) {
                     return 'Email is required';
                   }
-                  if (!value.contains('@')) {
+                  if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
                     return 'Enter a valid email address';
                   }
                   return null;
                 },
-                onSaved: (value) => _formData['contact_email'] = value,
+                onSaved: (value) => _formData['contact_email'] = value?.trim(),
               ),
               const SizedBox(height: 16),
 
-              // Phone
+              // Phone (Required in Django model)
               TextFormField(
                 initialValue: _formData['phone_number'] ?? '',
                 keyboardType: TextInputType.phone,
@@ -329,7 +509,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: Color(0xFF1976D2), width: 2),
+                    borderSide: const BorderSide(color: themeBlue, width: 2),
                   ),
                   filled: true,
                   fillColor: Colors.grey[50],
@@ -340,15 +520,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   }
                   return null;
                 },
-                onSaved: (value) => _formData['phone_number'] = value,
+                onSaved: (value) => _formData['phone_number'] = value?.trim(),
               ),
               const SizedBox(height: 16),
 
-              // Country
+              // Alternate Phone (Optional in Django model)
               TextFormField(
-                initialValue: _formData['country'] ?? '',
+                initialValue: _formData['alternate_phone'] ?? '',
+                keyboardType: TextInputType.phone,
                 decoration: InputDecoration(
-                  labelText: 'Country *',
+                  labelText: 'Alternate Phone',
                   labelStyle: const TextStyle(color: Colors.grey),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
@@ -356,22 +537,27 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: Color(0xFF1976D2), width: 2),
+                    borderSide: const BorderSide(color: themeBlue, width: 2),
                   ),
                   filled: true,
                   fillColor: Colors.grey[50],
                 ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Country is required';
-                  }
-                  return null;
-                },
-                onSaved: (value) => _formData['country'] = value,
+                onSaved: (value) => _formData['alternate_phone'] = value?.trim(),
               ),
               const SizedBox(height: 16),
 
-              // City
+              // Location Information Section
+              const Text(
+                'Location Information',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // City (Required in Django model)
               TextFormField(
                 initialValue: _formData['city'] ?? '',
                 decoration: InputDecoration(
@@ -383,7 +569,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: Color(0xFF1976D2), width: 2),
+                    borderSide: const BorderSide(color: themeBlue, width: 2),
                   ),
                   filled: true,
                   fillColor: Colors.grey[50],
@@ -394,15 +580,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   }
                   return null;
                 },
-                onSaved: (value) => _formData['city'] = value,
+                onSaved: (value) => _formData['city'] = value?.trim(),
               ),
               const SizedBox(height: 16),
 
-              // Address
+              // Address (Required in Django model)
               TextFormField(
                 initialValue: _formData['address'] ?? '',
                 decoration: InputDecoration(
-                  labelText: 'Business Address',
+                  labelText: 'Address *',
                   labelStyle: const TextStyle(color: Colors.grey),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
@@ -410,16 +596,22 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: Color(0xFF1976D2), width: 2),
+                    borderSide: const BorderSide(color: themeBlue, width: 2),
                   ),
                   filled: true,
                   fillColor: Colors.grey[50],
                 ),
-                onSaved: (value) => _formData['address'] = value,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Address is required';
+                  }
+                  return null;
+                },
+                onSaved: (value) => _formData['address'] = value?.trim(),
               ),
               const SizedBox(height: 24),
 
-              // Optional Information Section
+              // Additional Information Section
               const Text(
                 'Additional Information',
                 style: TextStyle(
@@ -428,9 +620,122 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   color: Colors.black87,
                 ),
               ),
+              const SizedBox(height: 16),
+
+              // Skills
+              TextFormField(
+                initialValue: _formData['skills'] ?? '',
+                maxLines: 2,
+                decoration: InputDecoration(
+                  labelText: 'Skills (comma-separated)',
+                  labelStyle: const TextStyle(color: Colors.grey),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Colors.grey),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: themeBlue, width: 2),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                  hintText: 'e.g., Web Development, Graphic Design, Marketing',
+                ),
+                onSaved: (value) => _formData['skills'] = value?.trim(),
+              ),
+              const SizedBox(height: 16),
+
+              // Bio/About
+              TextFormField(
+                initialValue: _formData['bio'] ?? '',
+                maxLines: 4,
+                decoration: InputDecoration(
+                  labelText: 'About/Bio',
+                  labelStyle: const TextStyle(color: Colors.grey),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Colors.grey),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: themeBlue, width: 2),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                  alignLabelWithHint: true,
+                  hintText: 'Tell about yourself and what services you need',
+                ),
+                onSaved: (value) => _formData['bio'] = value?.trim(),
+              ),
+              const SizedBox(height: 16),
+
+              // Social Media Section
+              const Text(
+                'Social Media (Optional)',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // LinkedIn URL
+              TextFormField(
+                initialValue: _formData['linkedin_url'] ?? '',
+                keyboardType: TextInputType.url,
+                decoration: InputDecoration(
+                  labelText: 'LinkedIn Profile URL',
+                  labelStyle: const TextStyle(color: Colors.grey),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Colors.grey),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: themeBlue, width: 2),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                ),
+                onSaved: (value) => _formData['linkedin_url'] = value?.trim(),
+              ),
+              const SizedBox(height: 16),
+
+              // Twitter URL
+              TextFormField(
+                initialValue: _formData['twitter_url'] ?? '',
+                keyboardType: TextInputType.url,
+                decoration: InputDecoration(
+                  labelText: 'Twitter Profile URL',
+                  labelStyle: const TextStyle(color: Colors.grey),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Colors.grey),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: themeBlue, width: 2),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                ),
+                onSaved: (value) => _formData['twitter_url'] = value?.trim(),
+              ),
+              const SizedBox(height: 32),
+
+              // ID Number (for verification)
+              const Text(
+                'Verification (Optional)',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.black87,
+                ),
+              ),
               const SizedBox(height: 8),
               const Text(
-                '(Optional)',
+                'Add ID number for account verification',
                 style: TextStyle(
                   fontSize: 14,
                   color: Colors.grey,
@@ -438,12 +743,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Website
               TextFormField(
-                initialValue: _formData['website'] ?? '',
-                keyboardType: TextInputType.url,
+                initialValue: _formData['id_number'] ?? '',
                 decoration: InputDecoration(
-                  labelText: 'Website',
+                  labelText: 'ID Number',
                   labelStyle: const TextStyle(color: Colors.grey),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
@@ -451,77 +754,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: Color(0xFF1976D2), width: 2),
+                    borderSide: const BorderSide(color: themeBlue, width: 2),
                   ),
                   filled: true,
                   fillColor: Colors.grey[50],
+                  hintText: 'National ID, Passport, or Driver\'s License',
                 ),
-                onSaved: (value) => _formData['website'] = value,
-              ),
-              const SizedBox(height: 16),
-
-              // Tax ID
-              TextFormField(
-                initialValue: _formData['tax_id'] ?? '',
-                decoration: InputDecoration(
-                  labelText: 'Tax ID/VAT Number',
-                  labelStyle: const TextStyle(color: Colors.grey),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: Colors.grey),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: Color(0xFF1976D2), width: 2),
-                  ),
-                  filled: true,
-                  fillColor: Colors.grey[50],
-                ),
-                onSaved: (value) => _formData['tax_id'] = value,
-              ),
-              const SizedBox(height: 16),
-
-              // Industry
-              TextFormField(
-                initialValue: _formData['industry'] ?? '',
-                decoration: InputDecoration(
-                  labelText: 'Industry',
-                  labelStyle: const TextStyle(color: Colors.grey),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: Colors.grey),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: Color(0xFF1976D2), width: 2),
-                  ),
-                  filled: true,
-                  fillColor: Colors.grey[50],
-                ),
-                onSaved: (value) => _formData['industry'] = value,
-              ),
-              const SizedBox(height: 16),
-
-              // Description/About
-              TextFormField(
-                initialValue: _formData['bio'] ?? '',
-                maxLines: 4,
-                decoration: InputDecoration(
-                  labelText: 'About Your Business',
-                  labelStyle: const TextStyle(color: Colors.grey),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: Colors.grey),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: Color(0xFF1976D2), width: 2),
-                  ),
-                  filled: true,
-                  fillColor: Colors.grey[50],
-                  alignLabelWithHint: true,
-                ),
-                onSaved: (value) => _formData['bio'] = value,
+                onSaved: (value) => _formData['id_number'] = value?.trim(),
               ),
               const SizedBox(height: 32),
 

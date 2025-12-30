@@ -342,7 +342,7 @@ class DashboardContent extends StatelessWidget {
                   context,
                   MaterialPageRoute(
                     builder: (_) =>
-                        const ClientProfileScreen(employerId:0),
+                        const ClientProfileScreen(profile:0),
                   ),
                 );
               },

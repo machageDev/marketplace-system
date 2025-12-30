@@ -13,13 +13,14 @@ import 'package:helawork/freelancer/provider/dashboard_provider.dart';
 import 'package:helawork/freelancer/provider/forgot_password_provider.dart';
 import 'package:helawork/freelancer/provider/proposal_provider.dart';
 import 'package:helawork/freelancer/provider/rating_provider.dart' as freelancer_rating;
+import 'package:helawork/freelancer/provider/recommended_job_provider.dart';
 import 'package:helawork/freelancer/provider/submission_provider.dart';
 import 'package:helawork/freelancer/provider/user_profile_provoder.dart';
 import 'package:helawork/freelancer/provider/wallet_provider.dart';
 import 'package:helawork/freelancer/screen/login_screen.dart';
 import 'package:helawork/wallet_service.dart';
 import 'package:provider/provider.dart';
-
+import 'package:helawork/freelancer/provider/task_provider.dart' as freelancer_task;
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -37,7 +38,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => ForgotPasswordProvider()),
         ChangeNotifierProvider(create: (_) => UserProfileProvider()),
         ChangeNotifierProvider(create: (_) => DashboardProvider()),
-        ChangeNotifierProvider(create: (_) => client_task.TaskProvider()),
+        ChangeNotifierProvider(create: (_) => freelancer_task.TaskProvider()),
         ChangeNotifierProvider(create: (_) => ProposalProvider()),
         ChangeNotifierProvider(create: (_) => ContractProvider()),
         ChangeNotifierProvider(create: (_) => freelancer_rating.RatingProvider()),
@@ -49,6 +50,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => client_proposal.ClientProposalProvider(apiService: ApiService())),
         ChangeNotifierProvider(create: (_) => ClientProfileProvider()),
         ChangeNotifierProvider(create: (_) => client_rating.ClientRatingProvider()),
+        ChangeNotifierProvider(create: (_) => RecommendedJobsProvider()),
       ],
       child: const MyApp(),
     ),
