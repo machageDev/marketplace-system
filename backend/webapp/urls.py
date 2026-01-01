@@ -64,6 +64,7 @@ urlpatterns = [
     path('api/payment/webhook/', views.payment_webhook_api, name='api_payment_webhook'),
     path('api/transactions/history/', views.transaction_history, name='api_transaction_history'),
     path('api/submissions/create/', views.create_submission, name='create-submission'), 
+    path('api/tasks/assigned/', views.get_assigned_tasks, name='freelancer-assigned-tasks'),
    # path('api/submissions/<int:submission_id>/', views.get_submission_detail, name='submission-detail'),
     
     

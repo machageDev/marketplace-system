@@ -493,7 +493,7 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => SubmitTaskScreen(taskId: taskId),
+                            builder: (context) => SubmitTaskScreen(taskId: taskId, taskTitle: '', budget: '',),
                           ),
                         );
                       } else {

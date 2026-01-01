@@ -1436,6 +1436,30 @@ def create_submission(request):
             "detail": str(e),
             "type": type(e).__name__
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+@api_view(['GET'])
+@authentication_classes([CustomTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def get_assigned_tasks(request):
+    
+    # Get contracts where this user is the freelancer
+    contracts = Contract.objects.filter(
+        freelancer=request.user,  # The current logged-in user
+        is_active=True  # Only active contracts
+    )
+    
+    tasks_data = []
+    for contract in contracts:
+        task = contract.task
+        tasks_data.append({
+            'task_id': task.id,  # The actual task ID from your database
+            'title': task.title,
+            'status': task.status,
+        })
+    
+    return Response({
+        'tasks': tasks_data
+    })        
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_employer_submissions(request):

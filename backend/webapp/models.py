@@ -435,9 +435,21 @@ class Submission(models.Model):
     ]
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='submitted')
     
-    # Files storage
+    # FIXED: File storage path function
     def submission_files_path(instance, filename):
-        return f'submissions/task_{instance.task.id}/{filename}'
+        
+        # First try to use task_id directly (most reliable)
+        if instance.task_id:
+            return f'submissions/task_{instance.task_id}/{filename}'
+        
+        # If task_id is not set yet, check if task object has id
+        elif instance.task and hasattr(instance.task, 'id') and instance.task.id:
+            return f'submissions/task_{instance.task.id}/{filename}'
+        
+        # Fallback: use timestamp or unique ID for new submissions
+        else:
+            timestamp = timezone.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]
+            return f'submissions/temp_{timestamp}/{filename}'
     
     zip_file = models.FileField(upload_to=submission_files_path, blank=True, null=True)
     screenshots = models.FileField(upload_to=submission_files_path, blank=True, null=True)
@@ -480,7 +492,14 @@ class Submission(models.Model):
     
     def mark_under_review(self):
         self.status = 'under_review'
-        self.save()    
+        self.save()
+    
+    
+    def save(self, *args, **kwargs):
+        # Ensure task_id is set if we have a task object
+        if self.task and not self.task_id:
+            self.task_id = self.task.id
+        super().save(*args, **kwargs)  
 
 
 class Rating(models.Model):

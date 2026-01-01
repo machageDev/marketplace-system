@@ -12,8 +12,8 @@ class SubmissionProvider extends ChangeNotifier {
 
   Future<void> submitTask({
     required String taskId,
-    required String title,  // ADD THIS
-    required String description,  // ADD THIS
+    required String title, 
+    required String description,  
     String? repoUrl,
     String? commitHash,
     String? stagingUrl,
