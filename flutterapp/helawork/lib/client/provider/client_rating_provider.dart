@@ -103,11 +103,11 @@ class ClientRatingProvider with ChangeNotifier {
     notifyListeners();
     
     try {
-      final result = await ApiService().createRating(
+      final result = await ApiService.createRating(
         taskId: taskId,
         ratedUserId: ratedUserId,
         score: score,
-        review: review,
+        review: review, contractId: 0,
       );
       
       if (result['success'] == true) {
@@ -136,7 +136,7 @@ class ClientRatingProvider with ChangeNotifier {
     notifyListeners();
     
     try {
-      _ratings = await ApiService().getUserRatings(userId);
+      _ratings = await ApiService.getUserRatings(userId);
       print("Loaded ${_ratings.length} ratings for user $userId");
     } catch (e) {
       _error = "Failed to load user ratings: $e";

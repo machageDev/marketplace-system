@@ -1,125 +1,120 @@
-import 'dart:convert';
+// client_contract_provider.dart
 import 'package:flutter/material.dart';
-import 'package:helawork/client/models/client_contract_model.dart';
-
-import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:helawork/api_service.dart';
 
 class ClientContractProvider with ChangeNotifier {
-  ContractModel? _contract;
+  // State
+  List<dynamic> _contracts = [];
   bool _isLoading = false;
-  String? _errorMessage;
+  String _errorMessage = '';
 
-  ContractModel? get contract => _contract;
+  // Getters
+  List<dynamic> get contracts => _contracts;
   bool get isLoading => _isLoading;
-  String? get errorMessage => _errorMessage;
+  String get errorMessage => _errorMessage;
 
-  final String baseUrl = "https://marketplace-system-1.onrender.com";
-
-  Future<String?> _getToken() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      return prefs.getString('user_token');
-    } catch (e) {
-      return null;
-    }
-  }
-
-  Future<void> fetchContract(String contractId) async { // REMOVED DUPLICATE PARAMETER
+  // ============ FETCH EMPLOYER CONTRACTS ============
+  
+  Future<void> fetchEmployerContracts() async {
     _isLoading = true;
-    _errorMessage = null;
+    _errorMessage = '';
     notifyListeners();
-
+    
     try {
-      final token = await _getToken();
-      if (token == null) {
-        throw Exception("Please login to view contracts");
+      debugPrint("🔍 Fetching employer contracts...");
+      
+      // Get contracts that need completion (paid but not completed)
+      final response = await ApiService.getEmployerPendingCompletions();
+      
+      _contracts = response;
+      debugPrint("✅ Loaded ${_contracts.length} employer contracts");
+      
+      if (_contracts.isEmpty) {
+        _errorMessage = "No contracts found. Contracts will appear here after freelancers complete work and payment is made.";
       }
-
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/contracts/$contractId/'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        _contract = ContractModel.fromJson(data);
-      } else if (response.statusCode == 404) {
-        throw Exception('Contract not found');
-      } else if (response.statusCode == 401) {
-        throw Exception('Please login again');
-      } else {
-        throw Exception('Failed to load contract');
-      }
+      
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = "Failed to load contracts: ${e.toString()}";
+      _contracts = [];
+      debugPrint("❌ Error fetching employer contracts: $e");
     }
-
+    
     _isLoading = false;
     notifyListeners();
   }
 
-  Future<void> acceptContract(String contractId) async { // REMOVED DUPLICATE PARAMETER
+  // ============ MARK CONTRACT AS COMPLETED ============
+
+  Future<void> markContractCompleted(int contractId) async {
     try {
-      final token = await _getToken();
-      if (token == null) {
-        throw Exception("Please login first");
-      }
-
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/contracts/$contractId/accept/'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        await fetchContract(contractId);
-      } else if (response.statusCode == 403) {
-        throw Exception('Not authorized to accept this contract');
-      } else {
-        throw Exception('Failed to accept contract');
-      }
+      debugPrint("📝 Marking contract $contractId as completed...");
+      
+      await ApiService.markContractCompleted(contractId);
+      
+      // Refresh the list after completion
+      await fetchEmployerContracts();
+      
+      debugPrint("✅ Contract $contractId marked as completed");
+      
     } catch (e) {
+      _errorMessage = "Failed to mark contract as completed: ${e.toString()}";
+      debugPrint("❌ Error marking contract completed: $e");
       rethrow;
     }
   }
 
-  Future<void> rejectContract(String contractId) async { // REMOVED DUPLICATE PARAMETER
+  // ============ UTILITY METHODS ============
+
+  // Get contracts ready for completion (paid but not completed)
+  List<dynamic> get readyForCompletion {
+    return _contracts.where((contract) => 
+      contract['can_complete'] == true
+    ).toList();
+  }
+
+  // Get pending contracts (not paid yet)
+  List<dynamic> get pendingContracts {
+    return _contracts.where((contract) => 
+      contract['can_complete'] == false
+    ).toList();
+  }
+
+  // Get contract by ID
+  Map<String, dynamic>? getContractById(int contractId) {
     try {
-      final token = await _getToken();
-      if (token == null) {
-        throw Exception("Please login first");
-      }
-
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/contracts/$contractId/reject/'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
+      return _contracts.firstWhere(
+        (contract) => contract['contract_id'] == contractId,
+        orElse: () => null,
       );
-
-      if (response.statusCode == 200) {
-        _contract = null;
-        notifyListeners();
-      } else if (response.statusCode == 403) {
-        throw Exception('Not authorized to reject this contract');
-      } else {
-        throw Exception('Failed to reject contract');
-      }
     } catch (e) {
-      rethrow;
+      debugPrint("Error getting contract by ID: $e");
+      return null;
     }
   }
 
+  // Get contract statistics
+  Map<String, int> getContractStats() {
+    final readyCount = readyForCompletion.length;
+    final pendingCount = pendingContracts.length;
+    final totalCount = _contracts.length;
+    
+    return {
+      'total': totalCount,
+      'ready': readyCount,
+      'pending': pendingCount,
+    };
+  }
+
+  // Clear error
+  void clearError() {
+    _errorMessage = '';
+    notifyListeners();
+  }
+
+  // Clear all data
   void clear() {
-    _contract = null;
-    _errorMessage = null;
+    _contracts = [];
+    _errorMessage = '';
     notifyListeners();
   }
 }

@@ -1,7 +1,7 @@
 from django.utils import timezone  
 from rest_framework import serializers 
 from rest_framework import serializers
-from .models import Order, Submission, TaskCompletion, Rating, Contract, Task
+from .models import Notification, Order, Submission, TaskCompletion, Rating, Contract, Task
 from .models import Contract, Proposal, TaskCompletion, Transaction, User, UserProfile, Wallet
 from .models import Employer, User
 from .models import Task
@@ -130,24 +130,117 @@ class ProposalSerializer(serializers.ModelSerializer):
             'submitted_at'
         ]
         read_only_fields = ['proposal_id', 'submitted_at']
-
 class ContractSerializer(serializers.ModelSerializer):
     task_title = serializers.CharField(source="task.title", read_only=True)
-    freelancer_name = serializers.CharField(source="freelancer.username", read_only=True)
-    employer_name = serializers.CharField(source="employer.username", read_only=True)
-
+    freelancer_name = serializers.CharField(source="freelancer.get_full_name", read_only=True)
+    employer_name = serializers.CharField(source="employer.user.get_full_name", read_only=True)
+    can_complete = serializers.SerializerMethodField()
+    completion_status = serializers.SerializerMethodField()
+    
     class Meta:
         model = Contract
         fields = [
             "contract_id",
+            "task",
             "task_title",
+            "freelancer",
             "freelancer_name",
+            "employer",
             "employer_name",
             "start_date",
             "end_date",
             "is_active",
-        ]        
+            "is_completed",
+            "is_paid",
+            "status",
+            "completed_date",
+            "payment_date",
+            "can_complete",
+            "completion_status",
+            "employer_accepted",
+            "freelancer_accepted",
+            "is_fully_accepted",
+        ]
+        read_only_fields = ["contract_id", "created_at"]
+    
+    def get_can_complete(self, obj):
+        """Check if contract can be marked as completed"""
+        return obj.is_paid and not obj.is_completed and obj.is_fully_accepted
+    
+    def get_completion_status(self, obj):
+        """Get human-readable completion status"""
+        if obj.is_completed:
+            return 'Completed'
+        elif obj.is_paid:
+            return 'Paid - Ready for Completion'
+        elif obj.is_fully_accepted:
+            return 'Active - Awaiting Payment'
+        else:
+            return 'Pending Acceptance'
+class ContractCompletionSerializer(serializers.ModelSerializer):
+    """Serializer for marking contract as completed"""
+    class Meta:
+        model = Contract
+        fields = ['is_completed', 'completed_date', 'status']
+        read_only_fields = ['completed_date', 'status']
+    
+    def update(self, instance, validated_data):
+        # Only allow marking as completed, not un-completing
+        if validated_data.get('is_completed'):
+            instance.is_completed = True
+            instance.status = 'completed'
+            instance.completed_date = timezone.now()
+            instance.save()
+        return instance
+
+class EmployerContractSerializer(serializers.ModelSerializer):
+    """Serializer for employer to see their contracts"""
+    task_details = serializers.SerializerMethodField()
+    freelancer_details = serializers.SerializerMethodField()
+    actions_available = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Contract
+        fields = [
+            'contract_id',
+            'task_details',
+            'freelancer_details',
+            'start_date',
+            'status',
+            'is_paid',
+            'is_completed',
+            'payment_date',
+            'actions_available',
+        ]
+    
+    def get_task_details(self, obj):
+        return {
+            'id': obj.task.id,
+            'title': obj.task.title,
+            'budget': obj.task.budget,
+        }
+    
+    def get_freelancer_details(self, obj):
+        return {
+            'id': obj.freelancer.id,
+            'name': obj.freelancer.get_full_name(),
+            'email': obj.freelancer.email,
+        }
+    
+    def get_actions_available(self, obj):
+        """What actions can employer take on this contract"""
+        actions = []
         
+        if not obj.is_paid and obj.is_fully_accepted:
+            actions.append('make_payment')
+        
+        if obj.is_paid and not obj.is_completed:
+            actions.append('mark_completed')
+        
+        if not obj.is_completed:
+            actions.append('view_submission')
+        
+        return actions            
 from .models import Employer, EmployerProfile
 class EmployerLoginSerializer(serializers.Serializer):
     username = serializers.CharField()
@@ -936,33 +1029,56 @@ class TaskCompletionSerializer(serializers.ModelSerializer):
             'employer_notes', 'freelancer_notes', 'payment_date', 'payment_reference'
         ]
         read_only_fields = ['completion_id', 'completed_at', 'payment_date']
-
 class RatingSerializer(serializers.ModelSerializer):
     rater_name = serializers.CharField(source='rater.get_full_name', read_only=True)
     rated_user_name = serializers.CharField(source='rated_user.get_full_name', read_only=True)
     task_title = serializers.CharField(source='task.title', read_only=True)
+    contract = serializers.PrimaryKeyRelatedField(queryset=Contract.objects.all(), required=False)
+    can_rate = serializers.SerializerMethodField(read_only=True)
     
     class Meta:
         model = Rating
         fields = [
-            'rating_id', 'task', 'task_title', 'submission', 'rater', 'rater_name',
-            'rated_user', 'rated_user_name', 'rating_type', 'score', 'review',
-            'created_at'
+            'rating_id', 'task', 'contract', 'task_title', 
+            'rater', 'rater_name', 'rated_user', 'rated_user_name',
+            'rating_type', 'score', 'review', 'created_at', 'can_rate'
         ]
-        read_only_fields = ['rating_id', 'created_at', 'rating_type']
+        read_only_fields = ['rating_id', 'created_at', 'rating_type', 'can_rate']
+    
+    def get_can_rate(self, obj):
+        """Check if rating is allowed"""
+        if not obj.contract:
+            return False
+        
+        return (
+            obj.contract.is_completed and 
+            obj.contract.is_paid and
+            obj.contract.status == 'completed'
+        )
     
     def validate(self, data):
-       
-        if data['rater'] == data['rated_user']:
-            raise serializers.ValidationError("You cannot rate yourself.")
+        # ... existing validation ...
         
-       
+        # Add contract validation
         task = data['task']
-        if not TaskCompletion.objects.filter(task=task, status='approved').exists():
-            raise serializers.ValidationError("You can only rate completed tasks.")
+        user = self.context['request'].user
+        
+        try:
+            contract = Contract.objects.get(task=task)
+            
+            # Check if contract allows rating
+            if not (contract.is_completed and contract.is_paid):
+                raise serializers.ValidationError(
+                    "Contract must be completed and paid before rating"
+                )
+            
+            # Set the contract on the rating
+            data['contract'] = contract
+            
+        except Contract.DoesNotExist:
+            raise serializers.ValidationError("No contract found for this task")
         
         return data
-
 class SimpleSubmissionSerializer(serializers.ModelSerializer):
    
     freelancer_name = serializers.CharField(source='freelancer.get_full_name', read_only=True)
@@ -974,7 +1090,34 @@ class SimpleSubmissionSerializer(serializers.ModelSerializer):
             'submission_id', 'task', 'task_title', 'freelancer_name', 'title',
             'status', 'submitted_at', 'staging_url', 'repo_url'
         ]        
+class NotificationSerializer(serializers.ModelSerializer):
+    user_name = serializers.CharField(source='user.get_full_name', read_only=True)
+    time_ago = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Notification
+        fields = [
+            'notification_id',
+            'user',
+            'user_name',
+            'title',
+            'message',
+            'notification_type',
+            'is_read',
+            'created_at',
+            'time_ago',
+            'related_id'
+        ]
+        read_only_fields = ['notification_id', 'created_at']
+    
+    def get_time_ago(self, obj):
+        from django.utils import timezone
+        from django.utils.timesince import timesince
         
+        now = timezone.now()
+        if obj.created_at:
+            return timesince(obj.created_at, now) + ' ago'
+        return ''        
 class OrderSerializer(serializers.ModelSerializer):
     freelancer_name = serializers.CharField(source='service.freelancer.user.get_full_name', read_only=True)
     service_title = serializers.CharField(source='service.title', read_only=True)

@@ -334,8 +334,6 @@ class Proposal(models.Model):
     def __str__(self):
         return f"{self.freelancer.name} -> {self.task.title}"
 
-
-# Contract (when freelancer is hired)
 class Contract(models.Model):
     contract_id = models.AutoField(primary_key=True)
     task = models.OneToOneField(Task, related_name="contract", on_delete=models.CASCADE)
@@ -349,6 +347,21 @@ class Contract(models.Model):
     freelancer_accepted = models.BooleanField(default=False)
 
     is_active = models.BooleanField(default=False)
+    
+    # ADD THESE FIELDS
+    is_completed = models.BooleanField(default=False)
+    is_paid = models.BooleanField(default=False)
+    completed_date = models.DateTimeField(null=True, blank=True)
+    payment_date = models.DateTimeField(null=True, blank=True)
+    
+    # Status choices
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('active', 'Active'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+    ]
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
 
     def __str__(self):
         return f"Contract for {self.task.title}"
@@ -362,21 +375,40 @@ class Contract(models.Model):
         """Mark contract as active if both sides accepted."""
         if self.is_fully_accepted:
             self.is_active = True
+            self.status = 'active'
             self.save()
 
+    def mark_as_completed(self):
+        """Mark contract as completed."""
+        self.is_completed = True
+        self.status = 'completed'
+        self.completed_date = timezone.now()
+        self.save()
 
+    def mark_as_paid(self):
+        """Mark contract as paid."""
+        self.is_paid = True
+        self.payment_date = timezone.now()
+        self.save()
+# models.py
+
+# models.py - Update Transaction model
 class Transaction(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    transaction_id = models.AutoField(primary_key=True)
+    
+    # Add these fields if missing
+    order = models.ForeignKey('Order', on_delete=models.CASCADE, null=True, blank=True)
+    paystack_reference = models.CharField(max_length=100, unique=True)
+    employer = models.ForeignKey('Employer', on_delete=models.CASCADE, null=True, blank=True)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-    email = models.EmailField()
-    reference = models.CharField(max_length=100, unique=True)
     status = models.CharField(max_length=20, default='pending')
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'transactions'
     
     def __str__(self):
-        return f"{self.reference} - {self.amount}"
-
+        return f"Transaction {self.transaction_id} - {self.paystack_reference}"
 
 class PaymentRecord(models.Model):
     tx_ref = models.CharField(max_length=100, unique=True)
@@ -501,7 +533,6 @@ class Submission(models.Model):
             self.task_id = self.task.id
         super().save(*args, **kwargs)  
 
-
 class Rating(models.Model):
     RATING_TYPES = [
         ('employer_to_freelancer', 'Employer to Freelancer'),
@@ -510,13 +541,10 @@ class Rating(models.Model):
     
     rating_id = models.AutoField(primary_key=True)
     task = models.ForeignKey(Task, on_delete=models.CASCADE)
+    contract = models.ForeignKey(Contract, on_delete=models.CASCADE, null=True, blank=True)  # ADD THIS
     submission = models.ForeignKey(Submission, on_delete=models.CASCADE, null=True, blank=True)
-    
-   
     rater = models.ForeignKey(User, related_name='ratings_given', on_delete=models.CASCADE)
-    
     rated_user = models.ForeignKey(User, related_name='ratings_received', on_delete=models.CASCADE)
-    
     rating_type = models.CharField(max_length=25, choices=RATING_TYPES)
     score = models.IntegerField(choices=[(i, i) for i in range(1, 6)])
     review = models.TextField(blank=True, null=True)
@@ -529,15 +557,35 @@ class Rating(models.Model):
         return f"{self.rater.username} → {self.rated_user.username}: {self.score}/5"
     
     def save(self, *args, **kwargs):
-        
+        # Auto-set rating_type
         if hasattr(self.rater, 'employer') and hasattr(self.rated_user, 'freelancer'):
             self.rating_type = 'employer_to_freelancer'
         elif hasattr(self.rated_user, 'employer') and hasattr(self.rater, 'freelancer'):
             self.rating_type = 'freelancer_to_employer'
         super().save(*args, **kwargs)
-        
-
-
+# models.py - Add Notification model
+class Notification(models.Model):
+    NOTIFICATION_TYPES = [
+        ('contract_completed', 'Contract Completed'),
+        ('rating_received', 'Rating Received'),
+        ('payment_received', 'Payment Received'),
+        ('task_assigned', 'Task Assigned'),
+    ]
+    
+    notification_id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
+    title = models.CharField(max_length=200)
+    message = models.TextField()
+    notification_type = models.CharField(max_length=50, choices=NOTIFICATION_TYPES)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    related_id = models.IntegerField(null=True, blank=True)  # For linking to contract/task
+    
+    def __str__(self):
+        return f"{self.title} - {self.user.username}"
+    
+    class Meta:
+        ordering = ['-created_at']
 class Freelancer(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     paystack_subaccount_code = models.CharField(max_length=100, blank=True, null=True)
@@ -573,16 +621,19 @@ class Order(models.Model):
         ('cancelled', 'Cancelled'),
     ]
     
-    order_id = models.CharField(max_length=50, unique=True)
-    client = models.ForeignKey(Client, on_delete=models.CASCADE)
-    service = models.ForeignKey(Service, on_delete=models.CASCADE)
+    order_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    
+    # ADD null=True temporarily
+    employer = models.ForeignKey(Employer, on_delete=models.CASCADE, related_name='orders', null=True)
+    
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='orders', null=True)
+    
     amount = models.DecimalField(max_digits=10, decimal_places=2)
+    currency = models.CharField(max_length=10, default='KSH')
+    freelancer = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
     status = models.CharField(max_length=20, choices=ORDER_STATUS, default='pending')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
-    def __str__(self):
-        return f"Order {self.order_id} - {self.client.user.username}"
 
 class PaymentTransaction(models.Model):
     TRANSACTION_STATUS = [

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:helawork/api_service.dart';
+import 'package:helawork/client/home/client_contract_screen.dart';
 import 'package:helawork/client/home/client_payment_screen.dart';
 import 'package:helawork/client/provider/auth_provider.dart' as client_auth;
 import 'package:helawork/client/provider/client_proposal_provider.dart' as client_proposal;
 import 'package:helawork/client/provider/client_task_provider.dart' as client_task;
+import 'package:helawork/client/provider/client_contract_provider.dart' as client_contract;
 import 'package:helawork/client/screen/client_profile_screen.dart';
 import 'package:helawork/payment_service.dart';
 import 'package:provider/provider.dart';
@@ -179,6 +181,10 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
           create: (_) =>
               client_proposal.ClientProposalProvider(apiService: ApiService()),
         ),
+        ChangeNotifierProvider(
+          create: (_) =>
+              client_contract.ClientContractProvider(),
+        ),
       ],
       child: Scaffold(
         backgroundColor: Colors.grey[100],
@@ -297,23 +303,11 @@ class DashboardContent extends StatelessWidget {
           const SizedBox(height: 20),
           _buildStatsGrid(context),
           const SizedBox(height: 24),
-          GestureDetector(
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Navigating to Contracts')),
-              );
-            },
-            child: SectionCard(
-              title: 'Contracts',
-              icon: Icons.assignment_turned_in_outlined,
-              isClickable: true,
-              child: const Center(
-                child: Text(
-                  'No contracts yet',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ),
-            ),
+          SectionCard(
+            title: 'Contracts',
+            icon: Icons.assignment_turned_in_outlined,
+            isClickable: true,
+            child: _buildContractsSection(context),
           ),
         ],
       ),
@@ -463,6 +457,115 @@ class DashboardContent extends StatelessWidget {
       ],
     );
   }
+
+  Widget _buildContractsSection(BuildContext context) {
+    final contractProvider = Provider.of<client_contract.ClientContractProvider>(context, listen: false);
+    
+    return GestureDetector(
+      onTap: () {
+        contractProvider.fetchEmployerContracts();
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const ClientContractsScreen(),
+          ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'View All Contracts',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blueAccent,
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Manage your service agreements',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ],
+                ),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.blueAccent.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.arrow_forward_ios,
+                    size: 16,
+                    color: Colors.blueAccent,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            // FIXED: Remove hardcoded task/proposal counts
+            // Show actual contract information or a placeholder
+            _buildContractInfoPlaceholder(context),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContractInfoPlaceholder(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.blue[50],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.blue[100]!),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.assignment_outlined, color: Colors.blue[700], size: 24),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Your Contracts',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.blue[900],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'View and manage all your service agreements with freelancers. '
+                  'Contracts will appear here after you accept proposals.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.blue[700],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // REMOVED: _buildContractStatusChip method since it was using wrong data
+
 }
 
 class StatCard extends StatelessWidget {

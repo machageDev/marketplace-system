@@ -3,17 +3,17 @@ import 'package:provider/provider.dart';
 import 'package:helawork/freelancer/provider/rating_provider.dart';
 
 class SubmitRatingScreen extends StatefulWidget {
-  final int taskId;
-  final int employerId;
+  final dynamic taskId;  // Changed from int to dynamic
+  final dynamic clientId; // Changed from int to dynamic
   final String clientName;
-  final int freelancerId;
+  final String taskTitle;
 
   const SubmitRatingScreen({
     super.key,
     required this.taskId,
-    required this.employerId,
+    required this.clientId,
     required this.clientName,
-    required this.freelancerId,
+    required this.taskTitle, required int employerId, required int freelancerId, required contractId, required isFreelancerRating,
   });
 
   @override
@@ -58,12 +58,12 @@ class _SubmitRatingScreenState extends State<SubmitRatingScreen> {
     try {
       final ratingProvider = Provider.of<RatingProvider>(context, listen: false);
       
-      await ratingProvider.rateClient(
+      // FIXED: Use submitClientRating method
+      await ratingProvider.submitClientRating(
         taskId: widget.taskId,
-        clientId: widget.employerId,
-        freelancerId: widget.freelancerId,
+        clientId: widget.clientId,
         score: _selectedRating,
-        review: _reviewController.text.trim(),
+        review: _reviewController.text.trim(), userId: 0,
       );
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -151,10 +151,18 @@ class _SubmitRatingScreenState extends State<SubmitRatingScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Task ID: ${widget.taskId}',
+                          'Task: ${widget.taskTitle}',
                           style: TextStyle(
                             color: Colors.grey[400],
                             fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Task ID: ${widget.taskId}',
+                          style: TextStyle(
+                            color: Colors.grey[400],
+                            fontSize: 12,
                           ),
                         ),
                       ],

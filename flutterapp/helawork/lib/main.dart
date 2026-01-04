@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:helawork/api_service.dart';
 import 'package:helawork/client/provider/auth_provider.dart' as client_auth;
+import 'package:helawork/client/provider/client_contract_provider.dart' as client_contract;
 import 'package:helawork/client/provider/client_dashboard_provider.dart' as client_dashboard;
 import 'package:helawork/client/provider/client_profile_provider.dart';
 import 'package:helawork/client/provider/client_proposal_provider.dart' as client_proposal;
@@ -51,6 +52,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => ClientProfileProvider()),
         ChangeNotifierProvider(create: (_) => client_rating.ClientRatingProvider()),
         ChangeNotifierProvider(create: (_) => RecommendedJobsProvider()),
+        ChangeNotifierProvider(   create: (_) => client_contract.ClientContractProvider() ),
       ],
       child: const MyApp(),
     ),

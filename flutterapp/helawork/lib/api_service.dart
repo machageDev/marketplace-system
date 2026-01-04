@@ -50,7 +50,7 @@ class ApiService{
   static const String freelancerrateUrl = '$baseUrl/apifreelancerrates';
   static const String tasktorateUrl ='$baseUrl/apitasks-to-rate';
   static const String employerprofileUrl = '$baseUrl/apiemployerprofile';
-  static const String submitRatingUrl = '$baseUrl/employer_ratings/';
+  
   static const String employerratingsUrl ='$baseUrl/apifetchratings';
   static const String taskforratingUrl = '$baseUrl/completetask';
   static const String clientProposalsUrl= '$baseUrl/client/proposals/';
@@ -578,23 +578,44 @@ static Future<Map<String, dynamic>?> getUserProfile([String? externalToken]) asy
       throw Exception("Error posting data: $e");
     }
   }
-  static Future<Map<String, dynamic>> submitRating({
-  required int taskId,
-  required int freelancerId, 
-  required int employerId,    
-  required int score,
-  String? review,             
-}) async {
-  final body = {
-    "task": taskId,
-    "freelancer": freelancerId,  
-    "employer": employerId,      
-    "score": score,
-    "review": review ?? "",      
-  };
+ static Future<Map<String, dynamic>> rateClientByFreelancer({
+    required int taskId,
+    required int clientId,
+    required int freelancerId,
+    required int score,
+    String? review,
+  }) async {
+    final body = {
+      "task": taskId,
+      "rated_user": clientId,      // Client being rated
+      "rater_user": freelancerId,  // Freelancer doing the rating
+      "score": score,
+      "review": review ?? "",
+      "rating_type": "client_rating",
+    };
 
-  return await postData('/employer_ratings/', body);
-}
+    return await ApiService.postData('/ratings/', body);
+  }
+
+  // For employers rating freelancers (if needed)
+  static Future<Map<String, dynamic>> rateFreelancerByEmployer({
+    required int taskId,
+    required int freelancerId,
+    required int employerId,
+    required int score,
+    String? review,
+  }) async {
+    final body = {
+      "task": taskId,
+      "rated_user": freelancerId,  
+      "rater_user": employerId,    
+      "score": score,
+      "review": review ?? "",
+      "rating_type": "freelancer_rating",
+    };
+
+    return await ApiService.postData('/ratings/', body);
+  }
 static Future<Proposal> submitProposal(Proposal proposal, {PlatformFile? pdfFile}) async {
   try {
     // Get authentication token
@@ -1415,6 +1436,7 @@ Future<Map<String, dynamic>> fetchTaskStats() async {
   }
 }
 
+
  Future<Map<String, dynamic>> getContract(String contractId) async {
     try {
       final response = await http.get(
@@ -1450,23 +1472,7 @@ Future<Map<String, dynamic>> fetchTaskStats() async {
       throw Exception('Failed to accept contract: $e');
     }
   }
-  // Get contracts by employer
-  Future<List<dynamic>> getEmployerContracts(String employerId) async {
-    try {
-      final response = await http.get(
-        Uri.parse(employerIdcontractUrl),
-        
-      );
-
-      if (response.statusCode == 200) {
-        return json.decode(response.body);
-      } else {
-        throw Exception('Failed to load contracts: ${response.statusCode}');
-      }
-    } catch (e) {
-      throw Exception('Failed to load contracts: $e');
-    }
-  }
+ 
 
   // Get contracts by freelancer
   Future<List<dynamic>> getFreelancerContracts(String freelancerId) async {
@@ -2124,11 +2130,87 @@ Future<List<dynamic>> getCompletedTasksForRating(int employerId) async {
       throw Exception("Failed to accept contract");
     }
   }
+// In ApiService.dart - Update these methods:
 
+// Change from: /api/users/$userId/ratings/
+// To: /users/ratings/ (with user_id as query parameter)
+static Future<List<dynamic>> getUserRatings(int userId) async {
+  try {
+    final String? token = await _getUserToken();
+    
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
 
-Future<Map<String, dynamic>> createRating({
+    // ✅ FIXED: Use correct endpoint with query parameter
+    final response = await http.get(
+      Uri.parse('$baseUrl/users/ratings/?user_id=$userId'),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+    );
+
+    debugPrint('User Ratings API Response:');
+    debugPrint('URL: $baseUrl/users/ratings/?user_id=$userId');
+    debugPrint('Status: ${response.statusCode}');
+    debugPrint('Body: ${response.body}');
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to fetch user ratings: ${response.statusCode}');
+    }
+  } catch (e) {
+    debugPrint('Error in getUserRatings: $e');
+    rethrow;
+  }
+}
+
+// Change from: /api/contracts/rateable/
+// To: /contracts/rateable/ (remove /api/ prefix)
+static Future<List<dynamic>> getRateableContracts() async {
+  try {
+    final String? token = await _getUserToken();
+    
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
+
+    // ✅ FIXED: Use correct endpoint without /api/ prefix
+    final response = await http.get(
+      Uri.parse('$baseUrl/contracts/rateable/'),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+    );
+
+    debugPrint('Rateable Contracts API Response:');
+    debugPrint('URL: $baseUrl/contracts/rateable/');
+    debugPrint('Status: ${response.statusCode}');
+    debugPrint('Body: ${response.body}');
+
+    if (response.statusCode == 200) {
+      final responseData = jsonDecode(response.body);
+      if (responseData['success'] == true) {
+        return responseData['contracts'] ?? [];
+      }
+      return [];
+    } else {
+      throw Exception("Failed to load rateable contracts: ${response.statusCode}");
+    }
+  } catch (e) {
+    debugPrint('Error in getRateableContracts: $e');
+    rethrow;
+  }
+}
+
+// Also update createRating endpoint if needed
+static Future<Map<String, dynamic>> createRating({
   required int taskId,
   required int ratedUserId,
+  required int contractId,
   required int score,
   String review = '',
 }) async {
@@ -2139,25 +2221,26 @@ Future<Map<String, dynamic>> createRating({
       throw Exception('No authentication token found');
     }
 
+    // ✅ Check if this endpoint exists
     final response = await http.post(
-      Uri.parse('$baseUrl/api/ratings/create/'),
+      Uri.parse('$baseUrl/ratings/'),  // Should match your Django URL pattern
       headers: {
         "Content-Type": "application/json",
         "Authorization": "Bearer $token",
       },
       body: jsonEncode({
         'task': taskId,
+        'contract': contractId,
         'rated_user': ratedUserId,
         'score': score,
         'review': review,
-        // 'rater' is automatically set by backend from request.user
       }),
     );
 
-    print('Create Rating API Response:');
-    print('URL: $baseUrl/api/ratings/create/');
-    print('Status: ${response.statusCode}');
-    print('Body: ${response.body}');
+    debugPrint('Create Rating API Response:');
+    debugPrint('URL: $baseUrl/ratings/');
+    debugPrint('Status: ${response.statusCode}');
+    debugPrint('Body: ${response.body}');
 
     if (response.statusCode == 201) {
       final responseData = jsonDecode(response.body);
@@ -2174,44 +2257,10 @@ Future<Map<String, dynamic>> createRating({
       throw Exception('Failed to create rating: ${response.statusCode}');
     }
   } catch (e) {
-    print('Error in createRating: $e');
+    debugPrint('Error in createRating: $e');
     rethrow;
   }
 }
-
-// Get ratings for a specific user (matches your get_user_ratings endpoint)
-Future<List<dynamic>> getUserRatings(int userId) async {
-  try {
-    final String? token = await _getUserToken();
-    
-    if (token == null) {
-      throw Exception('No authentication token found');
-    }
-
-    final response = await http.get(
-      Uri.parse('$baseUrl/api/users/$userId/ratings/'),
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer $token",
-      },
-    );
-
-    print('User Ratings API Response:');
-    print('URL: $baseUrl/api/users/$userId/ratings/');
-    print('Status: ${response.statusCode}');
-    print('Body: ${response.body}');
-
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body);
-    } else {
-      throw Exception('Failed to fetch user ratings: ${response.statusCode}');
-    }
-  } catch (e) {
-    print('Error in getUserRatings: $e');
-    rethrow;
-  }
-}
-
 // Get ratings for a specific task (matches your get_task_ratings endpoint)
 Future<List<dynamic>> getTaskRatings(int taskId) async {
   try {
@@ -2282,6 +2331,7 @@ Future<Map<String, dynamic>> getSubmissionStats() async {
 
 
 
+
 // Employer rates Freelancer
 Future<Map<String, dynamic>> submitEmployerRating({
   required int taskId,
@@ -2293,7 +2343,7 @@ Future<Map<String, dynamic>> submitEmployerRating({
     taskId: taskId,
     ratedUserId: freelancerId,
     score: score,
-    review: review,
+    review: review, contractId: 0,
   );
 }
 
@@ -2308,7 +2358,7 @@ Future<Map<String, dynamic>> submitFreelancerRating({
     taskId: taskId,
     ratedUserId: employerId,
     score: score,
-    review: review,
+    review: review, contractId: 0,
   );
 }
 
@@ -2727,8 +2777,9 @@ Future<List<dynamic>> getOrdersForPayment() async {
       throw Exception('No authentication token found');
     }
 
+    // ✅ CORRECT: Use the pending orders endpoint
     final response = await http.get(
-      Uri.parse('$baseUrl/api/payment/order/<str:order_id>/'),
+      Uri.parse('$baseUrl/api/orders/pending-payment/'),  // FIXED!
       headers: {
         "Content-Type": "application/json",
         "Authorization": "Bearer $token",
@@ -2742,13 +2793,17 @@ Future<List<dynamic>> getOrdersForPayment() async {
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      if (data is List) {
-        return data;
-      } else if (data is Map && data.containsKey('orders')) {
-        return data['orders'];
+      if (data['status'] == true) {
+        // Return orders array
+        return data['orders'] ?? [];
       } else {
+        // API returned status: false
+        print('API returned false: ${data['message']}');
         return [];
       }
+    } else if (response.statusCode == 400 || response.statusCode == 404) {
+      // No orders found or endpoint not found
+      return [];
     } else {
       throw Exception("Failed to load orders: ${response.statusCode}");
     }
@@ -2767,16 +2822,24 @@ Future<Map<String, dynamic>> getOrderDetails(String orderId) async {
       throw Exception('No authentication token found');
     }
 
+    // ✅ CORRECT: Use the correct endpoint
     final response = await http.get(
-      Uri.parse('$baseUrl/api/orders/$orderId/'),
+      Uri.parse('$baseUrl/api/payment/order/$orderId/'),  // FIXED!
       headers: {
         "Content-Type": "application/json",
         "Authorization": "Bearer $token",
       },
     );
 
+    print('Order Details API Response:');
+    print('URL: $baseUrl/api/payment/order/$orderId/');
+    print('Status: ${response.statusCode}');
+    print('Body: ${response.body}');
+
     if (response.statusCode == 200) {
       return jsonDecode(response.body);
+    } else if (response.statusCode == 400 || response.statusCode == 404) {
+      return {'status': false, 'message': 'Order not found'};
     } else {
       throw Exception("Failed to load order details: ${response.statusCode}");
     }
@@ -2795,36 +2858,45 @@ Future<List<dynamic>> getUserOrders() async {
       throw Exception('No authentication token found');
     }
 
+    // ✅ This endpoint might not exist - check your Django URLs
     final response = await http.get(
-      Uri.parse('$baseUrl/api/user/orders/'),
+      Uri.parse('$baseUrl/api/payment/transactions/'),  // Changed to existing endpoint
       headers: {
         "Content-Type": "application/json",
         "Authorization": "Bearer $token",
       },
     );
 
+    print('User Orders API Response:');
+    print('URL: $baseUrl/api/payment/transactions/');
+    print('Status: ${response.statusCode}');
+    print('Body: ${response.body}');
+
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      if (data is List) {
-        return data;
-      } else if (data is Map && data.containsKey('orders')) {
-        return data['orders'];
+      if (data['status'] == true) {
+        return data['transactions'] ?? [];
       } else {
         return [];
       }
     } else {
-      throw Exception("Failed to load user orders: ${response.statusCode}");
+      return []; // Return empty if endpoint doesn't exist
     }
   } catch (e) {
     print('Error in getUserOrders: $e');
-    rethrow;
+    return [];
   }
 }
+// Get current user's orders
+
 
   Future<double> getBalance() async {
     final response = await http.get(
       Uri.parse('$baseUrl/freelancer/wallet/'),
-      headers: {'Authorization': 'Token $token'},
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
     );
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
@@ -2930,5 +3002,180 @@ Future<List<dynamic>> getUserOrders() async {
       rethrow;
     }
   }
+  // Add to ApiService.dart
+
+// Get employer pending completions
+static Future<List<dynamic>> getEmployerPendingCompletions() async {
+  try {
+    final String? token = await _getUserToken();
+    
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
+
+    final response = await http.get(
+      Uri.parse('$baseUrl/contracts/employer/pending-completions/'),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+    );
+
+    debugPrint('Pending Completions API Response:');
+    debugPrint('URL: $baseUrl/contracts/employer/pending-completions/');
+    debugPrint('Status: ${response.statusCode}');
+    debugPrint('Body: ${response.body}');
+
+    if (response.statusCode == 200) {
+      final responseData = jsonDecode(response.body);
+      if (responseData['success'] == true) {
+        return responseData['contracts'] ?? [];
+      }
+      return [];
+    } else {
+      throw Exception("Failed to load pending completions: ${response.statusCode}");
+    }
+  } catch (e) {
+    debugPrint('Error in getEmployerPendingCompletions: $e');
+    rethrow;
+  }
+}
+
+// Mark contract as completed
+static Future<Map<String, dynamic>> markContractCompleted(int contractId) async {
+  try {
+    final String? token = await _getUserToken();
+    
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/contracts/$contractId/mark-completed/'),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+    );
+
+    debugPrint('Mark Contract Completed API Response:');
+    debugPrint('URL: $baseUrl/contracts/$contractId/mark-completed/');
+    debugPrint('Status: ${response.statusCode}');
+    debugPrint('Body: ${response.body}');
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else if (response.statusCode == 400) {
+      final errorData = jsonDecode(response.body);
+      throw Exception(errorData['error'] ?? 'Failed to mark contract as completed');
+    } else {
+      throw Exception('Failed to mark contract as completed: ${response.statusCode}');
+    }
+  } catch (e) {
+    debugPrint('Error in markContractCompleted: $e');
+    rethrow;
+  }
+}
+
+// Alternative version using the token from your example
+static Future<Map<String, dynamic>> markContractCompleted2(int contractId, String token) async {
+  try {
+    final response = await http.post(
+      Uri.parse('$baseUrl/contracts/$contractId/mark-completed/'),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+    );
+
+    debugPrint('Mark Contract Completed API Response:');
+    debugPrint('Status: ${response.statusCode}');
+    debugPrint('Body: ${response.body}');
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      final errorData = jsonDecode(response.body);
+      throw Exception(errorData['error'] ?? 'Failed to mark contract as completed');
+    }
+  } catch (e) {
+    debugPrint('Error in markContractCompleted2: $e');
+    rethrow;
+  }
+}
+
+// Get all employer contracts (not just pending completions)
+static Future<List<dynamic>> getEmployerContracts() async {
+  try {
+    final String? token = await _getUserToken();
+    
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
+
+    final response = await http.get(
+      Uri.parse('$baseUrl/contracts/employer/'),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+    );
+
+    debugPrint('Employer Contracts API Response:');
+    debugPrint('URL: $baseUrl/contracts/employer/');
+    debugPrint('Status: ${response.statusCode}');
+    debugPrint('Body: ${response.body}');
+
+    if (response.statusCode == 200) {
+      final responseData = jsonDecode(response.body);
+      if (responseData['success'] == true) {
+        return responseData['contracts'] ?? [];
+      }
+      return [];
+    } else {
+      throw Exception("Failed to load employer contracts: ${response.statusCode}");
+    }
+  } catch (e) {
+    debugPrint('Error in getEmployerContracts: $e');
+    rethrow;
+  }
+}
+
+// Get specific contract details
+static Future<Map<String, dynamic>> getContractDetails(int contractId) async {
+  try {
+    final String? token = await _getUserToken();
+    
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
+
+    final response = await http.get(
+      Uri.parse('$baseUrl/contracts/$contractId/'),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+    );
+
+    debugPrint('Contract Details API Response:');
+    debugPrint('URL: $baseUrl/contracts/$contractId/');
+    debugPrint('Status: ${response.statusCode}');
+    debugPrint('Body: ${response.body}');
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception("Failed to load contract details: ${response.statusCode}");
+    }
+  } catch (e) {
+    debugPrint('Error in getContractDetails: $e');
+    rethrow;
+  }
+}
+
+  
+
+
 }
  

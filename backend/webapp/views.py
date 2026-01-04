@@ -7,7 +7,7 @@ from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import authentication_classes, permission_classes, api_view
 from rest_framework.response import Response
 from rest_framework import status
-from datetime import date, timezone
+from datetime import date, timedelta, timezone
 import random
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -24,7 +24,7 @@ from rest_framework import status
 from django.core.mail import send_mail
 from webapp.matcher import rank_jobs_for_freelancer
 from webapp.paystack_service import PaystackService
-from .models import Contract, Employer, EmployerProfile, EmployerToken, Order, Proposal, Rating, Service, Submission, Task, TaskCompletion, Transaction, UserProfile, Wallet
+from .models import Contract, Employer, EmployerProfile, EmployerToken, Notification, Order, PaymentTransaction, Proposal, Rating, Service, Submission, Task, TaskCompletion, Transaction, UserProfile, Wallet
 from .models import  User
 from rest_framework.permissions import IsAuthenticated
 from django.views.decorators.csrf import csrf_exempt
@@ -1556,6 +1556,7 @@ def request_revision(request, submission_id):
 
 # Rating Views
 @api_view(['POST'])
+@authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def create_rating(request):
     try:
@@ -1584,13 +1585,141 @@ def create_rating(request):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
+# In your views.py - Update get_user_ratings view
 @api_view(['GET'])
+@authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
-def get_user_ratings(request, user_id):
-    ratings = Rating.objects.filter(rated_user_id=user_id).order_by('-created_at')
-    serializer = RatingSerializer(ratings, many=True)
-    return Response(serializer.data)
-
+def get_user_ratings(request):
+    try:
+        # Get user_id from query parameter
+        user_id = request.GET.get('user_id')
+        
+        if not user_id:
+            # If no user_id provided, return current user's ratings
+            ratings = Rating.objects.filter(rated_user=request.user).order_by('-created_at')
+        else:
+            # Get ratings for specific user
+            ratings = Rating.objects.filter(rated_user_id=user_id).order_by('-created_at')
+        
+        serializer = RatingSerializer(ratings, many=True)
+        return Response(serializer.data)
+    
+    except Exception as e:
+        return Response(
+            {"error": str(e)}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+from django.db.models import Q, Exists, OuterRef
+@api_view(['GET'])
+@authentication_classes([CustomTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def get_rateable_contracts(request):
+    """
+    Get contracts that are eligible for rating by the current user.
+    """
+    try:
+        user = request.user
+        
+        # ============ DEBUG: Check what fields the user has ============
+        print(f"DEBUG: User object type: {type(user)}")
+        print(f"DEBUG: User object dir: {[attr for attr in dir(user) if not attr.startswith('_')][:20]}")
+        
+        # Try to get user identifier
+        user_pk = user.pk if hasattr(user, 'pk') else 'unknown'
+        
+        # Check common primary key field names
+        if hasattr(user, 'user_id'):
+            user_pk = user.user_id
+        elif hasattr(user, 'uid'):
+            user_pk = user.uid
+        elif hasattr(user, 'userId'):
+            user_pk = user.userId
+        
+        print(f"DEBUG: User PK/ID: {user_pk}")
+        
+        # ============ Get contracts where user is the FREELANCER ============
+        # Try different ways to filter by user
+        try:
+            # First try: user is freelancer directly
+            contracts = Contract.objects.filter(
+                freelancer=user,
+                is_completed=True,
+                is_paid=True
+            )
+        except Exception as e:
+            print(f"DEBUG: Direct filter failed: {e}")
+            # Try alternative: user might be referenced differently
+            contracts = Contract.objects.none()
+        
+        print(f"DEBUG: Found {contracts.count()} completed/paid contracts")
+        
+        # ============ Prepare response ============
+        rateable_contracts = []
+        for contract in contracts:
+            try:
+                # Get employer info
+                employer = contract.employer
+                employer_user = employer.user if hasattr(employer, 'user') else employer
+                
+                # Get employer identifier
+                employer_id = employer_user.pk if hasattr(employer_user, 'pk') else 'unknown'
+                employer_name = "Employer"
+                
+                if hasattr(employer_user, 'email'):
+                    employer_name = employer_user.email.split('@')[0]
+                elif hasattr(employer_user, 'name'):
+                    employer_name = employer_user.name
+                elif hasattr(employer_user, 'first_name'):
+                    employer_name = employer_user.first_name
+                
+                # Get task info
+                task_title = str(contract.task) if contract.task else "Task"
+                if hasattr(contract.task, 'title'):
+                    task_title = contract.task.title
+                
+                rateable_contracts.append({
+                    'contract_id': contract.contract_id,
+                    'task': {
+                        'id': contract.task.id if hasattr(contract.task, 'id') else 0,
+                        'title': task_title,
+                        'budget': contract.task.budget if hasattr(contract.task, 'budget') else 0,
+                    },
+                    'user_to_rate': {
+                        'id': employer_id,
+                        'username': employer_name,
+                        'email': getattr(employer_user, 'email', ''),
+                    },
+                    'current_user_role': 'freelancer',
+                    'other_party_role': 'employer',
+                    'completed_date': contract.completed_date.isoformat() if contract.completed_date else None,
+                    'payment_date': contract.payment_date.isoformat() if contract.payment_date else None,
+                })
+                
+            except Exception as e:
+                print(f"DEBUG: Error processing contract {contract.contract_id}: {e}")
+                continue
+        
+        return Response({
+            'success': True,
+            'count': len(rateable_contracts),
+            'contracts': rateable_contracts,
+            'debug_info': {
+                'user_pk': user_pk,
+                'user_type': str(type(user)),
+                'contracts_found': contracts.count(),
+            }
+        })
+        
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"ERROR in get_rateable_contracts: {error_detail}")
+        
+        return Response({
+            'success': False,
+            'error': str(e),
+            'debug': 'Check user model and contract relationships'
+        }, status=500)
 @api_view(['GET'])
 
 def get_task_ratings(request, task_id):
@@ -1775,65 +1904,179 @@ def payment_order_details(request, order_id):
             'status': False,
             'message': str(e)
         }, status=status.HTTP_400_BAD_REQUEST)
-
 @api_view(['POST'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
-def initialize_payment_api(request):
-   
-    serializer = PaymentInitializeSerializer(data=request.data)
-    
-    if not serializer.is_valid():
-        return Response({
-            'status': False,
-            'message': 'Invalid data',
-            'errors': serializer.errors
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
+def initialize_payment(request):
+    """
+    POST /api/payment/initialize/
+    Initialize Paystack payment for an order
+    """
     try:
-        order_id = serializer.validated_data['order_id']
-        email = serializer.validated_data['email']
+        print(f"\n{'='*60}")
+        print("🚀 INITIALIZE PAYMENT API CALLED!")
+        print(f"{'='*60}")
         
-        order = get_object_or_404(Order, order_id=order_id)
+        # Print all request details
+        print(f"📋 Request Method: {request.method}")
+        print(f"📋 Request Path: {request.path}")
+        print(f"📋 Request Headers:")
+        for header, value in request.headers.items():
+            print(f"   {header}: {value}")
+        print(f"📋 Request Content-Type: {request.content_type}")
+        print(f"📋 Request Body: {request.body}")
+        print(f"📋 Request Data: {request.data}")
         
-        # Calculate split amounts
-        total_amount = float(order.amount)
-        platform_commission = total_amount * 0.10  # 10%
-        freelancer_share = total_amount * 0.90     # 90%
+        # Get request data
+        order_id = request.data.get('order_id')
+        email = request.data.get('email')
         
-        # Generate unique reference
+        print(f"\n📦 Request Data Analysis:")
+        print(f"   order_id: '{order_id}'")
+        print(f"   email: '{email}'")
+        print(f"   Type of order_id: {type(order_id)}")
+        print(f"   Type of email: {type(email)}")
+        
+        print(f"\n👤 Employer Info:")
+        print(f"   Username: '{request.user.username}'")
+        print(f"   Employer ID: {request.user.employer_id}")
+        
+        # Check employer fields
+        print(f"\n🔍 Checking Employer Fields:")
+        employer_fields = ['contact_email', 'email', 'contact_email_address', 'contactEmail']
+        for field in employer_fields:
+            if hasattr(request.user, field):
+                value = getattr(request.user, field)
+                print(f"   {field}: '{value}'")
+        
+        # Get employer from DB to be sure
+        from .models import Employer
+        try:
+            db_employer = Employer.objects.get(pk=request.user.employer_id)
+            print(f"\n💾 Database Employer Check:")
+            print(f"   DB contact_email: '{db_employer.contact_email}'")
+            print(f"   DB username: '{db_employer.username}'")
+            print(f"   DB employer_id: {db_employer.employer_id}")
+        except Employer.DoesNotExist:
+            print(f"\n❌ Employer not found in database!")
+        except Exception as e:
+            print(f"\n❌ Error getting employer from DB: {e}")
+        
+        # ✅ **AUTO-GENERATE EMAIL IF MISSING**
+        if not email:
+            print(f"\n📧 Email is empty in request, trying to get from employer...")
+            
+            # Try different sources for email
+            possible_emails = []
+            
+            # 1. From request.user (authenticated employer)
+            if hasattr(request.user, 'contact_email') and request.user.contact_email:
+                possible_emails.append(request.user.contact_email)
+                print(f"   Found in request.user.contact_email: '{request.user.contact_email}'")
+            
+            # 2. From database employer
+            try:
+                db_employer = Employer.objects.get(pk=request.user.employer_id)
+                if db_employer.contact_email:
+                    possible_emails.append(db_employer.contact_email)
+                    print(f"   Found in DB employer.contact_email: '{db_employer.contact_email}'")
+            except:
+                pass
+            
+            # 3. Generate from username
+            if not possible_emails:
+                generated_email = f"{request.user.username}@helawork.test"
+                possible_emails.append(generated_email)
+                print(f"   Generated email: '{generated_email}'")
+            
+            # Use the first available email
+            email = possible_emails[0]
+            print(f"   ✅ Selected email: '{email}'")
+        
+        print(f"\n🎯 Final Values:")
+        print(f"   order_id: '{order_id}'")
+        print(f"   email: '{email}'")
+        
+        # Validation
+        if not order_id:
+            print(f"\n❌ Validation failed: order_id is required")
+            return Response({
+                'status': False,
+                'message': 'order_id is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not email:
+            print(f"\n❌ Validation failed: email is required")
+            return Response({
+                'status': False,
+                'message': 'email is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get the order
+        print(f"\n🔍 Getting order from database...")
+        try:
+            order = Order.objects.get(order_id=order_id, employer=request.user)
+            print(f"   ✅ Order found: {order.order_id}")
+            print(f"   Order amount: {order.amount}")
+            print(f"   Order status: {order.status}")
+            print(f"   Order employer: {order.employer.username}")
+        except Order.DoesNotExist:
+            print(f"\n❌ Order not found: order_id='{order_id}', employer='{request.user.username}'")
+            return Response({
+                'status': False,
+                'message': 'Order not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if order is already paid
+        if order.status == 'paid':
+            print(f"\n❌ Order already paid")
+            return Response({
+                'status': False,
+                'message': 'Order is already paid'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Generate reference
         reference = f"HW_{order_id}_{secrets.token_hex(5)}"
+        print(f"\n🔢 Generated reference: {reference}")
         
-        # Prepare subaccounts for split payment
-        subaccounts = [
-            {
-                'subaccount': order.service.freelancer.paystack_subaccount_code,
-                'share': int(freelancer_share * 100),  # Convert to kobo
-                'bearer': 'subaccount'
-            }
-        ]
+        # Initialize Paystack payment
+        print(f"\n💳 Initializing Paystack payment...")
+        paystack_service = PaystackService()
         
-        paystack = PaystackService()
+        # Convert amount to cents
+        amount_in_cents = int(float(order.amount) * 100)
+        print(f"   Amount: {order.amount} KSH")
+        print(f"   Amount in cents: {amount_in_cents}")
+        print(f"   Email for Paystack: {email}")
+        print(f"   Currency: KES")
         
-        # Initialize split payment
-        response = paystack.initialize_split_payment(
+        # Initialize transaction
+        response = paystack_service.initialize_transaction(
             email=email,
-            amount=total_amount,
+            amount=amount_in_cents,
             reference=reference,
-            subaccounts=subaccounts,
-            callback_url=f"{settings.PAYSTACK_CALLBACK_URL}{reference}/"
+            callback_url=f"{settings.PAYSTACK_CALLBACK_URL}?reference={reference}",
+            currency="KES"
         )
+        
+        print(f"\n🔄 Paystack Response:")
+        print(f"   Response status: {response.get('status')}")
+        print(f"   Response message: {response.get('message')}")
         
         if response and response.get('status'):
             # Create transaction record
             transaction = Transaction.objects.create(
                 order=order,
                 paystack_reference=reference,
-                amount=total_amount,
-                platform_commission=platform_commission,
-                freelancer_share=freelancer_share,
-                status='pending'
+                amount=order.amount,
+                status='pending',
+                employer=request.user
             )
+            
+            print(f"\n✅ SUCCESS: Payment initialized!")
+            print(f"   Authorization URL: {response['data']['authorization_url']}")
+            print(f"   Reference: {reference}")
+            print(f"   Transaction ID: {transaction.id}")
             
             return Response({
                 'status': True,
@@ -1841,19 +2084,29 @@ def initialize_payment_api(request):
                 'data': {
                     'authorization_url': response['data']['authorization_url'],
                     'reference': reference,
-                    'transaction_id': transaction.id
+                    'order_id': str(order.order_id),
+                    'amount': float(order.amount),
+                    'email': email,
+                    'employer_name': request.user.username,
                 }
             })
         else:
+            error_msg = response.get('message', 'Failed to initialize payment')
+            print(f"\n❌ Paystack error: {error_msg}")
             return Response({
                 'status': False,
-                'message': 'Failed to initialize payment with Paystack'
+                'message': error_msg
             }, status=status.HTTP_400_BAD_REQUEST)
             
     except Exception as e:
+        print(f"\n💥 UNEXPECTED ERROR:")
+        print(f"   Error type: {type(e).__name__}")
+        print(f"   Error message: {str(e)}")
+        import traceback
+        print(f"   Traceback:\n{traceback.format_exc()}")
         return Response({
             'status': False,
-            'message': f'Error: {str(e)}'
+            'message': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])
@@ -2233,7 +2486,7 @@ def recommended_jobs(request):
             "status": False,
             "message": f"Error fetching recommended jobs: {str(e)}",
             "recommended": []
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)     
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 @api_view(['POST'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -2285,30 +2538,78 @@ def accept_proposal(request):
         task.save()
         print(f"✓ Task locked and assigned to freelancer")
 
-        #  FIX: Create ACTIVE contract with both parties accepted
+        # Create ACTIVE contract
         from django.utils import timezone
         contract = Contract.objects.create(
             task=task,
             freelancer=proposal.freelancer,
             employer=task.employer,
             employer_accepted=True,
-            freelancer_accepted=True,  # Freelancer accepts by default when proposal is accepted
-            is_active=True,  # Contract should be active immediately
+            freelancer_accepted=True,
+            is_active=True,
             start_date=timezone.now()
         )
         print(f"✓ Contract created: ID={contract.contract_id}")
-        print(f"  Contract is_active: {contract.is_active}")
-        print(f"  employer_accepted: {contract.employer_accepted}")
-        print(f"  freelancer_accepted: {contract.freelancer_accepted}")
- 
+        
+        # ✅ ✅ ✅ **AUTO-CREATE ORDER WHEN PROPOSAL IS ACCEPTED** ✅ ✅ ✅
+        from decimal import Decimal
+        import uuid
+        
+        # Get amount from proposal or task budget
+        amount = proposal.bid_amount if proposal.bid_amount else task.budget
+        if not amount:
+            amount = Decimal('0.00')
+        
+        # Check if order already exists (safety check)
+        existing_order = Order.objects.filter(
+            task=task,
+            employer=request.user,
+            freelancer=proposal.freelancer,
+            status='pending'
+        ).first()
+        
+        if existing_order:
+            print(f"⚠ Order already exists: {existing_order.order_id}")
+            order = existing_order
+        else:
+            # Create NEW order for this contract
+            order = Order.objects.create(
+                order_id=uuid.uuid4(),
+                employer=request.user,
+                task=task,
+                freelancer=proposal.freelancer,
+                amount=Decimal(str(amount)),
+                currency='KSH',
+                status='pending'
+            )
+            print(f"✅ Auto-created order: {order.order_id}")
+            print(f"   Amount: {order.amount}")
+            print(f"   Status: {order.status}")
+            
+            # Create notification for freelancer
+            Notification.objects.create(
+                user=proposal.freelancer,
+                title='Payment Order Created',
+                message=f'{request.user.username} has created a payment order for task: {task.title}',
+                notification_type='payment_received',
+                related_id=order.id
+            )
+        
+        # Also notify freelancer about contract acceptance
+        Notification.objects.create(
+            user=proposal.freelancer,
+            title='Proposal Accepted!',
+            message=f'Your proposal for "{task.title}" has been accepted. Contract is ready.',
+            notification_type='contract_accepted'
+        )
 
         print(f"\n{'='*60}")
-        print("SUCCESS: Proposal accepted and ACTIVE contract created")
+        print("SUCCESS: Proposal accepted, contract created, and order ready!")
         print(f"{'='*60}")
         
         return Response({
             "success": True,
-            "message": "Proposal accepted and task locked successfully",
+            "message": "Proposal accepted, contract created, and payment order is ready",
             "task_id": task.task_id,
             "task_title": task.title,
             "task_status": task.status,
@@ -2316,6 +2617,10 @@ def accept_proposal(request):
             "assigned_freelancer_name": proposal.freelancer.name,
             "contract_id": contract.contract_id,
             "contract_active": contract.is_active,
+            "order_created": True,
+            "order_id": str(order.order_id),
+            "order_amount": float(order.amount),
+            "order_status": order.status,
             "task_locked": True
         })
 
@@ -2331,7 +2636,6 @@ def accept_proposal(request):
             {"success": False, "error": "Internal server error", "detail": str(e)},
             status=500
         )
-
 
 @api_view(['POST'])
 @authentication_classes([CustomTokenAuthentication])
@@ -2417,3 +2721,871 @@ def freelancer_contracts(request):
         import traceback
         print(traceback.format_exc())  # Add this for detailed error
         return Response({"error": str(e)}, status=500)
+    
+    
+# views.py
+@api_view(['POST'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def employer_mark_contract_completed(request, contract_id):
+    """
+    Task Provider (Employer) marks a contract as completed
+    Called after they've reviewed work and made payment
+    """
+    try:
+        user = request.user
+        
+        # Get the contract - user must be the employer
+        contract = Contract.objects.select_related(
+            'task', 'employer', 'employer__user'
+        ).get(
+            contract_id=contract_id,
+            employer__user=user  # User must be the employer
+        )
+        
+        # Check if payment was made
+        if not contract.is_paid:
+            return Response({
+                'error': 'Payment must be completed first'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Mark as completed
+        contract.is_completed = True
+        contract.status = 'completed'
+        contract.completed_date = timezone.now()
+        contract.save()
+        
+        # Create notification for freelancer
+        Notification.objects.create(
+            user=contract.freelancer,
+            title='Contract Completed',
+            message=f'Your contract for "{contract.task.title}" has been marked as completed. You can now rate the employer.',
+            notification_type='contract_completed'
+        )
+        
+        return Response({
+            'success': True,
+            'message': 'Contract marked as completed successfully',
+            'contract': {
+                'id': contract.contract_id,
+                'title': contract.task.title,
+                'completed_date': contract.completed_date,
+                'status': contract.status,
+            }
+        })
+        
+    except Contract.DoesNotExist:
+        return Response({
+            'error': 'Contract not found or you are not the employer'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)    
+# Add this to your views.py file
+@api_view(['GET'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def employer_contracts(request):
+    """
+    GET /api/employer/contracts/
+    Returns ALL contracts for the employer (not just pending completions)
+    """
+    try:
+        print(f"\n{'='*60}")
+        print("EMPLOYER ALL CONTRACTS API CALLED")
+        print(f"{'='*60}")
+        print(f"Employer: {request.user.username}")
+        
+        # Get ALL contracts where this employer is involved
+        contracts = Contract.objects.filter(
+            employer=request.user
+        ).select_related(
+            'task', 
+            'freelancer'
+        ).order_by('-start_date')
+        
+        print(f"Found {contracts.count()} total contracts")
+        
+        contracts_data = []
+        for contract in contracts:
+            # Get freelancer name
+            freelancer_name = contract.freelancer.name if contract.freelancer else 'Unknown'
+            
+            # Determine contract status
+            status = 'active'
+            if contract.is_completed:
+                status = 'completed'
+            elif not contract.is_active:
+                status = 'pending'
+            
+            # Determine if contract can be marked as completed
+            # A contract can be completed if:
+            # 1. It's paid AND not completed, OR
+            # 2. It's active and both parties accepted (for testing/demo)
+            can_complete = (contract.is_paid and not contract.is_completed) or (
+                contract.is_active and 
+                contract.employer_accepted and 
+                contract.freelancer_accepted
+            )
+            
+            contract_data = {
+                'contract_id': contract.contract_id,
+                'task_id': contract.task.task_id if contract.task else None,
+                'task_title': contract.task.title if contract.task else 'Unknown Task',
+                'freelancer_id': contract.freelancer.user_id if contract.freelancer else None,
+                'freelancer_name': freelancer_name,
+                'freelancer_email': contract.freelancer.email if contract.freelancer else '',
+                'freelancer_photo': None,  # Add if you have profile pictures
+                'amount': float(contract.task.budget) if contract.task and contract.task.budget else 0.0,
+                'status': status,
+                'contract_status': contract.status if hasattr(contract, 'status') else status,
+                'employer_accepted': contract.employer_accepted,
+                'freelancer_accepted': contract.freelancer_accepted,
+                'is_active': contract.is_active,
+                'is_completed': contract.is_completed,
+                'is_paid': contract.is_paid,
+                'start_date': contract.start_date.strftime('%Y-%m-%d') if contract.start_date else None,
+                'end_date': contract.end_date.strftime('%Y-%m-%d') if contract.end_date else None,
+                'created_date': contract.start_date.strftime('%Y-%m-%d %H:%M:%S') if contract.start_date else None,
+                'can_complete': can_complete,
+                'requires_payment': not contract.is_paid and contract.is_active,
+            }
+            contracts_data.append(contract_data)
+        
+        return Response({
+            'success': True,
+            'count': len(contracts_data),
+            'contracts': contracts_data,
+            'message': f'Found {len(contracts_data)} contracts'
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        print(f"ERROR in employer_contracts: {str(e)}")
+        return Response({
+            'error': f'Failed to fetch contracts: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+@api_view(['GET'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def employer_pending_completions(request):
+    """
+    GET /contracts/employer/pending-completions/
+    Returns contracts that are paid but not completed (ready for employer to mark as completed)
+    This is the endpoint your Flutter app is calling!
+    """
+    try:
+        print(f"\n{'='*60}")
+        print("EMPLOYER PENDING COMPLETIONS API CALLED")
+        print(f"{'='*60}")
+        print(f"Employer: {request.user.username}")
+        
+        # Get contracts that are paid but not completed
+        contracts = Contract.objects.filter(
+            employer=request.user,
+            is_paid=True,
+            is_completed=False,
+            is_active=True
+        ).select_related('task', 'freelancer')
+        
+        print(f"Found {contracts.count()} pending completion contracts")
+        
+        contracts_data = []
+        for contract in contracts:
+            freelancer_name = contract.freelancer.name if contract.freelancer else 'Unknown'
+            
+            contract_info = {
+                'contract_id': contract.contract_id,
+                'task_id': contract.task.task_id if contract.task else None,
+                'task_title': contract.task.title if contract.task else 'Unknown Task',
+                'freelancer_name': freelancer_name,
+                'freelancer_email': contract.freelancer.email if contract.freelancer else '',
+                'amount': float(contract.task.budget) if contract.task and contract.task.budget else 0.0,
+                'status': contract.status,
+                'payment_date': contract.payment_date.strftime('%Y-%m-%d') if contract.payment_date else None,
+                'can_complete': True,  # Paid but not completed
+                'requires_completion': True,
+            }
+            contracts_data.append(contract_info)
+        
+        return Response({
+            'success': True,
+            'count': len(contracts_data),
+            'contracts': contracts_data,
+            'message': 'Found contracts ready for completion'
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        print(f"ERROR in employer_pending_completions: {str(e)}")
+        return Response({
+            'error': f'Failed to fetch pending completions: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)        
+
+
+from decimal import Decimal
+@api_view(['POST'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def create_order(request):
+    """
+    POST /api/payment/create-order/
+    Create payment order from accepted proposal/contract
+    (Now acts as a fallback/redundancy method)
+    """
+    try:
+        print(f"\n{'='*60}")
+        print("CREATE ORDER API (Fallback)")
+        print(f"{'='*60}")
+        
+        task_id = request.data.get('task_id')
+        print(f"Task ID: {task_id}")
+        
+        if not task_id:
+            return Response({
+                'status': False,
+                'message': 'task_id is required'
+            }, status=400)
+        
+        # Get task
+        try:
+            task = Task.objects.get(task_id=task_id, employer=request.user)
+        except Task.DoesNotExist:
+            return Response({
+                'status': False,
+                'message': 'Task not found or not owned by you'
+            }, status=404)
+        
+        print(f"Task: {task.title}")
+        
+        # Check if contract exists
+        contract = Contract.objects.filter(
+            task=task,
+            employer=request.user,
+            is_active=True
+        ).first()
+        
+        if not contract:
+            return Response({
+                'status': False,
+                'message': 'No active contract found for this task'
+            }, status=400)
+        
+        print(f"Contract: {contract.contract_id}")
+        print(f"Freelancer: {contract.freelancer.name}")
+        
+        # ✅ Check if order already exists (should exist if proposal was accepted)
+        existing_order = Order.objects.filter(
+            task=task,
+            employer=request.user,
+            freelancer=contract.freelancer
+        ).first()
+        
+        if existing_order:
+            print(f"✅ Order already exists: {existing_order.order_id}")
+            return Response({
+                'status': True,
+                'message': 'Order already exists (auto-created when proposal was accepted)',
+                'order': {
+                    'order_id': str(existing_order.order_id),
+                    'amount': float(existing_order.amount),
+                    'status': existing_order.status,
+                    'created_at': existing_order.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                    'task_title': task.title,
+                    'freelancer_name': contract.freelancer.name,
+                }
+            })
+        
+        # Get amount (from proposal or task budget)
+        proposal = Proposal.objects.filter(
+            task=task,
+            freelancer=contract.freelancer,
+            status='accepted'
+        ).first()
+        
+        amount = proposal.bid_amount if proposal and proposal.bid_amount else task.budget
+        if not amount:
+            amount = Decimal('0.00')
+        
+        print(f"Amount: {amount}")
+        
+        # Create new order (fallback)
+        import uuid
+        order = Order.objects.create(
+            order_id=uuid.uuid4(),
+            employer=request.user,
+            task=task,
+            freelancer=contract.freelancer,
+            amount=Decimal(str(amount)),
+            currency='KSH',
+            status='pending'
+        )
+        
+        print(f"⚠ Fallback order created: {order.order_id}")
+        print(f"   Note: Orders should auto-create when proposals are accepted")
+        
+        return Response({
+            'status': True,
+            'message': 'Order created (fallback method)',
+            'note': 'Future orders will auto-create when proposals are accepted',
+            'order': {
+                'order_id': str(order.order_id),
+                'amount': float(order.amount),
+                'currency': order.currency,
+                'status': order.status,
+                'created_at': order.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                'task_title': task.title,
+                'task_id': task.task_id,
+                'freelancer_name': contract.freelancer.name,
+                'freelancer_id': contract.freelancer.user_id,
+                'employer_name': request.user.username,
+            }
+        })
+        
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return Response({
+            'status': False,
+            'message': str(e)
+        }, status=500)
+import secrets
+
+from webapp.paystack_service import PaystackService
+
+@api_view(['GET'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def pending_payment_orders(request):
+    """
+    GET /api/orders/pending-payment/
+    Get all pending payment orders for the authenticated employer
+    """
+    try:
+        print(f"\n{'='*60}")
+        print("PENDING PAYMENT ORDERS API")
+        print(f"{'='*60}")
+        print(f"Employer: {request.user.username} (ID: {request.user.employer_id})")
+        
+        # Get pending orders for this employer
+        orders = Order.objects.filter(
+            employer=request.user,
+            status='pending'
+        ).select_related('task', 'freelancer')
+        
+        print(f"Found {orders.count()} pending orders")
+        
+        if not orders.exists():
+            return Response({
+                'status': False,
+                'message': 'No pending payment orders found'
+            }, status=status.HTTP_200_OK)
+        
+        order_list = []
+        for order in orders:
+            order_data = {
+                'order_id': str(order.order_id),
+                'id': str(order.order_id),  # For compatibility
+                'amount': float(order.amount),
+                'currency': order.currency,
+                'status': order.status,
+                'created_at': order.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                'task': {
+                    'task_id': order.task.task_id,
+                    'title': order.task.title,
+                    'description': order.task.description,
+                } if order.task else None,
+                'freelancer': {
+                    'name': order.freelancer.name if order.freelancer else 'Unknown',
+                    'email': order.freelancer.email if order.freelancer else None,
+                } if order.freelancer else None
+            }
+            order_list.append(order_data)
+        
+        return Response({
+            'status': True,
+            'orders': order_list,
+            'count': len(order_list)
+        })
+        
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return Response({
+            'status': False,
+            'message': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def order_detail(request, order_id):
+    """
+    GET /api/payment/order/<str:order_id>/
+    Get order details by ID
+    """
+    try:
+        print(f"\n{'='*60}")
+        print("ORDER DETAIL API")
+        print(f"{'='*60}")
+        print(f"Order ID: {order_id}")
+        print(f"Employer: {request.user.username}")
+        
+        # Get the order
+        order = get_object_or_404(Order, order_id=order_id, employer=request.user)
+        
+        # Get task and freelancer info
+        task = order.task
+        freelancer = order.freelancer
+        
+        order_data = {
+            'order_id': str(order.order_id),
+            'id': str(order.order_id),
+            'amount': float(order.amount),
+            'currency': order.currency,
+            'status': order.status,
+            'created_at': order.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'task': {
+                'task_id': task.task_id,
+                'title': task.title,
+                'description': task.description,
+                'budget': float(task.budget) if task.budget else 0.0,
+            } if task else None,
+            'freelancer': {
+                'name': freelancer.name if freelancer else 'Unknown',
+                'email': freelancer.email if freelancer else None,
+                'user_id': freelancer.user_id if freelancer else None,
+            } if freelancer else None,
+            'employer': {
+                'id': request.user.employer_id,
+                'username': request.user.username,
+                'email': request.user.contact_email,
+            }
+        }
+        
+        return Response({
+            'status': True,
+            'order': order_data
+        })
+        
+    except Order.DoesNotExist:
+        return Response({
+            'status': False,
+            'message': 'Order not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return Response({
+            'status': False,
+            'message': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def initialize_payment(request):
+    """
+    POST /api/payment/initialize/
+    Initialize Paystack payment for an order
+    """
+    try:
+        print(f"\n{'='*60}")
+        print("INITIALIZE PAYMENT API")
+        print(f"{'='*60}")
+        
+        # Get request data
+        order_id = request.data.get('order_id')
+        email = request.data.get('email')
+        
+        print(f"Order ID: {order_id}")
+        print(f"Email: {email}")
+        print(f"Employer: {request.user.username}")
+        
+        # Validation
+        if not order_id:
+            return Response({
+                'status': False,
+                'message': 'order_id is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not email:
+            return Response({
+                'status': False,
+                'message': 'email is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get the order
+        try:
+            order = Order.objects.get(order_id=order_id, employer=request.user)
+        except Order.DoesNotExist:
+            return Response({
+                'status': False,
+                'message': 'Order not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if order is already paid
+        if order.status == 'paid':
+            return Response({
+                'status': False,
+                'message': 'Order is already paid'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Generate reference
+        reference = f"HW_{order_id}_{secrets.token_hex(5)}"
+        
+        # Initialize Paystack payment
+        paystack_service = PaystackService()
+        
+        # Convert amount to kobo (Paystack uses kobo for NGN)
+        amount_in_kobo = int(float(order.amount) * 100)
+        
+        # Initialize transaction
+        response = paystack_service.initialize_transaction(
+            email=email,
+            amount=amount_in_kobo,
+            reference=reference,
+            callback_url=f"{settings.PAYSTACK_CALLBACK_URL}?reference={reference}"
+        )
+        
+        if response and response.get('status'):
+            # Create transaction record
+            transaction = Transaction.objects.create(
+                order=order,
+                paystack_reference=reference,
+                amount=order.amount,
+                status='pending',
+                employer=request.user
+            )
+            
+            print(f"✅ Payment initialized successfully")
+            print(f"Authorization URL: {response['data']['authorization_url']}")
+            print(f"Reference: {reference}")
+            
+            return Response({
+                'status': True,
+                'message': 'Payment initialized successfully',
+                'data': {
+                    'authorization_url': response['data']['authorization_url'],
+                    'reference': reference,
+                    'access_code': response['data']['access_code'],
+                    'order_id': str(order.order_id),
+                    'amount': float(order.amount),
+                    'email': email
+                }
+            })
+        else:
+            error_msg = response.get('message', 'Failed to initialize payment')
+            print(f"❌ Paystack error: {error_msg}")
+            return Response({
+                'status': False,
+                'message': error_msg
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return Response({
+            'status': False,
+            'message': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def verify_payment(request, reference):
+    """
+    GET /api/payment/verify/<str:reference>/
+    Verify Paystack payment
+    """
+    try:
+        print(f"\n{'='*60}")
+        print("VERIFY PAYMENT API")
+        print(f"{'='*60}")
+        print(f"Reference: {reference}")
+        print(f"Employer: {request.user.username}")
+        
+        # Verify transaction with Paystack
+        paystack_service = PaystackService()
+        verification = paystack_service.verify_transaction(reference)
+        
+        if verification and verification.get('status'):
+            transaction_data = verification['data']
+            
+            # Get transaction from database
+            try:
+                transaction = Transaction.objects.get(paystack_reference=reference)
+            except Transaction.DoesNotExist:
+                return Response({
+                    'status': False,
+                    'message': 'Transaction not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            if transaction_data['status'] == 'success':
+                # Update transaction status
+                transaction.status = 'success'
+                transaction.save()
+                
+                # Update order status
+                order = transaction.order
+                order.status = 'paid'
+                order.save()
+                
+                # Update contract payment status
+                contract = Contract.objects.filter(
+                    task=order.task,
+                    employer=request.user,
+                    freelancer=order.freelancer
+                ).first()
+                
+                if contract:
+                    contract.is_paid = True
+                    contract.payment_date = transaction.created_at
+                    contract.save()
+                
+                print(f"✅ Payment verified successfully")
+                
+                return Response({
+                    'status': True,
+                    'message': 'Payment verified successfully',
+                    'data': {
+                        'reference': reference,
+                        'amount': float(transaction.amount),
+                        'currency': transaction_data.get('currency', 'NGN'),
+                        'paid_at': transaction_data.get('paid_at'),
+                        'transaction_status': 'success',
+                        'order_status': 'paid',
+                        'order_id': str(order.order_id)
+                    }
+                })
+            else:
+                # Payment failed
+                transaction.status = 'failed'
+                transaction.save()
+                
+                return Response({
+                    'status': False,
+                    'message': 'Payment failed or was cancelled',
+                    'data': {
+                        'reference': reference,
+                        'transaction_status': 'failed'
+                    }
+                })
+        else:
+            return Response({
+                'status': False,
+                'message': 'Payment verification failed'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return Response({
+            'status': False,
+            'message': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def payment_callback(request):
+    """
+    GET /api/payment/callback/
+    Paystack payment callback endpoint
+    """
+    try:
+        reference = request.GET.get('reference', '')
+        trxref = request.GET.get('trxref', '')
+        
+        print(f"\n{'='*60}")
+        print("PAYMENT CALLBACK")
+        print(f"{'='*60}")
+        print(f"Reference: {reference}")
+        print(f"trxref: {trxref}")
+        
+        if reference:
+            # Redirect to frontend with reference
+            frontend_url = f"{settings.FRONTEND_URL}/payment/callback?reference={reference}"
+            return redirect(frontend_url)
+        else:
+            return Response({
+                'status': False,
+                'message': 'No reference provided'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return Response({
+            'status': False,
+            'message': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+@api_view(['GET'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def employer_transactions(request):
+    """
+    GET /api/payment/transactions/
+    Get payment transactions for the employer via PaymentTransaction model
+    """
+    try:
+        print(f"\n{'='*60}")
+        print("EMPLOYER PAYMENT TRANSACTIONS")
+        print(f"{'='*60}")
+        print(f"Employer: {request.user.username}")
+        
+        # Get PaymentTransaction records via Order
+        # PaymentTransaction -> Order -> Employer
+        payment_transactions = PaymentTransaction.objects.filter(
+            order__employer=request.user  # Go through Order to get Employer
+        ).select_related('order', 'order__task', 'order__freelancer').order_by('-created_at')
+        
+        print(f"Found {payment_transactions.count()} payment transactions")
+        
+        transactions_data = []
+        for pt in payment_transactions:
+            transaction_info = {
+                'id': pt.id,
+                'paystack_reference': pt.paystack_reference,
+                'amount': float(pt.amount),
+                'platform_commission': float(pt.platform_commission),
+                'freelancer_share': float(pt.freelancer_share),
+                'status': pt.status,
+                'created_at': pt.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                'order': {
+                    'order_id': str(pt.order.order_id),
+                    'amount': float(pt.order.amount),
+                    'status': pt.order.status,
+                } if pt.order else None,
+                'task': {
+                    'title': pt.order.task.title if pt.order and pt.order.task else 'Unknown',
+                } if pt.order and pt.order.task else None
+            }
+            transactions_data.append(transaction_info)
+        
+        # If no PaymentTransaction records, check if we have Orders
+        if not transactions_data:
+            orders = Order.objects.filter(employer=request.user)
+            print(f"Found {orders.count()} orders (but no PaymentTransaction records)")
+            
+            # Return orders as placeholder
+            for order in orders:
+                transactions_data.append({
+                    'id': str(order.order_id),
+                    'type': 'order',
+                    'amount': float(order.amount),
+                    'status': order.status,
+                    'created_at': order.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                    'note': 'Payment transaction not yet created'
+                })
+        
+        return Response({
+            'status': True,
+            'transactions': transactions_data,
+            'count': len(transactions_data),
+            'employer_id': request.user.employer_id
+        })
+        
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return Response({
+            'status': False,
+            'message': str(e)
+        }, status=500) 
+@api_view(['GET'])
+def payment_status(request, order_id):
+    """
+    GET /api/payment/status/<str:order_id>/
+    Check payment status for an order
+    """
+    try:
+        order = get_object_or_404(Order, order_id=order_id)
+        
+        # Get latest transaction for this order
+        transaction = Transaction.objects.filter(order=order).order_by('-created_at').first()
+        
+        status_data = {
+            'order_id': str(order.order_id),
+            'order_status': order.status,
+            'amount': float(order.amount),
+            'currency': order.currency,
+            'transaction': {
+                'reference': transaction.paystack_reference if transaction else None,
+                'status': transaction.status if transaction else None,
+                'created_at': transaction.created_at.strftime('%Y-%m-%d %H:%M:%S') if transaction else None,
+            } if transaction else None
+        }
+        
+        return Response({
+            'status': True,
+            'data': status_data
+        })
+        
+    except Order.DoesNotExist:
+        return Response({
+            'status': False,
+            'message': 'Order not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({
+            'status': False,
+            'message': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        
+@api_view(['GET'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def pending_payment_orders(request):
+    """
+    GET /api/orders/pending-payment/
+    """
+    try:
+        print(f"\n{'='*60}")
+        print("PENDING PAYMENT ORDERS API")
+        print(f"{'='*60}")
+        print(f"Employer: {request.user.username}")
+        
+        # ✅ NOW THIS WORKS! Order has employer field
+        orders = Order.objects.filter(
+            employer=request.user,  # ✅ Direct filter by employer
+            status='pending'
+        ).select_related('task', 'freelancer')
+        
+        print(f"Found {orders.count()} pending orders")
+        
+        order_list = []
+        for order in orders:
+            order_data = {
+                'order_id': str(order.order_id),
+                'id': str(order.order_id),
+                'amount': float(order.amount),
+                'currency': order.currency,
+                'status': order.status,
+                'created_at': order.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                'task': {
+                    'task_id': order.task.task_id if order.task else None,
+                    'title': order.task.title if order.task else 'Unknown',
+                    'description': order.task.description if order.task else '',
+                } if order.task else None,
+                'freelancer': {
+                    'name': order.freelancer.name if order.freelancer else 'Unknown',
+                    'email': order.freelancer.email if order.freelancer else None,
+                } if order.freelancer else None
+            }
+            order_list.append(order_data)
+        
+        return Response({
+            'status': True,
+            'orders': order_list,
+            'count': len(order_list)
+        })
+        
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return Response({
+            'status': False,
+            'message': str(e)
+        }, status=500)        
+        

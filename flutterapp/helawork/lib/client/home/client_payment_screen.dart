@@ -1,26 +1,26 @@
+
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:helawork/payment_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+
 class PaymentScreen extends StatefulWidget {
   final String orderId;
   final double amount;
-  final String email;
   final String freelancerName;
   final String serviceDescription;
   final String freelancerPhotoUrl;
   final String currency;
-  final PaymentService paymentService;
 
   const PaymentScreen({
     super.key,
     required this.orderId,
     required this.amount,
-    required this.email,
     required this.freelancerName,
     required this.serviceDescription,
     required this.freelancerPhotoUrl,
-    this.currency = 'KSH',
-    required this.paymentService, required String authToken,
+    this.currency = 'KSH', required email, required PaymentService paymentService, required String authToken,
   });
 
   @override
@@ -32,6 +32,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
   bool _isLoading = true;
   bool _paymentInitialized = false;
   String? _errorMessage;
+  bool _isPaymentComplete = false;
+  String? _email;
+  PaymentService? _paymentService;
 
   @override
   void initState() {
@@ -41,21 +44,30 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   Future<void> _initializePayment() async {
     try {
-      print('PAYMENT DEBUG');
-      print('Order ID: "${widget.orderId}"');
-      print('Email: "${widget.email}"');
-      print('Order ID is empty: ${widget.orderId.isEmpty}');
-      print('Email is empty: ${widget.email.isEmpty}');
+      print('🚀 INITIALIZING PAYMENT...');
       
-      if (widget.orderId.isEmpty) {
+      // 1. Get token from SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('user_token');
+      
+      if (token == null || token.isEmpty) {
         setState(() {
-          _errorMessage = 'Order ID is missing. Please try again.';
+          _errorMessage = 'Authentication token not found. Please log in again.';
           _isLoading = false;
         });
         return;
       }
       
-      if (widget.email.isEmpty) {
+      print('✅ Token found: ${token.substring(0, min(10, token.length))}...');
+      
+      // 2. Create PaymentService WITH the token
+      _paymentService = PaymentService(authToken: token);
+      
+      // 3. Get email
+      _email = await _paymentService!.getEmployerEmail();
+      print('✅ Email: $_email');
+      
+      if (_email == null || _email!.isEmpty) {
         setState(() {
           _errorMessage = 'Email is required for payment.';
           _isLoading = false;
@@ -63,14 +75,13 @@ class _PaymentScreenState extends State<PaymentScreen> {
         return;
       }
       
-      print('Proceeding with payment...');
-      
-      final response = await widget.paymentService.initializePayment(
+      // 4. Initialize payment
+      final response = await _paymentService!.initializePayment(
         orderId: widget.orderId,
-        email: widget.email,
+        email: _email!,
       );
       
-      print('Payment result: $response');
+      print('✅ Payment response: $response');
       
       if (response['status'] == true) {
         final authUrl = response['data']['authorization_url'];
@@ -80,17 +91,37 @@ class _PaymentScreenState extends State<PaymentScreen> {
           ..setBackgroundColor(Colors.white)
           ..setNavigationDelegate(NavigationDelegate(
             onPageStarted: (url) {
+              print('🌐 Page started: $url');
               setState(() => _isLoading = true);
             },
             onPageFinished: (String url) {
+              print('🌐 Page finished: $url');
               setState(() => _isLoading = false);
               _handlePaymentResponse(url);
             },
             onWebResourceError: (error) {
+              print('❌ Web resource error: ${error.description}');
               setState(() {
                 _isLoading = false;
                 _errorMessage = 'Payment loading error: ${error.description}';
               });
+            },
+            onNavigationRequest: (navigation) {
+              print('🌐 Navigation request: ${navigation.url}');
+              
+              if (navigation.url.contains('paystack.co')) {
+                return NavigationDecision.navigate;
+              }
+              
+              if (navigation.url.contains('callback') || 
+                  navigation.url.contains('verify') ||
+                  navigation.url.contains('success') ||
+                  navigation.url.contains('failed')) {
+                _handlePaymentResponse(navigation.url);
+                return NavigationDecision.prevent;
+              }
+              
+              return NavigationDecision.navigate;
             },
           ))
           ..loadRequest(Uri.parse(authUrl));
@@ -105,25 +136,46 @@ class _PaymentScreenState extends State<PaymentScreen> {
         });
       }
     } catch (e) {
+      print('❌ ERROR in _initializePayment: $e');
       setState(() {
-        _errorMessage = 'Network error: $e';
+        _errorMessage = 'Error: $e';
         _isLoading = false;
       });
     }
   }
 
   void _handlePaymentResponse(String url) {
-    if (url.contains('/api/payment/verify/')) {
-      if (url.contains('success') || !url.contains('failed')) {
-        Navigator.pop(context, true);
-      } else {
-        Navigator.pop(context, false);
-      }
-    }
+    print('🔗 Handling payment response: $url');
     
-    if (url.contains('callback') && url.contains('success')) {
+    if (url.contains('success') || url.contains('completed')) {
+      _completePayment(true);
+    } else if (url.contains('failed') || url.contains('canceled')) {
+      _completePayment(false);
+    }
+  }
+
+  void _completePayment(bool success) async {
+    if (_isPaymentComplete) return;
+    
+    _isPaymentComplete = true;
+    
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Payment successful!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      
+      await Future.delayed(const Duration(seconds: 2));
       Navigator.pop(context, true);
-    } else if (url.contains('callback') && url.contains('failed')) {
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Payment failed. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
       Navigator.pop(context, false);
     }
   }
@@ -133,8 +185,13 @@ class _PaymentScreenState extends State<PaymentScreen> {
       _errorMessage = null;
       _isLoading = true;
       _paymentInitialized = false;
+      _isPaymentComplete = false;
     });
     _initializePayment();
+  }
+
+  void _cancelPayment() {
+    Navigator.pop(context, false);
   }
 
   String _getCurrencySymbol() {
@@ -167,152 +224,114 @@ class _PaymentScreenState extends State<PaymentScreen> {
         backgroundColor: Colors.blueAccent,
         elevation: 0,
         centerTitle: true,
-        automaticallyImplyLeading: false,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: _cancelPayment,
+        ),
       ),
       body: _errorMessage != null
           ? _buildErrorState()
-          : CustomScrollView(
-              slivers: [
-                SliverToBoxAdapter(
-                  child: Container(
-                    margin: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.blueAccent.withOpacity(0.1),
-                          blurRadius: 10,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                      border: Border.all(color: Colors.blueAccent.withOpacity(0.2)),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+          : Column(
+              children: [
+                // Payment Summary Card
+                Container(
+                  margin: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withOpacity(0.2),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                    border: Border.all(color: Colors.blueAccent.withOpacity(0.2)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Freelancer Info
+                      Row(
                         children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: Colors.blueAccent.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Icon(
-                                  Icons.payment,
-                                  color: Colors.blueAccent,
-                                  size: 24,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              const Text(
-                                'Payment Summary',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.blueAccent,
-                                ),
-                              ),
-                            ],
+                          CircleAvatar(
+                            radius: 24,
+                            backgroundImage: NetworkImage(widget.freelancerPhotoUrl),
+                            backgroundColor: Colors.blueAccent.withOpacity(0.1),
                           ),
-                          const SizedBox(height: 20),
-                          
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  widget.freelancerName,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.blueAccent,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  widget.serviceDescription,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey[600],
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      
+                      const SizedBox(height: 16),
+                      
+                      // Order ID and Email
+                      Column(
+                        children: [
                           Container(
-                            padding: const EdgeInsets.all(16),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             decoration: BoxDecoration(
-                              color: Colors.blueAccent.withOpacity(0.05),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.blueAccent.withOpacity(0.1)),
+                              color: Colors.blueAccent.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
                             ),
                             child: Row(
                               children: [
-                                CircleAvatar(
-                                  backgroundImage: NetworkImage(widget.freelancerPhotoUrl),
-                                  radius: 24,
-                                  backgroundColor: Colors.blueAccent.withOpacity(0.1),
-                                ),
-                                const SizedBox(width: 12),
+                                const Icon(Icons.receipt, color: Colors.blueAccent, size: 16),
+                                const SizedBox(width: 8),
                                 Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Paying: ${widget.freelancerName}',
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.blueAccent,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        widget.serviceDescription,
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          color: Colors.blueAccent.withOpacity(0.7),
-                                        ),
-                                      ),
-                                    ],
+                                  child: Text(
+                                    'Order #${widget.orderId}',
+                                    style: const TextStyle(
+                                      color: Colors.blueAccent,
+                                      fontWeight: FontWeight.w500,
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          
-                          const SizedBox(height: 20),
-                          
+                          const SizedBox(height: 8),
                           Container(
-                            padding: const EdgeInsets.all(16),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             decoration: BoxDecoration(
-                              color: Colors.blueAccent.withOpacity(0.05),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.blueAccent.withOpacity(0.1)),
-                            ),
-                            child: Column(
-                              children: [
-                                _buildAmountRow(
-                                  'Service Amount', 
-                                  _formatAmount(widget.amount * 0.9),
-                                ),
-                                const SizedBox(height: 12),
-                                _buildAmountRow(
-                                  'Platform Fee (10%)', 
-                                  _formatAmount(widget.amount * 0.1),
-                                ),
-                                const Divider(height: 20, color: Colors.blueAccent),
-                                _buildAmountRow(
-                                  'TOTAL AMOUNT', 
-                                  _formatAmount(widget.amount), 
-                                  isTotal: true
-                                ),
-                              ],
-                            ),
-                          ),
-                          
-                          const SizedBox(height: 16),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.blueAccent.withOpacity(0.1),
+                              color: Colors.green.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: const Row(
+                            child: Row(
                               children: [
-                                Icon(
-                                  Icons.security,
-                                  color: Colors.blueAccent,
-                                  size: 16,
-                                ),
-                                SizedBox(width: 8),
+                                const Icon(Icons.email, color: Colors.green, size: 16),
+                                const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
-                                    'You will be redirected to complete payment securely',
-                                    style: TextStyle(
-                                      color: Colors.blueAccent,
-                                      fontSize: 12,
+                                    _email ?? 'Loading email...',
+                                    style: const TextStyle(
+                                      color: Colors.green,
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),
@@ -322,21 +341,43 @@ class _PaymentScreenState extends State<PaymentScreen> {
                           ),
                         ],
                       ),
-                    ),
+                      
+                      const SizedBox(height: 16),
+                      
+                      // Amount Breakdown
+                      _buildAmountRow('Service Fee', _formatAmount(widget.amount * 0.9)),
+                      const SizedBox(height: 8),
+                      _buildAmountRow('Platform Fee (10%)', _formatAmount(widget.amount * 0.1)),
+                      const Divider(height: 20, thickness: 1),
+                      _buildAmountRow(
+                        'TOTAL AMOUNT', 
+                        _formatAmount(widget.amount), 
+                        isTotal: true
+                      ),
+                    ],
                   ),
                 ),
                 
-                SliverToBoxAdapter(
+                // WebView Container
+                Expanded(
                   child: Container(
-                    height: MediaQuery.of(context).size.height * 0.6,
-                    margin: const EdgeInsets.all(16),
+                    margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.blueAccent.withOpacity(0.3)),
+                      border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withOpacity(0.1),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
                     child: Stack(
                       children: [
-                        if (_paymentInitialized) WebViewWidget(controller: controller),
+                        if (_paymentInitialized)
+                          WebViewWidget(controller: controller),
+                        
                         if (_isLoading)
                           Container(
                             color: Colors.white,
@@ -344,30 +385,17 @@ class _PaymentScreenState extends State<PaymentScreen> {
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(20),
-                                    decoration: BoxDecoration(
-                                      color: Colors.blueAccent,
-                                      borderRadius: BorderRadius.circular(50),
-                                    ),
-                                    child: const SizedBox(
-                                      height: 30,
-                                      width: 30,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 3,
-                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                      ),
-                                    ),
+                                  CircularProgressIndicator(
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.blueAccent),
                                   ),
                                   const SizedBox(height: 16),
                                   Text(
                                     _paymentInitialized 
-                                        ? 'Processing payment...' 
-                                        : 'Initializing payment...',
+                                        ? 'Loading payment gateway...' 
+                                        : 'Preparing payment...',
                                     style: const TextStyle(
                                       color: Colors.blueAccent,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
+                                      fontWeight: FontWeight.w500,
                                     ),
                                   ),
                                 ],
@@ -379,8 +407,18 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   ),
                 ),
                 
-                const SliverToBoxAdapter(
-                  child: SizedBox(height: 20),
+                // Cancel Button
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: OutlinedButton(
+                    onPressed: _cancelPayment,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red,
+                      side: const BorderSide(color: Colors.red),
+                      minimumSize: const Size(double.infinity, 50),
+                    ),
+                    child: const Text('Cancel Payment'),
+                  ),
                 ),
               ],
             ),
@@ -406,16 +444,33 @@ class _PaymentScreenState extends State<PaymentScreen> {
               style: const TextStyle(
                 color: Colors.red,
                 fontSize: 16,
+                fontWeight: FontWeight.w500,
               ),
             ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _retryPayment,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blueAccent,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Retry Payment'),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton(
+                  onPressed: _retryPayment,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blueAccent,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(120, 48),
+                  ),
+                  child: const Text('Retry'),
+                ),
+                const SizedBox(width: 16),
+                OutlinedButton(
+                  onPressed: _cancelPayment,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.grey,
+                    side: const BorderSide(color: Colors.grey),
+                    minimumSize: const Size(120, 48),
+                  ),
+                  child: const Text('Cancel'),
+                ),
+              ],
             ),
           ],
         ),
@@ -424,29 +479,26 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 
   Widget _buildAmountRow(String label, String amount, {bool isTotal = false}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: isTotal ? Colors.blueAccent : Colors.blueAccent.withOpacity(0.8),
-              fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
-              fontSize: isTotal ? 16 : 14,
-            ),
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: isTotal ? Colors.blueAccent : Colors.grey[700],
+            fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
+            fontSize: isTotal ? 16 : 14,
           ),
-          Text(
-            amount,
-            style: TextStyle(
-              color: isTotal ? Colors.blueAccent : Colors.blueAccent.withOpacity(0.8),
-              fontWeight: isTotal ? FontWeight.bold : FontWeight.w600,
-              fontSize: isTotal ? 18 : 14,
-            ),
+        ),
+        Text(
+          amount,
+          style: TextStyle(
+            color: isTotal ? Colors.blueAccent : Colors.grey[700],
+            fontWeight: isTotal ? FontWeight.bold : FontWeight.w600,
+            fontSize: isTotal ? 18 : 14,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
