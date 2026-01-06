@@ -2032,7 +2032,7 @@ Future<List<dynamic>> getTasksForRating() async {
     }
 
     final response = await http.get(
-      Uri.parse(tasktorateUrl),
+      Uri.parse('$baseUrl/api/submissions-to-rate/'),
       headers: {
         "Content-Type": "application/json",
         "Authorization": "Bearer $token", 
@@ -2206,61 +2206,7 @@ static Future<List<dynamic>> getRateableContracts() async {
   }
 }
 
-// Also update createRating endpoint if needed
-static Future<Map<String, dynamic>> createRating({
-  required int taskId,
-  required int ratedUserId,
-  required int contractId,
-  required int score,
-  String review = '',
-}) async {
-  try {
-    final String? token = await _getUserToken();
-    
-    if (token == null) {
-      throw Exception('No authentication token found');
-    }
 
-    // ✅ Check if this endpoint exists
-    final response = await http.post(
-      Uri.parse('$baseUrl/ratings/'),  // Should match your Django URL pattern
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer $token",
-      },
-      body: jsonEncode({
-        'task': taskId,
-        'contract': contractId,
-        'rated_user': ratedUserId,
-        'score': score,
-        'review': review,
-      }),
-    );
-
-    debugPrint('Create Rating API Response:');
-    debugPrint('URL: $baseUrl/ratings/');
-    debugPrint('Status: ${response.statusCode}');
-    debugPrint('Body: ${response.body}');
-
-    if (response.statusCode == 201) {
-      final responseData = jsonDecode(response.body);
-      return {
-        'success': true,
-        'message': responseData['message'] ?? 'Rating created successfully',
-        'rating_id': responseData['rating_id'],
-        'data': responseData
-      };
-    } else if (response.statusCode == 400) {
-      final errorData = jsonDecode(response.body);
-      throw Exception(errorData['error'] ?? 'Failed to create rating');
-    } else {
-      throw Exception('Failed to create rating: ${response.statusCode}');
-    }
-  } catch (e) {
-    debugPrint('Error in createRating: $e');
-    rethrow;
-  }
-}
 // Get ratings for a specific task (matches your get_task_ratings endpoint)
 Future<List<dynamic>> getTaskRatings(int taskId) async {
   try {
@@ -2331,36 +2277,115 @@ Future<Map<String, dynamic>> getSubmissionStats() async {
 
 
 
+// In ApiService.dart - ADD THESE TWO METHODS:
 
-// Employer rates Freelancer
+// 1. For EMPLOYERS rating freelancers (NO contract field)
 Future<Map<String, dynamic>> submitEmployerRating({
   required int taskId,
   required int freelancerId,
   required int score,
   String review = '',
 }) async {
-  return await createRating(
-    taskId: taskId,
-    ratedUserId: freelancerId,
-    score: score,
-    review: review, contractId: 0,
-  );
+  try {
+    final String? token = await _getUserToken();
+    
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
+
+    debugPrint('🚀 Employer Submit Rating:');
+    debugPrint('   Task: $taskId, Freelancer: $freelancerId, Score: $score');
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/ratings/'),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+      body: jsonEncode({
+        'task': taskId,
+        // ❌ NO 'contract' field for employers!
+        'rated_user': freelancerId,
+        'score': score,
+        'review': review,
+      }),
+    );
+
+    debugPrint('📡 Employer Rating Response: ${response.statusCode}');
+    debugPrint('📡 Response Body: ${response.body}');
+
+    if (response.statusCode == 201) {
+      final responseData = jsonDecode(response.body);
+      return {
+        'success': true,
+        'message': 'Rating submitted successfully',
+        'rating_id': responseData['rating_id'],
+      };
+    } else {
+      final errorData = jsonDecode(response.body);
+      throw Exception(errorData['error'] ?? 'Failed to submit rating');
+    }
+  } catch (e) {
+    debugPrint('❌ Error in submitEmployerRating: $e');
+    rethrow;
+  }
 }
 
-// Freelancer rates Employer
-Future<Map<String, dynamic>> submitFreelancerRating({
+// 2. For FREELANCERS rating employers/clients (WITH contract field)
+static Future<Map<String, dynamic>> createRating({
   required int taskId,
-  required int employerId,
+  required int ratedUserId,  // This is EMPLOYER being rated
+  required int contractId,   // Freelancer needs contract ID
   required int score,
   String review = '',
 }) async {
-  return await createRating(
-    taskId: taskId,
-    ratedUserId: employerId,
-    score: score,
-    review: review, contractId: 0,
-  );
+  try {
+    final String? token = await _getUserToken();
+    
+    if (token == null) {
+      throw Exception('No authentication token found');
+    }
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/ratings/'),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+      body: jsonEncode({
+        'task': taskId,
+        'contract': contractId,  // ✅ Freelancer sends contract
+        'rated_user': ratedUserId,  // Employer/client being rated
+        'score': score,
+        'review': review,
+      }),
+    );
+
+    debugPrint('💼 Freelancer Create Rating:');
+    debugPrint('   Task: $taskId, Employer: $ratedUserId, Contract: $contractId, Score: $score');
+    debugPrint('   Response: ${response.statusCode}');
+    debugPrint('   Body: ${response.body}');
+
+    if (response.statusCode == 201) {
+      final responseData = jsonDecode(response.body);
+      return {
+        'success': true,
+        'message': responseData['message'] ?? 'Rating created successfully',
+        'rating_id': responseData['rating_id'],
+        'data': responseData
+      };
+    } else if (response.statusCode == 400) {
+      final errorData = jsonDecode(response.body);
+      throw Exception(errorData['error'] ?? 'Failed to create rating');
+    } else {
+      throw Exception('Failed to create rating: ${response.statusCode}');
+    }
+  } catch (e) {
+    debugPrint('❌ Error in createRating: $e');
+    rethrow;
+  }
 }
+
 
 // Get employer's received ratings
 Future<List<dynamic>> getEmployerReceivedRatings(int employerId) async {

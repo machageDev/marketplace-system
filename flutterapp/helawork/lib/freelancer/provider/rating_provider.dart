@@ -247,14 +247,20 @@ class RatingProvider with ChangeNotifier {
       
       debugPrint("📤 Submitting rating: Contract $contractId, Task $taskId, User $ratedUserId, Score $score");
       
-      // Submit rating with contract ID
-      await ApiService.createRating(
+      // ✅ FIXED: This calls ApiService.createRating() which sends contract: contractId
+      // This is CORRECT for freelancers rating employers
+      final result = await ApiService.createRating(
         taskId: taskId,
         ratedUserId: ratedUserId,
         contractId: contractId,
         score: score,
         review: review,
       );
+      
+      // Check if successful
+      if (result['success'] != true) {
+        throw Exception(result['message'] ?? 'Failed to submit rating');
+      }
       
       // Refresh data
       await Future.wait([

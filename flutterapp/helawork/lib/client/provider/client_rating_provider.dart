@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:helawork/api_service.dart';
 
-
 class ClientRatingProvider with ChangeNotifier {
   List<dynamic> _ratings = [];
   List<dynamic> _tasksForRating = [];
@@ -23,10 +22,10 @@ class ClientRatingProvider with ChangeNotifier {
     
     try {
       _tasksForRating = await ApiService().getEmployerRateableTasks();
-      print("Loaded ${_tasksForRating.length} tasks for employer rating");
+      print("✅ Loaded ${_tasksForRating.length} tasks for employer rating");
     } catch (e) {
       _error = "Failed to load completed tasks: $e";
-      print("Error fetching employer tasks: $e");
+      print("❌ Error fetching employer tasks: $e");
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -38,7 +37,7 @@ class ClientRatingProvider with ChangeNotifier {
     try {
       return await ApiService().getEmployerRatings(employerId);
     } catch (e) {
-      print("Error fetching employer ratings: $e");
+      print("❌ Error fetching employer ratings: $e");
       return [];
     }
   }
@@ -53,7 +52,7 @@ class ClientRatingProvider with ChangeNotifier {
     print("=====================================");
   }
 
-  // Employer rates Freelancer
+  // ✅ CORRECT: Employer rates Freelancer
   Future<bool> submitEmployerRating({
     required int taskId,
     required int freelancerId,
@@ -73,7 +72,8 @@ class ClientRatingProvider with ChangeNotifier {
       );
       
       if (result['success'] == true) {
-        print("Employer rating submitted successfully");
+        print("✅ Employer rating submitted successfully");
+        // Remove the rated task from the list
         _tasksForRating.removeWhere((task) => task['id'] == taskId || task['task_id'] == taskId);
         return true;
       } else {
@@ -83,45 +83,7 @@ class ClientRatingProvider with ChangeNotifier {
       
     } catch (e) {
       _error = "Failed to submit rating: $e";
-      print("Error submitting rating: $e");
-      return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  // Create a new rating (alternative method)
-  Future<bool> createRating({
-    required int taskId,
-    required int ratedUserId,
-    required int score,
-    String review = '',
-  }) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
-    
-    try {
-      final result = await ApiService.createRating(
-        taskId: taskId,
-        ratedUserId: ratedUserId,
-        score: score,
-        review: review, contractId: 0,
-      );
-      
-      if (result['success'] == true) {
-        print("Rating created successfully: ${result['rating_id']}");
-        await fetchUserRatings(ratedUserId);
-        return true;
-      } else {
-        _error = result['message'] ?? 'Failed to create rating';
-        return false;
-      }
-      
-    } catch (e) {
-      _error = "Failed to create rating: $e";
-      print("Error creating rating: $e");
+      print("❌ Error submitting rating: $e");
       return false;
     } finally {
       _isLoading = false;
@@ -137,10 +99,10 @@ class ClientRatingProvider with ChangeNotifier {
     
     try {
       _ratings = await ApiService.getUserRatings(userId);
-      print("Loaded ${_ratings.length} ratings for user $userId");
+      print("✅ Loaded ${_ratings.length} ratings for user $userId");
     } catch (e) {
       _error = "Failed to load user ratings: $e";
-      print("Error fetching user ratings: $e");
+      print("❌ Error fetching user ratings: $e");
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -155,10 +117,10 @@ class ClientRatingProvider with ChangeNotifier {
     
     try {
       _ratings = await ApiService().getTaskRatings(taskId);
-      print("Loaded ${_ratings.length} ratings for task $taskId");
+      print("✅ Loaded ${_ratings.length} ratings for task $taskId");
     } catch (e) {
       _error = "Failed to load task ratings: $e";
-      print("Error fetching task ratings: $e");
+      print("❌ Error fetching task ratings: $e");
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -214,6 +176,6 @@ class ClientRatingProvider with ChangeNotifier {
 
   // Helper method to get current user ID
   int _getCurrentUserId() {
-    return 1;
+    return 1; // Replace with actual user ID logic
   }
 }

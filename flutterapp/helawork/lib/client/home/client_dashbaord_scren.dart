@@ -13,6 +13,7 @@ import 'package:helawork/client/home/client_proposal_screen.dart';
 import 'package:helawork/client/home/client_rating_screen.dart';
 import 'package:helawork/client/home/client_task_scren.dart';
 import 'package:helawork/client/provider/client_dashboard_provider.dart' as client_dashboard;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ClientDashboardScreen extends StatefulWidget {
   const ClientDashboardScreen({super.key});
@@ -70,94 +71,263 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
   }
 
   void _handlePaymentNavigation() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Payment'),
-        content: const Text('Please select an order with pending payment to proceed.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _navigateToPaymentWithOrder();
-            },
-            child: const Text('Select Order'),
-          ),
-        ],
-      ),
-    );
+    _navigateToPaymentWithOrder();
   }
 
   void _navigateToPaymentWithOrder() async {
-    final orderData = await _getOrderDataForPayment();
-    
-    if (orderData != null) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => PaymentScreen(
-            orderId: orderData['id'],
-            amount: orderData['amount'],
-            email: orderData['email'],
-            freelancerName: orderData['freelancerName'],
-            serviceDescription: orderData['serviceDescription'],
-            freelancerPhotoUrl: orderData['freelancerPhotoUrl'],
-            paymentService: PaymentService(authToken: ''), authToken: '',
+    try {
+      print('🔍 Starting payment navigation...');
+      
+      final orderData = await _getOrderDataForPayment();
+      print('📊 Order data received: ${orderData != null ? "NOT NULL" : "NULL"}');
+      
+      if (orderData != null) {
+        print('✅ Order data details:');
+        print('   Order ID: ${orderData['id']}');
+        print('   Amount: ${orderData['amount']}');
+        print('   Freelancer Name: ${orderData['freelancerName']}');
+        print('   Freelancer ID: ${orderData['freelancerId']}');
+        print('   Freelancer Email: ${orderData['freelancerEmail']}');
+        
+        // Validate required data
+        if (orderData['id']?.isEmpty == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Order ID is missing')),
+          );
+          return;
+        }
+        
+        if (orderData['freelancerId']?.isEmpty == true) {
+          print('❌ ERROR: Freelancer ID is empty');
+          print('❌ Here is what we got:');
+          print('   - Order ID: ${orderData['id']}');
+          print('   - Freelancer Name: ${orderData['freelancerName']}');
+          print('   - Freelancer Email: ${orderData['freelancerEmail']}');
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Cannot process payment: Freelancer information is missing')),
+          );
+          return;
+        }
+        
+        // Get auth token and email
+        final prefs = await SharedPreferences.getInstance();
+        final token = prefs.getString('user_token') ?? '';
+        final userEmail = prefs.getString('user_email') ?? '';
+        
+        print('✅ All data valid, navigating to PaymentScreen...');
+        
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => PaymentScreen(
+              orderId: orderData['id']!,
+              amount: orderData['amount'] ?? 0.0,
+              freelancerName: orderData['freelancerName'] ?? 'Freelancer',
+              serviceDescription: orderData['serviceDescription'] ?? 'Service',
+              freelancerPhotoUrl: orderData['freelancerPhotoUrl'] ?? '',
+              freelancerId: orderData['freelancerId']!,
+              freelancerEmail: orderData['freelancerEmail'] ?? '',
+              currency: orderData['currency'] ?? 'KSH', 
+              email: userEmail, 
+              authToken: token, 
+              paymentService: 1,
+            ),
           ),
-        ),
-      );
-    } else {
+        );
+      } else {
+        print('❌ No order data received');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No orders available for payment')),
+        );
+      }
+    } catch (e) {
+      print('❌ Error in payment navigation: $e');
+      print('Stack trace: ${e.toString()}');
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No orders available for payment')),
+        SnackBar(content: Text('Error: ${e.toString()}')),
       );
     }
   }
 
-  Future<Map<String, dynamic>?> _getOrderDataForPayment() async {
+Future<Map<String, dynamic>?> _getOrderDataForPayment() async {
+  try {
+    print('🔍 Fetching order data for payment...');
+    
+    final paymentService = PaymentService();
+    
+    // Try to get pending orders
     try {
-      final orders = await ApiService().getOrdersForPayment();
+      final orders = await paymentService.getPendingOrders();
+      print('📋 Found ${orders.length} pending orders');
       
       if (orders.isNotEmpty) {
         final order = orders.first;
         
+        // DEBUG: Print the entire order structure
+        print('📋 ORDER STRUCTURE:');
+        print('Order Type: ${order.runtimeType}');
+        
+        order.forEach((key, value) {
+          print('   $key: ${value.runtimeType} = $value');
+        });
+              
+        // Check if freelancer exists and what fields it has
+        if (order['freelancer'] != null) {
+          print('📋 FREELANCER STRUCTURE:');
+          final freelancer = order['freelancer'];
+          if (freelancer is Map<String, dynamic>) {
+            freelancer.forEach((key, value) {
+              print('   $key: ${value.runtimeType} = $value');
+            });
+          } else {
+            print('Freelancer is not a Map: ${freelancer.toString()}');
+          }
+        } else {
+          print('❌ No freelancer object found in order');
+          
+          // Check for other possible freelancer fields
+          print('🔍 Looking for freelancer in other fields...');
+          order.forEach((key, value) {
+            if (key.toString().toLowerCase().contains('freelancer')) {
+              print('   Found freelancer-related field: $key = $value');
+            }
+          });
+        }
+        
+        print('✅ Using first pending order');
+        
+        // Extract freelancer data safely - TRY DIFFERENT FIELD NAMES
+        final freelancer = order['freelancer'];
+        final freelancerId = freelancer?['id']?.toString() ?? 
+                             freelancer?['freelancer_id']?.toString() ?? 
+                             freelancer?['user_id']?.toString() ?? 
+                             freelancer?['userId']?.toString() ?? 
+                             freelancer?['freelancerId']?.toString() ?? 
+                             '';
+        
+        print('📋 Trying to get freelancer ID:');
+        print('   From freelancer["id"]: ${freelancer?["id"]}');
+        print('   From freelancer["freelancer_id"]: ${freelancer?["freelancer_id"]}');
+        print('   From freelancer["user_id"]: ${freelancer?["user_id"]}');
+        print('   From freelancer["userId"]: ${freelancer?["userId"]}');
+        print('   From freelancer["freelancerId"]: ${freelancer?["freelancerId"]}');
+        print('   Final freelancerId: $freelancerId');
+        
+        final freelancerName = freelancer?['name']?.toString() ?? 
+                              freelancer?['full_name']?.toString() ?? 
+                              freelancer?['username']?.toString() ?? 
+                              freelancer?['firstName']?.toString() ?? 
+                              freelancer?['lastName']?.toString() ?? 
+                              'Freelancer';
+        final freelancerEmail = freelancer?['email']?.toString() ?? '';
+        
+        // Extract order data safely
+        final orderId = order['order_id']?.toString() ?? 
+                       order['id']?.toString() ?? 
+                       order['orderId']?.toString() ?? 
+                       '';
+        final amount = order['amount'] != null 
+            ? (order['amount'] is num ? order['amount'].toDouble() : double.tryParse(order['amount'].toString()) ?? 0.0)
+            : 0.0;
+        
+        // Debug the extracted values
+        print('📋 EXTRACTED VALUES:');
+        print('   orderId: $orderId');
+        print('   amount: $amount');
+        print('   freelancerName: $freelancerName');
+        print('   freelancerEmail: $freelancerEmail');
+        
         return {
-          'id': order['order_id'] ?? order['id'] ?? '',
-          'amount': order['amount'] != null ? double.parse(order['amount'].toString()) : 0.0,
-          'email': order['email'] ?? '',
-          'freelancerName': order['freelancer_name'] ?? order['freelancerName'] ?? 'Freelancer',
-          'serviceDescription': order['service_description'] ?? order['serviceDescription'] ?? 'Service',
-          'freelancerPhotoUrl': order['freelancer_photo'] ?? order['freelancerPhotoUrl'] ?? '',
+          'id': orderId,
+          'amount': amount,
+          'freelancerName': freelancerName,
+          'serviceDescription': order['task']?['title']?.toString() ?? 
+                              order['service_description']?.toString() ?? 
+                              order['task_title']?.toString() ?? 
+                              order['description']?.toString() ?? 
+                              'Service',
+          'freelancerPhotoUrl': order['freelancer_photo']?.toString() ?? 
+                               order['freelancerPhotoUrl']?.toString() ?? 
+                               order['profile_picture']?.toString() ?? 
+                               '',
+          'freelancerId': freelancerId,
+          'freelancerEmail': freelancerEmail,
+          'currency': order['currency']?.toString() ?? 'KSH',
         };
+      } else {
+        print('❌ No pending orders found');
       }
-      
+    } catch (e) {
+      print('⚠️ Error getting pending orders: $e');
+      print('Stack trace: ${e.toString()}');
+    }
+    
+    // Fallback: Try to get any user orders from ApiService
+    try {
+      print('🔍 Trying fallback: Getting user orders from ApiService...');
       final userOrders = await ApiService().getUserOrders();
+      print('📋 Found ${userOrders.length} user orders');
+      
       if (userOrders.isNotEmpty) {
-        final order = userOrders.firstWhere(
-          (order) => order['status'] == 'pending' || order['status'] == 'awaiting_payment',
+        // Find first order with pending payment status
+        final pendingOrder = userOrders.firstWhere(
+          (order) => order['status'] == 'pending' || 
+                    order['status'] == 'awaiting_payment' ||
+                    order['status'] == 'completed',
           orElse: () => userOrders.first,
         );
         
+        // Debug the pending order structure
+        print('📋 PENDING ORDER STRUCTURE:');
+        pendingOrder.forEach((key, value) {
+          print('   $key: ${value.runtimeType} = $value');
+        });
+        
+        print('✅ Using user order: ${pendingOrder['order_id'] ?? pendingOrder['id']}');
+        
+        // Extract freelancer data safely
+        final freelancer = pendingOrder['freelancer'];
+        final freelancerId = freelancer?['id']?.toString() ?? '';
+        final freelancerName = freelancer?['name']?.toString() ?? 'Freelancer';
+        final freelancerEmail = freelancer?['email']?.toString() ?? '';
+        
+        // Extract order data safely
+        final orderId = pendingOrder['order_id']?.toString() ?? pendingOrder['id']?.toString() ?? '';
+        final amount = pendingOrder['amount'] != null 
+            ? (pendingOrder['amount'] is num ? pendingOrder['amount'].toDouble() : double.tryParse(pendingOrder['amount'].toString()) ?? 0.0)
+            : 0.0;
+        
         return {
-          'id': order['order_id'] ?? order['id'] ?? '',
-          'amount': order['amount'] != null ? double.parse(order['amount'].toString()) : 0.0,
-          'email': order['email'] ?? '',
-          'freelancerName': order['freelancer_name'] ?? order['freelancerName'] ?? 'Freelancer',
-          'serviceDescription': order['service_description'] ?? order['serviceDescription'] ?? 'Service',
-          'freelancerPhotoUrl': order['freelancer_photo'] ?? order['freelancerPhotoUrl'] ?? '',
+          'id': orderId,
+          'amount': amount,
+          'freelancerName': freelancerName,
+          'serviceDescription': pendingOrder['task']?['title']?.toString() ?? 
+                              pendingOrder['service_description']?.toString() ?? 
+                              pendingOrder['serviceDescription']?.toString() ?? 
+                              'Service',
+          'freelancerPhotoUrl': pendingOrder['freelancer_photo']?.toString() ?? 
+                               pendingOrder['freelancerPhotoUrl']?.toString() ?? 
+                               '',
+          'freelancerId': freelancerId,
+          'freelancerEmail': freelancerEmail,
+          'currency': pendingOrder['currency']?.toString() ?? 'KSH',
         };
       }
-      
-      return null;
-      
     } catch (e) {
-      print('Error fetching order data: $e');
-      return null;
+      print('⚠️ Error getting user orders: $e');
+      print('Stack trace: ${e.toString()}');
     }
+    
+    print('❌ No orders found for payment');
+    return null;
+    
+  } catch (e) {
+    print('❌ ERROR in _getOrderDataForPayment: $e');
+    print('Stack trace: ${e.toString()}');
+    return null;
   }
+}
 
   void _onTabTapped(int index) {
     setState(() => _currentIndex = index);
@@ -514,58 +684,49 @@ class DashboardContent extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-            // FIXED: Remove hardcoded task/proposal counts
-            // Show actual contract information or a placeholder
-            _buildContractInfoPlaceholder(context),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue[100]!),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.assignment_outlined, color: Colors.blue[700], size: 24),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Your Contracts',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.blue[900],
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'View and manage all your service agreements with freelancers. '
+                          'Contracts will appear here after you accept proposals.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.blue[700],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
     );
   }
-
-  Widget _buildContractInfoPlaceholder(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.blue[50],
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.blue[100]!),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.assignment_outlined, color: Colors.blue[700], size: 24),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Your Contracts',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.blue[900],
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'View and manage all your service agreements with freelancers. '
-                  'Contracts will appear here after you accept proposals.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.blue[700],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // REMOVED: _buildContractStatusChip method since it was using wrong data
-
 }
 
 class StatCard extends StatelessWidget {

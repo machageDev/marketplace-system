@@ -37,6 +37,7 @@ urlpatterns = [
     path('submissions/employer-submissions/', views.get_employer_submissions, name='employer_submissions'),
     path('submissions/<int:submission_id>/approve/', views.approve_submission, name='submission_approve'),
     path('submissions/<int:submission_id>/request-revision/', views.request_revision, name='request_revision'),
+    path('api/submissions-to-rate/', views.get_submissions_for_rating, name='submissions_to_rate'),
     
     # ============ PAYMENTS ============
     # CHOOSE ONE: Either use existing payment endpoints OR new ones
@@ -49,7 +50,7 @@ urlpatterns = [
     #path('api/transactions/history/', views.transaction_history, name='api_transaction_history'),
     path('api/orders/pending-payment/', views.pending_payment_orders, name='pending_payment_orders'),
     path('api/payment/transactions/', views.employer_transactions, name='employer_transactions'),
-    
+     path('api/orders/<uuid:order_id>/verify-payment/', views.verify_order_payment, name='verify-order-payment'),
     # OPTION B: Use new payment endpoints (if you implemented them) - REMOVE ABOVE IF USING THESE
     # path('api/payment/order/<str:order_id>/', views.order_detail, name='order_detail'),
     # path('api/orders/pending-payment/', views.pending_payment_orders, name='pending_payment_orders'),
@@ -61,7 +62,7 @@ urlpatterns = [
     
     # ============ RATINGS ============
     path('contracts/rateable/', views.get_rateable_contracts, name='rateable-contracts'),
-    path('ratings/', views.create_rating, name='rating-create'),
+    path('ratings/', views.create_employer_rating, name='rating-create'),
     path('users/ratings/', views.get_user_ratings, name='user_ratings'),
     path('tasks/ratings/', views.get_task_ratings, name='task_ratings'),
     path('api/employers/<int:employer_id>/ratings/', views.employer_ratings, name='employer-ratings'),

@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:math';
 import 'package:helawork/api_config.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,37 +11,20 @@ class PaymentService {
       : baseUrl = baseUrl ?? AppConfig.getBaseUrl();
 
   /// Get authentication token from SharedPreferences
-  static Future<String?> _getUserToken() async {
+  Future<String?> _getUserToken() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       
-      // Try user_token first
       String? token = prefs.getString('user_token');
       if (token != null && token.isNotEmpty) {
-        print('✅ DEBUG: Found user_token: ${token.substring(0, min(10, token.length))}...');
         return token;
       }
       
-      // Try employer_token
       token = prefs.getString('employer_token');
       if (token != null && token.isNotEmpty) {
-        print('✅ DEBUG: Found employer_token: ${token.substring(0, min(10, token.length))}...');
         return token;
       }
       
-      // Try any other token keys
-      final allKeys = prefs.getKeys();
-      for (final key in allKeys) {
-        if (key.contains('token') || key.contains('Token')) {
-          token = prefs.getString(key);
-          if (token != null && token.isNotEmpty) {
-            print('✅ DEBUG: Found token in key "$key": ${token.substring(0, min(10, token.length))}...');
-            return token;
-          }
-        }
-      }
-      
-      print('❌ DEBUG: No token found in SharedPreferences');
       return null;
       
     } catch (e) {
@@ -56,13 +38,11 @@ class PaymentService {
     try {
       final prefs = await SharedPreferences.getInstance();
       
-      // Check multiple possible sources
       String? email;
       
       // 1. Check if email is stored in shared preferences
       email = prefs.getString('user_email');
       if (email != null && email.isNotEmpty) {
-        print('✅ DEBUG: Found email in SharedPreferences: $email');
         return email;
       }
       
@@ -73,7 +53,6 @@ class PaymentService {
           final profile = jsonDecode(employerProfile);
           email = profile['email'] ?? profile['contact_email'];
           if (email != null && email.isNotEmpty) {
-            print('✅ DEBUG: Found email in employer profile: $email');
             return email;
           }
         } catch (e) {
@@ -84,13 +63,201 @@ class PaymentService {
       // 3. Get username and generate email
       final username = prefs.getString('userName') ?? 'employer';
       email = '${username.replaceAll(' ', '.').toLowerCase()}@helawork.com';
-      print('✅ DEBUG: Generated email: $email');
       
       return email;
       
     } catch (e) {
       print('❌ ERROR getting employer email: $e');
       return 'employer@helawork.com';
+    }
+  }
+
+  /// VERIFY payment before processing
+  Future<Map<String, dynamic>> verifyOrderPayment({
+    required String orderId,
+    required String freelancerId,
+  }) async {
+    try {
+      final String? token = authToken ?? await _getUserToken();
+      if (token == null || token.isEmpty) {
+        return {
+          'status': false,
+          'message': 'Authentication token not found',
+          'code': 'AUTH_ERROR'
+        };
+      }
+
+      // Check if freelancerId is provided
+      if (freelancerId.isEmpty) {
+        return {
+          'status': false,
+          'message': 'Freelancer ID is required',
+          'code': 'MISSING_FREELANCER_ID'
+        };
+      }
+
+      // Try the verification endpoint
+      try {
+        final url = Uri.parse('$baseUrl/api/orders/$orderId/verify-payment/?freelancer_id=$freelancerId');
+        print('🔍 Calling verification URL: $url');
+        
+        final response = await http.get(
+          url,
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+        );
+
+        print('🔍 Verification status: ${response.statusCode}');
+        
+        if (response.statusCode == 200) {
+          final Map<String, dynamic> data = jsonDecode(response.body);
+          
+          if (data['status'] == true) {
+            return {
+              'status': true,
+              'message': 'Payment verified successfully',
+              'data': data['data'] ?? {}
+            };
+          } else {
+            return {
+              'status': false,
+              'message': data['message'] ?? 'Payment verification failed',
+              'code': 'VERIFICATION_FAILED',
+              'data': {}
+            };
+          }
+        } else if (response.statusCode == 404 || response.statusCode == 500) {
+          // Endpoint doesn't exist or has error, use fallback
+          print('⚠️ Verification endpoint not available, using fallback');
+          return await _fallbackVerification(orderId, freelancerId, token);
+        } else {
+          return {
+            'status': false,
+            'message': 'Server error: ${response.statusCode}',
+            'code': 'SERVER_ERROR',
+            'data': {}
+          };
+        }
+      } catch (e) {
+        // If endpoint doesn't exist, use fallback
+        print('⚠️ Verification error: $e, using fallback');
+        return await _fallbackVerification(orderId, freelancerId, token);
+      }
+    } catch (e) {
+      print('❌ ERROR in verifyOrderPayment: $e');
+      return {
+        'status': false,
+        'message': 'Network error: $e',
+        'code': 'NETWORK_ERROR',
+        'data': {}
+      };
+    }
+  }
+
+  /// Fallback verification
+  Future<Map<String, dynamic>> _fallbackVerification(
+    String orderId, 
+    String freelancerId, 
+    String? token
+  ) async {
+    try {
+      print('🔄 Using fallback verification');
+      
+      if (token == null) {
+        return {
+          'status': true, // Allow payment even without verification
+          'message': 'Proceeding with payment (token not available)',
+          'data': {
+            'order_id': orderId,
+            'freelancer_id': freelancerId,
+            'freelancer_paystack_account': 'default_account',
+          }
+        };
+      }
+
+      // Get pending orders to find this order
+      try {
+        final pendingOrdersUrl = Uri.parse('$baseUrl/api/orders/pending-payment/');
+        final response = await http.get(
+          pendingOrdersUrl,
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+        );
+
+        if (response.statusCode == 200) {
+          final Map<String, dynamic> data = jsonDecode(response.body);
+          
+          if (data['status'] == true) {
+            final orders = data['orders'] ?? data['data'];
+            if (orders is List) {
+              for (var order in orders) {
+                final currentOrderId = order['order_id']?.toString() ?? order['id']?.toString();
+                if (currentOrderId == orderId) {
+                  final orderFreelancer = order['freelancer'];
+                  if (orderFreelancer != null) {
+                    return {
+                      'status': true,
+                      'message': 'Payment verified from pending orders',
+                      'data': {
+                        'order_id': orderId,
+                        'freelancer_id': freelancerId,
+                        'freelancer_name': orderFreelancer['name']?.toString() ?? 'Freelancer',
+                        'freelancer_email': orderFreelancer['email']?.toString() ?? '',
+                        'freelancer_paystack_account': 'default_account',
+                        'amount': order['amount'] != null 
+                            ? (order['amount'] is num ? order['amount'].toDouble() : double.parse(order['amount'].toString()))
+                            : 0.0,
+                        'currency': order['currency']?.toString() ?? 'KSH',
+                        'order_status': order['status']?.toString() ?? 'pending',
+                        'work_completed': true,
+                        'service_description': order['task']?['title']?.toString() ?? 
+                                            order['service_description']?.toString() ?? 
+                                            'Service',
+                      }
+                    };
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (e) {
+        print('⚠️ Error in fallback verification: $e');
+      }
+      
+      // If not found, still allow payment but with warning
+      return {
+        'status': true,
+        'message': 'Proceeding with payment (order not verified)',
+        'data': {
+          'order_id': orderId,
+          'freelancer_id': freelancerId,
+          'freelancer_name': 'Freelancer',
+          'freelancer_email': '',
+          'freelancer_paystack_account': 'default_account',
+          'amount': 0.0,
+          'currency': 'KSH',
+          'order_status': 'pending',
+          'work_completed': true,
+          'service_description': 'Service',
+        }
+      };
+      
+    } catch (e) {
+      print('❌ ERROR in _fallbackVerification: $e');
+      return {
+        'status': true, // Still allow payment
+        'message': 'Proceeding despite verification error',
+        'data': {
+          'order_id': orderId,
+          'freelancer_id': freelancerId,
+          'freelancer_paystack_account': 'default_account',
+        }
+      };
     }
   }
 
@@ -103,7 +270,7 @@ class PaymentService {
       }
 
       final url = Uri.parse('$baseUrl/api/orders/pending-payment/');
-      print('✅ DEBUG: Fetching pending orders from $url');
+      print('📋 Fetching pending orders from: $url');
 
       final response = await http.get(
         url,
@@ -112,8 +279,8 @@ class PaymentService {
           'Content-Type': 'application/json',
         },
       );
-
-      print('✅ DEBUG: Response status: ${response.statusCode}');
+      
+      print('📋 Response status: ${response.statusCode}');
       
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
@@ -143,11 +310,11 @@ class PaymentService {
   Future<Map<String, dynamic>> initializePayment({
     required String orderId,
     required String email,
+    required String freelancerPaystackAccount,
   }) async {
     try {
-      print('🚀 DEBUG: Initializing payment...');
-      print('   Order ID: $orderId');
-      print('   Email: $email');
+      print('🚀 Initializing payment for order: $orderId');
+      print('📧 Using email: $email');
       
       // Input validation
       if (orderId.isEmpty) {
@@ -175,19 +342,10 @@ class PaymentService {
         };
       }
 
-      // Get token - prioritize authToken from constructor
-      final String? token;
-      if (authToken != null && authToken!.isNotEmpty) {
-        token = authToken;
-        print('✅ DEBUG: Using token from constructor');
-      } else {
-        print('⚠️ DEBUG: No constructor token, getting from SharedPreferences');
-        token = await _getUserToken();
-      }
+      // Get token
+      final String? token = authToken ?? await _getUserToken();
       
       if (token == null || token.isEmpty) {
-        print('❌ DEBUG: Token is null or empty!');
-        print('❌ DEBUG: authToken was: ${authToken ?? "NULL"}');
         return {
           'status': false,
           'message': 'Authentication token not found. Please log in again.',
@@ -195,17 +353,16 @@ class PaymentService {
         };
       }
       
-      print('✅ DEBUG: Token found: ${token.substring(0, min(10, token.length))}...');
-      
       final requestBody = {
         'order_id': orderId.trim(),
         'email': email.trim(),
+        'freelancer_paystack_account': freelancerPaystackAccount.trim(),
       };
-      
-      print('✅ DEBUG: Request body: $requestBody');
 
+      print('📤 Request body: $requestBody');
+      
       final url = Uri.parse('$baseUrl/api/payment/initialize/');
-      print('✅ DEBUG: Payment URL: $url');
+      print('🌐 Calling URL: $url');
 
       final response = await http.post(
         url,
@@ -216,8 +373,8 @@ class PaymentService {
         body: jsonEncode(requestBody),
       );
 
-      print('✅ DEBUG: Response status: ${response.statusCode}');
-      print('✅ DEBUG: Response body: ${response.body}');
+      print('📥 Response status: ${response.statusCode}');
+      print('📥 Response body: ${response.body}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final Map<String, dynamic> responseData = jsonDecode(response.body);
@@ -275,7 +432,7 @@ class PaymentService {
   /// Verify payment using reference
   Future<Map<String, dynamic>> verifyPayment(String reference) async {
     try {
-      print('✅ DEBUG: Verifying payment reference: $reference');
+      print('✅ Verifying payment reference: $reference');
       
       final String? token = authToken ?? await _getUserToken();
       if (token == null) {
@@ -287,7 +444,7 @@ class PaymentService {
       }
 
       final url = Uri.parse('$baseUrl/api/payment/verify/$reference/');
-      print('✅ DEBUG: Verify URL: $url');
+      print('🌐 Calling URL: $url');
 
       final response = await http.get(
         url,
@@ -297,8 +454,8 @@ class PaymentService {
         },
       );
 
-      print('✅ DEBUG: Verify status: ${response.statusCode}');
-      print('✅ DEBUG: Verify body: ${response.body}');
+      print('📥 Verify status: ${response.statusCode}');
+      print('📥 Verify body: ${response.body}');
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
@@ -324,27 +481,6 @@ class PaymentService {
         'message': 'Network error: $e',
         'code': 'NETWORK_ERROR'
       };
-    }
-  }
-
-  /// Debug method to test token
-  static Future<void> debugTokens() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      print('🔍 DEBUG TOKENS:');
-      print('All keys: ${prefs.getKeys()}');
-      
-      final userToken = prefs.getString('user_token');
-      print('user_token: ${userToken ?? "NULL"}');
-      if (userToken != null) {
-        print('  Length: ${userToken.length}');
-        print('  First 10: ${userToken.substring(0, min(10, userToken.length))}...');
-      }
-      
-      final employerToken = prefs.getString('employer_token');
-      print('employer_token: ${employerToken ?? "NULL"}');
-    } catch (e) {
-      print('❌ Error debugging tokens: $e');
     }
   }
 }

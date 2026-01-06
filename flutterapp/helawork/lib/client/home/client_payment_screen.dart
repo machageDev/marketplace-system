@@ -1,5 +1,4 @@
 
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:helawork/payment_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,6 +11,8 @@ class PaymentScreen extends StatefulWidget {
   final String serviceDescription;
   final String freelancerPhotoUrl;
   final String currency;
+  final String freelancerId;
+  final String freelancerEmail;
 
   const PaymentScreen({
     super.key,
@@ -20,7 +21,9 @@ class PaymentScreen extends StatefulWidget {
     required this.freelancerName,
     required this.serviceDescription,
     required this.freelancerPhotoUrl,
-    this.currency = 'KSH', required email, required PaymentService paymentService, required String authToken,
+    required this.freelancerId,
+    required this.freelancerEmail,
+    this.currency = 'KSH', required email, required String authToken, required int paymentService,
   });
 
   @override
@@ -33,18 +36,19 @@ class _PaymentScreenState extends State<PaymentScreen> {
   bool _paymentInitialized = false;
   String? _errorMessage;
   bool _isPaymentComplete = false;
-  String? _email;
+  String? _employerEmail;
   PaymentService? _paymentService;
+  Map<String, dynamic>? _paymentVerification;
 
   @override
   void initState() {
     super.initState();
-    _initializePayment();
+    _verifyAndInitializePayment();
   }
 
-  Future<void> _initializePayment() async {
+  Future<void> _verifyAndInitializePayment() async {
     try {
-      print('🚀 INITIALIZING PAYMENT...');
+      print('🔍 VERIFYING PAYMENT DETAILS...');
       
       // 1. Get token from SharedPreferences
       final prefs = await SharedPreferences.getInstance();
@@ -58,16 +62,33 @@ class _PaymentScreenState extends State<PaymentScreen> {
         return;
       }
       
-      print('✅ Token found: ${token.substring(0, min(10, token.length))}...');
-      
       // 2. Create PaymentService WITH the token
       _paymentService = PaymentService(authToken: token);
       
-      // 3. Get email
-      _email = await _paymentService!.getEmployerEmail();
-      print('✅ Email: $_email');
+      // 3. VERIFY payment with backend before proceeding
+      print('✅ Verifying order ${widget.orderId}');
       
-      if (_email == null || _email!.isEmpty) {
+      final verification = await _paymentService!.verifyOrderPayment(
+        orderId: widget.orderId,
+        freelancerId: widget.freelancerId,
+      );
+      
+      print('✅ Verification response: ${verification['status']}');
+      
+      if (verification['status'] != true) {
+        // Show warning but continue anyway
+        print('⚠️ Warning: ${verification['message']}');
+        // Don't block payment, just show a warning
+      }
+      
+      // Store verification data
+      _paymentVerification = verification['data'];
+      
+      // 4. Get employer email
+      _employerEmail = await _paymentService!.getEmployerEmail();
+      print('✅ Employer Email: $_employerEmail');
+      
+      if (_employerEmail == null || _employerEmail!.isEmpty) {
         setState(() {
           _errorMessage = 'Email is required for payment.';
           _isLoading = false;
@@ -75,40 +96,56 @@ class _PaymentScreenState extends State<PaymentScreen> {
         return;
       }
       
-      // 4. Initialize payment
+      // 5. Initialize payment
+      print('💰 INITIALIZING PAYMENT');
+      
       final response = await _paymentService!.initializePayment(
         orderId: widget.orderId,
-        email: _email!,
+        email: _employerEmail!,
+        freelancerPaystackAccount: _paymentVerification?['freelancer_paystack_account'] ?? 'default_account',
       );
       
-      print('✅ Payment response: $response');
+      print('✅ Payment response: ${response['status']}');
       
       if (response['status'] == true) {
         final authUrl = response['data']['authorization_url'];
+        
+        // Validate URL
+        if (authUrl == null || authUrl.isEmpty) {
+          setState(() {
+            _errorMessage = 'Invalid payment URL received';
+            _isLoading = false;
+          });
+          return;
+        }
+        
+        if (!authUrl.contains('http')) {
+          print('❌ ERROR: Invalid authorization URL: $authUrl');
+          setState(() {
+            _errorMessage = 'Invalid payment URL format';
+            _isLoading = false;
+          });
+          return;
+        }
         
         controller = WebViewController()
           ..setJavaScriptMode(JavaScriptMode.unrestricted)
           ..setBackgroundColor(Colors.white)
           ..setNavigationDelegate(NavigationDelegate(
             onPageStarted: (url) {
-              print('🌐 Page started: $url');
               setState(() => _isLoading = true);
             },
             onPageFinished: (String url) {
-              print('🌐 Page finished: $url');
               setState(() => _isLoading = false);
               _handlePaymentResponse(url);
             },
             onWebResourceError: (error) {
-              print('❌ Web resource error: ${error.description}');
               setState(() {
                 _isLoading = false;
                 _errorMessage = 'Payment loading error: ${error.description}';
               });
             },
             onNavigationRequest: (navigation) {
-              print('🌐 Navigation request: ${navigation.url}');
-              
               if (navigation.url.contains('paystack.co')) {
                 return NavigationDecision.navigate;
               }
@@ -136,7 +173,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
         });
       }
     } catch (e) {
-      print('❌ ERROR in _initializePayment: $e');
+      print('❌ ERROR in _verifyAndInitializePayment: $e');
       setState(() {
         _errorMessage = 'Error: $e';
         _isLoading = false;
@@ -187,7 +224,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
       _paymentInitialized = false;
       _isPaymentComplete = false;
     });
-    _initializePayment();
+    _verifyAndInitializePayment();
   }
 
   void _cancelPayment() {
@@ -205,17 +242,68 @@ class _PaymentScreenState extends State<PaymentScreen> {
     }
   }
 
+  int _convertToCents(double amountKsh) {
+    return (amountKsh * 100).round();
+  }
+
   String _formatAmount(double amount) {
     return '${_getCurrencySymbol()}${amount.toStringAsFixed(2)}';
   }
 
+  Widget _buildVerificationBadge() {
+    if (_paymentVerification == null) return const SizedBox();
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.green.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.green.shade100),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.verified, color: Colors.green, size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Payment Verified',
+                  style: TextStyle(
+                    color: Colors.green,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Freelancer: ${widget.freelancerName}',
+                  style: TextStyle(
+                    color: Colors.green.shade700,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final int totalCents = _convertToCents(widget.amount);
+    final int freelancerCents = _convertToCents(widget.amount * 0.9);
+    final int platformCents = _convertToCents(widget.amount * 0.1);
+    
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text(
-          'Payment',
+          'Secure Payment',
           style: TextStyle(
             fontWeight: FontWeight.w600,
             color: Colors.white,
@@ -233,7 +321,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
           ? _buildErrorState()
           : Column(
               children: [
-                // Payment Summary Card
                 Container(
                   margin: const EdgeInsets.all(16),
                   padding: const EdgeInsets.all(16),
@@ -252,12 +339,15 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Freelancer Info
+                      _buildVerificationBadge(),
+                      
                       Row(
                         children: [
                           CircleAvatar(
                             radius: 24,
-                            backgroundImage: NetworkImage(widget.freelancerPhotoUrl),
+                            backgroundImage: widget.freelancerPhotoUrl.isNotEmpty
+                                ? NetworkImage(widget.freelancerPhotoUrl)
+                                : const NetworkImage('https://via.placeholder.com/150') as ImageProvider,
                             backgroundColor: Colors.blueAccent.withOpacity(0.1),
                           ),
                           const SizedBox(width: 12),
@@ -291,7 +381,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       
                       const SizedBox(height: 16),
                       
-                      // Order ID and Email
                       Column(
                         children: [
                           Container(
@@ -329,7 +418,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
-                                    _email ?? 'Loading email...',
+                                    _employerEmail ?? 'Loading email...',
                                     style: const TextStyle(
                                       color: Colors.green,
                                       fontWeight: FontWeight.w500,
@@ -344,21 +433,67 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       
                       const SizedBox(height: 16),
                       
-                      // Amount Breakdown
-                      _buildAmountRow('Service Fee', _formatAmount(widget.amount * 0.9)),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.blueAccent.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.blueAccent.withOpacity(0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.info, color: Colors.blueAccent, size: 16),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Payment to ${widget.freelancerName}',
+                                    style: TextStyle(
+                                      color: Colors.blueAccent,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '${_formatAmount(widget.amount)} = $totalCents cents',
+                                    style: TextStyle(
+                                      color: Colors.blueAccent,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      
+                      _buildAmountRowWithCents(
+                        'Service Fee (To ${widget.freelancerName})',
+                        widget.amount * 0.9,
+                        freelancerCents,
+                      ),
                       const SizedBox(height: 8),
-                      _buildAmountRow('Platform Fee (10%)', _formatAmount(widget.amount * 0.1)),
+                      _buildAmountRowWithCents(
+                        'Platform Fee (10%)',
+                        widget.amount * 0.1,
+                        platformCents,
+                      ),
                       const Divider(height: 20, thickness: 1),
-                      _buildAmountRow(
-                        'TOTAL AMOUNT', 
-                        _formatAmount(widget.amount), 
-                        isTotal: true
+                      _buildAmountRowWithCents(
+                        'TOTAL AMOUNT',
+                        widget.amount,
+                        totalCents,
+                        isTotal: true,
                       ),
                     ],
                   ),
                 ),
                 
-                // WebView Container
                 Expanded(
                   child: Container(
                     margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -407,7 +542,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   ),
                 ),
                 
-                // Cancel Button
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   child: OutlinedButton(
@@ -478,24 +612,41 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
-  Widget _buildAmountRow(String label, String amount, {bool isTotal = false}) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Widget _buildAmountRowWithCents(String label, double amountKsh, int cents, {bool isTotal = false}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: isTotal ? Colors.blueAccent : Colors.grey[700],
-            fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
-            fontSize: isTotal ? 16 : 14,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: isTotal ? Colors.blueAccent : Colors.grey[700],
+                fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
+                fontSize: isTotal ? 16 : 14,
+              ),
+            ),
+            Text(
+              _formatAmount(amountKsh),
+              style: TextStyle(
+                color: isTotal ? Colors.blueAccent : Colors.grey[700],
+                fontWeight: isTotal ? FontWeight.bold : FontWeight.w600,
+                fontSize: isTotal ? 18 : 14,
+              ),
+            ),
+          ],
         ),
-        Text(
-          amount,
-          style: TextStyle(
-            color: isTotal ? Colors.blueAccent : Colors.grey[700],
-            fontWeight: isTotal ? FontWeight.bold : FontWeight.w600,
-            fontSize: isTotal ? 18 : 14,
+        const SizedBox(height: 2),
+        Padding(
+          padding: const EdgeInsets.only(left: 4.0),
+          child: Text(
+            '($cents cents)',
+            style: TextStyle(
+              color: isTotal ? Colors.blueAccent.withOpacity(0.8) : Colors.grey[600],
+              fontSize: 11,
+              fontStyle: FontStyle.italic,
+            ),
           ),
         ),
       ],

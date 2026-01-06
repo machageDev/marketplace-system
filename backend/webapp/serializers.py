@@ -978,13 +978,14 @@ class SubmissionCreateSerializer(serializers.ModelSerializer):
         
         # Get task, freelancer, and contract from context
         task = self.context.get('task')
-        freelancer = self.context.get('freelancer')  # This is User object
+        freelancer = self.context.get('freelancer')
         contract = self.context.get('contract')
+        is_resubmission = self.context.get('is_resubmission', False)
         
         print(f"Context - Task ID: {task.task_id if task else None}")
         print(f"Context - Freelancer User ID: {freelancer.user_id if freelancer else None}")
-        print(f"Context - Freelancer Name: {freelancer.name if freelancer else None}")
         print(f"Context - Contract ID: {contract.contract_id if contract else None}")
+        print(f"Context - Is Resubmission: {is_resubmission}")
         
         if not task:
             raise serializers.ValidationError({"task": "Task is required"})
@@ -996,17 +997,36 @@ class SubmissionCreateSerializer(serializers.ModelSerializer):
         try:
             print(f"Creating submission with task={task.task_id}, freelancer={freelancer.user_id}, contract={contract.contract_id}")
             
+            # Determine submission status
+            if is_resubmission:
+                status = 'resubmitted'
+                print(f"Setting status to 'resubmitted' for revision")
+            else:
+                status = 'submitted'
+                print(f"Setting status to 'submitted' for new submission")
+            
             # Create submission
             submission = Submission.objects.create(
                 task=task,
-                freelancer=freelancer,  # User object
+                freelancer=freelancer,
                 contract=contract,
+                status=status,  # Set the status explicitly
                 **validated_data
             )
             
             print(f"✓ Submission created: ID={submission.submission_id}")
             print(f"✓ Submission status: {submission.status}")
             print(f"✓ Submission submitted_at: {submission.submitted_at}")
+            
+            # ✅ CRITICAL: Update Task status to 'submitted'
+            # This is what makes it show up in the employer's rating UI
+            if not is_resubmission or task.status != 'submitted':
+                print(f"Updating Task {task.task_id} status from '{task.status}' to 'submitted'")
+                task.status = 'submitted'
+                task.save()
+                print(f"✓ Task status updated to 'submitted'")
+            else:
+                print(f"Task already in 'submitted' status, no update needed")
             
             return submission
             
@@ -1079,6 +1099,89 @@ class RatingSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("No contract found for this task")
         
         return data
+class EmployerRatingSerializer(serializers.ModelSerializer):
+    employer_name = serializers.CharField(source='rater.name', read_only=True)
+    freelancer_name = serializers.CharField(source='rated_user.name', read_only=True)
+    task_title = serializers.CharField(source='task.title', read_only=True)
+    contract = serializers.PrimaryKeyRelatedField(
+        queryset=Contract.objects.all(), 
+        required=True
+    )
+    
+    class Meta:
+        model = Rating
+        fields = [
+            'rating_id', 'task', 'contract', 'submission', 'task_title',
+            'rater', 'employer_name', 'rated_user', 'freelancer_name',
+            'score', 'review', 'created_at', 'rating_type'
+        ]
+        read_only_fields = ['rating_id', 'created_at', 'rating_type', 'submission']
+    
+    def validate(self, data):
+        request = self.context.get('request')
+        task = data.get('task')
+        rated_user = data.get('rated_user')
+        contract = data.get('contract')
+        
+        # Check required fields
+        if not task:
+            raise serializers.ValidationError({"task": "Task is required"})
+        
+        if not rated_user:
+            raise serializers.ValidationError({"rated_user": "Freelancer is required"})
+        
+        if not contract:
+            raise serializers.ValidationError({"contract": "Contract is required"})
+        
+        # Verify contract belongs to this task and freelancer
+        if contract.task != task or contract.freelancer != rated_user:
+            raise serializers.ValidationError({
+                "contract": "Contract does not match the task and freelancer"
+            })
+        
+        # Check if task belongs to the employer
+        if request and hasattr(request.user, 'employer_id'):
+            employer = request.user
+            if task.employer != employer:
+                raise serializers.ValidationError({
+                    "task": "You can only rate freelancers on your own tasks"
+                })
+        
+        # Check if task is in submitted status
+        if task.status != 'submitted':
+            raise serializers.ValidationError({
+                "task": f"Task must be in 'submitted' status. Current status: {task.status}"
+            })
+        
+        return data
+    
+    def create(self, validated_data):
+        # Get request context
+        request = self.context.get('request')
+        
+        # Get the submission for this task and freelancer
+        submission = Submission.objects.filter(
+            task=validated_data['task'],
+            freelancer=validated_data['rated_user']
+        ).first()
+        
+        if submission:
+            validated_data['submission'] = submission
+        
+        # Create the rating
+        rating = super().create(validated_data)
+        
+        # Update task status to 'completed'
+        task = rating.task
+        task.status = 'completed'
+        task.save()
+        
+        # Update submission status to 'accepted'
+        if submission:
+            submission.status = 'accepted'
+            submission.save()
+        
+        return rating
 class SimpleSubmissionSerializer(serializers.ModelSerializer):
    
     freelancer_name = serializers.CharField(source='freelancer.get_full_name', read_only=True)

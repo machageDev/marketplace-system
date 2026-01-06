@@ -24,7 +24,7 @@ from rest_framework import status
 from django.core.mail import send_mail
 from webapp.matcher import rank_jobs_for_freelancer
 from webapp.paystack_service import PaystackService
-from .models import Contract, Employer, EmployerProfile, EmployerToken, Notification, Order, PaymentTransaction, Proposal, Rating, Service, Submission, Task, TaskCompletion, Transaction, UserProfile, Wallet
+from .models import Contract, Employer, EmployerProfile, EmployerToken, Freelancer, Notification, Order, PaymentTransaction, Proposal, Rating, Service, Submission, Task, TaskCompletion, Transaction, UserProfile, Wallet
 from .models import  User
 from rest_framework.permissions import IsAuthenticated
 from django.views.decorators.csrf import csrf_exempt
@@ -42,6 +42,8 @@ from rest_framework import status
 from .authentication import EmployerTokenAuthentication, IsAuthenticated
 from .models import Task, Proposal
 from rest_framework.parsers import MultiPartParser, FormParser
+
+from webapp import models
 
 @csrf_exempt
 @api_view(['GET', 'POST', 'PUT'])
@@ -890,7 +892,7 @@ from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 from django_ratelimit.decorators import ratelimit
 from .models import Employer, EmployerProfile, EmployerToken
-from .serializers import EmployerProfileSerializer, EmployerProfileCreateSerializer, EmployerProfileUpdateSerializer, IDNumberUpdateSerializer
+from .serializers import EmployerProfileSerializer, EmployerProfileCreateSerializer, EmployerProfileUpdateSerializer, EmployerRatingSerializer, IDNumberUpdateSerializer
 
 # ============ HELPER FUNCTIONS ============
 def get_employer_from_token(request):
@@ -1221,6 +1223,7 @@ def task_completion_detail(request, pk):
     elif request.method == 'DELETE':
         completion.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)        
+
 @api_view(['POST'])
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -1231,14 +1234,10 @@ def create_submission(request):
     
     try:
         # Step 1: Basic validation
-        print(f"1. User object: {request.user}")
-        print(f"   User ID: {request.user.user_id}")
-        print(f"   User Name: {request.user.name}")
-        print(f"   Is authenticated: {request.user.is_authenticated}")
+        print(f"1. User: {request.user.user_id} ({request.user.name})")
         
         # Step 2: Check if user has UserProfile
         print(f"\n2. Checking UserProfile...")
-        
         if not hasattr(request.user, 'worker_profile'):
             print("✗ User does not have a UserProfile")
             return Response(
@@ -1261,22 +1260,11 @@ def create_submission(request):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Step 4: Import models
-        print(f"\n4. Importing models...")
-        try:
-            from django.apps import apps
-            Task = apps.get_model('webapp', 'Task')
-            Contract = apps.get_model('webapp', 'Contract')
-            print(f"   ✓ Successfully imported Task and Contract models")
-        except LookupError as e:
-            print(f"   ✗ Model import failed: {e}")
-            raise
-        
-        # Step 5: Get task
-        print(f"\n5. Getting task...")
+        # Step 4: Get task
+        print(f"\n4. Getting task...")
         try:
             task = Task.objects.get(task_id=task_id)
-            print(f"   ✓ Task found: ID={task.task_id}, Title='{task.title}'")
+            print(f"   ✓ Task found: ID={task.task_id}, Title='{task.title}', Status='{task.status}'")
         except Task.DoesNotExist:
             print(f"   ✗ Task not found")
             return Response(
@@ -1287,15 +1275,14 @@ def create_submission(request):
             print(f"   ✗ Error getting task: {type(e).__name__}: {e}")
             raise
         
-        # Step 6: ✅ STRICT contract check - NO auto-creation
-        print(f"\n6. Checking for ACTIVE contract...")
+        # Step 5: Check for ACTIVE contract
+        print(f"\n5. Checking for ACTIVE contract...")
         try:
-            # Only accept submissions with ACTIVE contracts
             contract = Contract.objects.get(
                 task=task,
                 freelancer=request.user,
-                is_active=True,  # Must be active
-                employer_accepted=True,  # Both must have accepted
+                is_active=True,
+                employer_accepted=True,
                 freelancer_accepted=True
             )
             print(f"   ✓ Active contract found: ID={contract.contract_id}")
@@ -1326,14 +1313,15 @@ def create_submission(request):
             print(f"   ✗ Error getting contract: {type(e).__name__}: {e}")
             raise
         
-        # Step 7: Check if submission already exists (prevent duplicates)
-        print(f"\n7. Checking for existing submissions...")
+        # Step 6: Check for existing submissions
+        print(f"\n6. Checking for existing submissions...")
         existing_submission = Submission.objects.filter(
             task=task,
             freelancer=request.user,
             contract=contract
         ).first()
         
+        is_resubmission = False
         if existing_submission:
             print(f"   ✓ Existing submission found: ID={existing_submission.submission_id}")
             print(f"   Status: {existing_submission.status}")
@@ -1349,76 +1337,56 @@ def create_submission(request):
                 }, status=status.HTTP_400_BAD_REQUEST)
             else:
                 print(f"   Allowing resubmission for revisions")
+                is_resubmission = True
         
-        # Step 8: Create serializer
-        print(f"\n8. Creating serializer...")
-        try:
-            from .serializers import SubmissionCreateSerializer
+        # Step 7: Create serializer inside atomic transaction
+        print(f"\n7. Creating serializer inside atomic transaction...")
+        
+        from .serializers import SubmissionCreateSerializer
+        
+        # ✅ CRITICAL: Use transaction.atomic to ensure both submission and task update succeed together
+        with transaction.atomic():
             serializer = SubmissionCreateSerializer(
                 data=request.data,
                 context={
                     'task': task,
                     'freelancer': request.user,
                     'contract': contract,
-                    'is_resubmission': bool(existing_submission)
+                    'is_resubmission': is_resubmission
                 }
             )
-            print(f"   ✓ Serializer created")
-        except Exception as e:
-            print(f"   ✗ Error creating serializer: {type(e).__name__}: {e}")
-            raise
-        
-        # Step 9: Validate serializer
-        print(f"\n9. Validating serializer...")
-        if serializer.is_valid():
-            print(f"   ✓ Serializer is valid")
-        else:
-            print(f"   ✗ Serializer validation failed")
-            print(f"   Errors: {serializer.errors}")
-            return Response({
-                "success": False,
-                "error": "Validation failed",
-                "errors": serializer.errors
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Step 10: Save submission
-        print(f"\n10. Saving submission...")
-        try:
-            submission = serializer.save()
-            print(f"   ✓ Submission saved: ID={submission.submission_id}")
-            print(f"   Status: {submission.status}")
             
-            # ✅ Optional: Send notification to employer
-            # try:
-            #     send_email_notification(
-            #         to_email=contract.employer.contact_email,
-            #         subject=f"New Submission for {task.title}",
-            #         message=f"{request.user.name} has submitted work for task: {task.title}"
-            #     )
-            #     print(f"   ✓ Notification sent to employer")
-            # except Exception as notify_error:
-            #     print(f"   ⚠ Notification failed: {notify_error}")
-            
-        except Exception as e:
-            print(f"   ✗ Error saving submission: {type(e).__name__}: {e}")
-            raise
-        
-        # Success!
-        print(f"\n{'='*60}")
-        print("SUCCESS: Submission created")
-        print(f"{'='*60}")
-        
-        return Response({
-            "success": True,
-            "message": "Submission created successfully",
-            "submission_id": submission.submission_id,
-            "status": submission.status,
-            "submitted_at": submission.submitted_at,
-            "task_id": task.task_id,
-            "task_title": task.title,
-            "contract_id": contract.contract_id,
-            "is_resubmission": bool(existing_submission)
-        }, status=status.HTTP_201_CREATED)
+            if serializer.is_valid():
+                # This will create submission AND update task status
+                submission = serializer.save()
+                
+                print(f"   ✓ Submission saved: ID={submission.submission_id}")
+                print(f"   ✓ Task {task.task_id} status updated to: {task.status}")
+                
+                # Double-check task status was updated
+                task.refresh_from_db()
+                print(f"   ✓ Confirmed Task status: {task.status}")
+                
+                return Response({
+                    "success": True,
+                    "message": "Submission created successfully. Task is now pending review.",
+                    "submission_id": submission.submission_id,
+                    "status": submission.status,
+                    "task_status": task.status,  # Include task status in response
+                    "submitted_at": submission.submitted_at,
+                    "task_id": task.task_id,
+                    "task_title": task.title,
+                    "contract_id": contract.contract_id,
+                    "is_resubmission": is_resubmission
+                }, status=status.HTTP_201_CREATED)
+            else:
+                print(f"   ✗ Serializer validation failed")
+                print(f"   Errors: {serializer.errors}")
+                return Response({
+                    "success": False,
+                    "error": "Validation failed",
+                    "errors": serializer.errors
+                }, status=status.HTTP_400_BAD_REQUEST)
         
     except Exception as e:
         print(f"\n{'='*60}")
@@ -1436,7 +1404,35 @@ def create_submission(request):
             "detail": str(e),
             "type": type(e).__name__
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+
+
+@api_view(['GET'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def get_submissions_for_rating(request):
+    try:
+        # Fetch submissions for tasks owned by the requesting user (employer)
+        # We filter by the task's owner and a status that needs attention
+        submissions = Submission.objects.filter(
+            task__employer=request.user, 
+            status__in=['submitted', 'resubmitted']
+        ).select_related('task', 'freelancer')
+
+        data = []
+        for sub in submissions:
+            data.append({
+                "submission_id": sub.submission_id,
+                "task_title": sub.task.title,
+                "freelancer_name": sub.freelancer.name,
+                "submitted_at": sub.submitted_at,
+                "content": sub.content, # Or the file URL
+                "status": sub.status
+            })
+
+        return Response(data, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)        
 @api_view(['GET'])
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -1553,39 +1549,178 @@ def request_revision(request, submission_id):
             {"error": str(e)}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
-
-# Rating Views
 @api_view(['POST'])
-@authentication_classes([CustomTokenAuthentication])
+@authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
-def create_rating(request):
+def create_employer_rating(request):
+    """
+    Create rating from employer to freelancer using rater_employer field
+    """
     try:
-        data = request.data.copy()
-        data['rater'] = request.user.id
+        print(f"\n=== CREATE EMPLOYER RATING ===")
+        print(f"Employer: {request.user.username}")
+        print(f"Request data: {request.data}")
         
-        # Validate that user doesn't rate themselves
-        if data.get('rated_user') == request.user.id:
+        # Get employer
+        employer = request.user
+        
+        # Get required data
+        data = request.data
+        task_id = data.get('task')
+        freelancer_id = data.get('rated_user')
+        score = data.get('score')
+        review = data.get('review', '')
+        
+        # Validate required fields
+        if not task_id:
             return Response(
-                {"error": "You cannot rate yourself"}, 
-                status=status.HTTP_400_BAD_REQUEST
+                {"success": False, "error": "task is required"}, 
+                status=400
             )
         
-        serializer = RatingSerializer(data=data)
-        if serializer.is_valid():
-            rating = serializer.save()
+        if not freelancer_id:
             return Response(
-                {"message": "Rating created successfully", "rating_id": rating.rating_id},
-                status=status.HTTP_201_CREATED
+                {"success": False, "error": "rated_user is required"}, 
+                status=400
             )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    except Exception as e:
-        return Response(
-            {"error": str(e)}, 
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        
+        if not score:
+            return Response(
+                {"success": False, "error": "score is required (1-5)"}, 
+                status=400
+            )
+        
+        # Convert score to integer
+        try:
+            score = int(score)
+            if score < 1 or score > 5:
+                return Response({
+                    "success": False,
+                    "error": "Score must be between 1 and 5"
+                }, status=400)
+        except ValueError:
+            return Response({
+                "success": False,
+                "error": "Score must be a valid number"
+            }, status=400)
+        
+        # Get task and verify ownership
+        try:
+            task = Task.objects.get(task_id=task_id, employer=employer)
+            print(f"Task found: {task.title}, status: {task.status}")
+        except Task.DoesNotExist:
+            return Response(
+                {"success": False, "error": "Task not found or you don't own this task"}, 
+                status=404
+            )
+        
+        # Check task status
+        if task.status != 'submitted':
+            return Response({
+                "success": False,
+                "error": f"Task must be in 'submitted' status. Current status: {task.status}",
+                "current_status": task.status
+            }, status=400)
+        
+        # Get freelancer
+        try:
+            freelancer = User.objects.get(user_id=freelancer_id)
+            print(f"Freelancer found: {freelancer.name}")
+        except User.DoesNotExist:
+            return Response(
+                {"success": False, "error": "Freelancer not found"}, 
+                status=404
+            )
+        
+        # Get contract for this task and freelancer
+        try:
+            contract = Contract.objects.get(
+                task=task,
+                freelancer=freelancer,
+                is_active=True
+            )
+            print(f"Contract found: {contract.contract_id}")
+        except Contract.DoesNotExist:
+            return Response({
+                "success": False,
+                "error": "No active contract found for this task and freelancer"
+            }, status=400)
+        
+        # Get submission if exists
+        submission = Submission.objects.filter(
+            task=task,
+            freelancer=freelancer
+        ).first()
+        
+        # Check if rating already exists (using rater_employer)
+        if Rating.objects.filter(
+            task=task, 
+            rater_employer=employer, 
+            rated_user=freelancer
+        ).exists():
+            return Response({
+                "success": False,
+                "error": "You have already rated this freelancer for this task"
+            }, status=400)
+        
+        # Create the rating - model will handle User creation
+        rating = Rating.objects.create(
+            task=task,
+            contract=contract,
+            submission=submission,
+            rater_employer=employer,  # Just pass the employer
+            rated_user=freelancer,
+            score=score,
+            review=review,
+            # Don't set rater or rating_type - they will be auto-set in save() method
         )
-
-# In your views.py - Update get_user_ratings view
+        
+        print(f"Rating created: {rating.rating_id}")
+        print(f"Auto-assigned rater: {rating.rater.name if rating.rater else 'None'}")
+        print(f"Rating type: {rating.rating_type}")
+        
+        # Update task status to 'completed'
+        task.status = 'completed'
+        task.save()
+        print(f"Task status updated to: {task.status}")
+        
+        # Update submission status to 'accepted' if exists
+        if submission:
+            submission.status = 'accepted'
+            submission.save()
+            print(f"Submission status updated to: {submission.status}")
+        
+        # Update contract status
+        contract.status = 'completed'
+        contract.is_completed = True
+        contract.completed_date = timezone.now()
+        contract.save()
+        print(f"Contract marked as completed")
+        
+        return Response({
+            "success": True,
+            "message": "Rating submitted successfully",
+            "rating_id": rating.rating_id,
+            "data": {
+                "task_status": task.status,
+                "submission_status": submission.status if submission else None,
+                "contract_status": contract.status,
+                "score": rating.score,
+                "review": rating.review,
+                "rating_type": rating.rating_type,
+                "freelancer_rated": freelancer.name
+            }
+        }, status=201)
+            
+    except Exception as e:
+        print(f"Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return Response({
+            "success": False,
+            "error": str(e)
+        }, status=500)
+                
 @api_view(['GET'])
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -1615,111 +1750,72 @@ from django.db.models import Q, Exists, OuterRef
 @permission_classes([IsAuthenticated])
 def get_rateable_contracts(request):
     """
-    Get contracts that are eligible for rating by the current user.
+    Fetches contracts where the freelancer has submitted work 
+    that the employer now needs to review and rate.
     """
     try:
         user = request.user
-        
-        # ============ DEBUG: Check what fields the user has ============
-        print(f"DEBUG: User object type: {type(user)}")
-        print(f"DEBUG: User object dir: {[attr for attr in dir(user) if not attr.startswith('_')][:20]}")
-        
-        # Try to get user identifier
-        user_pk = user.pk if hasattr(user, 'pk') else 'unknown'
-        
-        # Check common primary key field names
-        if hasattr(user, 'user_id'):
-            user_pk = user.user_id
-        elif hasattr(user, 'uid'):
-            user_pk = user.uid
-        elif hasattr(user, 'userId'):
-            user_pk = user.userId
-        
-        print(f"DEBUG: User PK/ID: {user_pk}")
-        
-        # ============ Get contracts where user is the FREELANCER ============
-        # Try different ways to filter by user
-        try:
-            # First try: user is freelancer directly
-            contracts = Contract.objects.filter(
-                freelancer=user,
-                is_completed=True,
-                is_paid=True
-            )
-        except Exception as e:
-            print(f"DEBUG: Direct filter failed: {e}")
-            # Try alternative: user might be referenced differently
-            contracts = Contract.objects.none()
-        
-        print(f"DEBUG: Found {contracts.count()} completed/paid contracts")
-        
-        # ============ Prepare response ============
-        rateable_contracts = []
+        print(f"DEBUG: Fetching rateable work for Employer: {user.name} (ID: {user.user_id})")
+
+        # 1. Get contracts where current user is the employer 
+        # AND there is a submission with status 'submitted' or 'resubmitted'
+        # We use distinct() to avoid duplicate contracts if there are multiple submissions
+        contracts = Contract.objects.filter(
+            task__employer=user,
+            is_active=True,
+            submissions__status__in=['submitted', 'resubmitted']
+        ).select_related('task', 'freelancer').distinct()
+
+        print(f"DEBUG: Found {contracts.count()} contracts with pending submissions")
+
+        rateable_list = []
         for contract in contracts:
             try:
-                # Get employer info
-                employer = contract.employer
-                employer_user = employer.user if hasattr(employer, 'user') else employer
-                
-                # Get employer identifier
-                employer_id = employer_user.pk if hasattr(employer_user, 'pk') else 'unknown'
-                employer_name = "Employer"
-                
-                if hasattr(employer_user, 'email'):
-                    employer_name = employer_user.email.split('@')[0]
-                elif hasattr(employer_user, 'name'):
-                    employer_name = employer_user.name
-                elif hasattr(employer_user, 'first_name'):
-                    employer_name = employer_user.first_name
-                
-                # Get task info
-                task_title = str(contract.task) if contract.task else "Task"
-                if hasattr(contract.task, 'title'):
-                    task_title = contract.task.title
-                
-                rateable_contracts.append({
+                # Get the latest submission for this contract
+                latest_submission = contract.submissions.filter(
+                    status__in=['submitted', 'resubmitted']
+                ).latest('submitted_at')
+
+                # Handle User/Profile naming logic safely
+                freelancer_user = contract.freelancer
+                freelancer_name = getattr(freelancer_user, 'name', 
+                                  getattr(freelancer_user, 'username', 'Freelancer'))
+
+                rateable_list.append({
                     'contract_id': contract.contract_id,
+                    'submission_id': latest_submission.submission_id,
                     'task': {
-                        'id': contract.task.id if hasattr(contract.task, 'id') else 0,
-                        'title': task_title,
-                        'budget': contract.task.budget if hasattr(contract.task, 'budget') else 0,
+                        'id': contract.task.task_id,
+                        'title': contract.task.title,
+                        'budget': str(contract.task.budget),
                     },
-                    'user_to_rate': {
-                        'id': employer_id,
-                        'username': employer_name,
-                        'email': getattr(employer_user, 'email', ''),
+                    'freelancer': {
+                        'id': freelancer_user.user_id,
+                        'name': freelancer_name,
                     },
-                    'current_user_role': 'freelancer',
-                    'other_party_role': 'employer',
-                    'completed_date': contract.completed_date.isoformat() if contract.completed_date else None,
-                    'payment_date': contract.payment_date.isoformat() if contract.payment_date else None,
+                    'submitted_work': {
+                        'content': latest_submission.content,
+                        'submitted_at': latest_submission.submitted_at.isoformat(),
+                    },
+                    'status': latest_submission.status,
                 })
-                
+
             except Exception as e:
-                print(f"DEBUG: Error processing contract {contract.contract_id}: {e}")
+                print(f"DEBUG: Skipping contract {contract.contract_id} due to error: {e}")
                 continue
-        
+
         return Response({
             'success': True,
-            'count': len(rateable_contracts),
-            'contracts': rateable_contracts,
-            'debug_info': {
-                'user_pk': user_pk,
-                'user_type': str(type(user)),
-                'contracts_found': contracts.count(),
-            }
-        })
-        
+            'count': len(rateable_list),
+            'tasks': rateable_list  # Named 'tasks' to match your Flutter expectations
+        }, status=status.HTTP_200_OK)
+
     except Exception as e:
-        import traceback
-        error_detail = traceback.format_exc()
-        print(f"ERROR in get_rateable_contracts: {error_detail}")
-        
+        print(f"FATAL ERROR in get_rateable_contracts: {str(e)}")
         return Response({
             'success': False,
-            'error': str(e),
-            'debug': 'Check user model and contract relationships'
-        }, status=500)
+            'error': "Internal server error occurred while fetching submissions."
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 @api_view(['GET'])
 
 def get_task_ratings(request, task_id):
@@ -1782,54 +1878,84 @@ def submission_stats(request):
             {"error": str(e)}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
-
 @api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def employer_rateable_tasks(request):
+    """
+    Get tasks that are ready for employer to rate/review.
+    """
     if request.method == 'GET':
         try:
+            print(f"\n=== GET RATEABLE TASKS (UPDATED) ===")
             
-            employer = Employer.objects.filter(contact_email=request.user.email).first()
+            employer = request.user
             
-            if not employer:
-                return JsonResponse([], safe=False)
-            
-            # Get completed tasks with assigned freelancers
-            completed_tasks = Task.objects.filter(
+            # Get SUBMITTED tasks
+            submitted_tasks = Task.objects.filter(
                 employer=employer,
                 assigned_user__isnull=False,
-                status='completed'
+                status='submitted'
             ).select_related('assigned_user')
-
+            
+            print(f"Found {submitted_tasks.count()} submitted tasks")
+            
             tasks_data = []
-            for task in completed_tasks:
-                # Check if already rated
+            for task in submitted_tasks:
+                print(f"\nProcessing task: {task.task_id} - {task.title}")
+                print(f"Assigned user: {task.assigned_user.name} (ID: {task.assigned_user.user_id})")
+                
+                # Check if already rated (using rater_employer)
                 already_rated = Rating.objects.filter(
                     task=task,
-                    rater=request.user,  # This is User model
-                    rated_user=task.assigned_user  # This is also User model
+                    rater_employer=employer,
+                    rated_user=task.assigned_user
                 ).exists()
                 
+                print(f"Already rated: {already_rated}")
+                
                 if not already_rated:
-                    tasks_data.append({
-                        'id': task.task_id,
-                        'title': task.title,
-                        'description': task.description,
-                        'freelancer': {
-                            'id': task.assigned_user.user_id,
-                            'username': task.assigned_user.name,
-                        }
-                    })
-
+                    # Get latest submission
+                    submission = Submission.objects.filter(
+                        task=task,
+                        freelancer=task.assigned_user,
+                        status__in=['submitted', 'resubmitted']
+                    ).order_by('-submitted_at').first()
+                    
+                    if submission:
+                        tasks_data.append({
+                            'id': task.task_id,
+                            'title': task.title,
+                            'description': task.description,
+                            'budget': str(task.budget) if task.budget else "0.00",
+                            'freelancer': {
+                                'id': task.assigned_user.user_id,
+                                'username': task.assigned_user.name,
+                                'email': task.assigned_user.email,
+                            },
+                            'submission_id': submission.submission_id,
+                            'submission_title': submission.title,
+                            'submission_status': submission.status,
+                            'submitted_at': submission.submitted_at.isoformat() if submission.submitted_at else None,
+                            'task_status': task.status,
+                            'can_rate': True
+                        })
+                        print(f"  ✓ Added to rateable list")
+                    else:
+                        print(f"  ⚠ No submission found")
+                else:
+                    print(f"  ✗ Already rated, skipping")
+            
+            print(f"\nReturning {len(tasks_data)} rateable tasks")
             return JsonResponse(tasks_data, safe=False)
             
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"Error in employer_rateable_tasks: {e}")
+            import traceback
+            traceback.print_exc()
             return JsonResponse([], safe=False)
     
-    return JsonResponse([], safe=False)      
-
+    return JsonResponse([], safe=False) 
 @api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -1904,211 +2030,146 @@ def payment_order_details(request, order_id):
             'status': False,
             'message': str(e)
         }, status=status.HTTP_400_BAD_REQUEST)
+
 @api_view(['POST'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def initialize_payment(request):
     """
     POST /api/payment/initialize/
-    Initialize Paystack payment for an order
+    Initialize Paystack SPLIT payment for an order.
     """
     try:
         print(f"\n{'='*60}")
-        print("🚀 INITIALIZE PAYMENT API CALLED!")
+        print("🚀 INITIALIZE SPLIT PAYMENT API")
         print(f"{'='*60}")
-        
-        # Print all request details
-        print(f"📋 Request Method: {request.method}")
-        print(f"📋 Request Path: {request.path}")
-        print(f"📋 Request Headers:")
-        for header, value in request.headers.items():
-            print(f"   {header}: {value}")
-        print(f"📋 Request Content-Type: {request.content_type}")
-        print(f"📋 Request Body: {request.body}")
-        print(f"📋 Request Data: {request.data}")
-        
-        # Get request data
+
         order_id = request.data.get('order_id')
-        email = request.data.get('email')
-        
-        print(f"\n📦 Request Data Analysis:")
-        print(f"   order_id: '{order_id}'")
-        print(f"   email: '{email}'")
-        print(f"   Type of order_id: {type(order_id)}")
-        print(f"   Type of email: {type(email)}")
-        
-        print(f"\n👤 Employer Info:")
-        print(f"   Username: '{request.user.username}'")
-        print(f"   Employer ID: {request.user.employer_id}")
-        
-        # Check employer fields
-        print(f"\n🔍 Checking Employer Fields:")
-        employer_fields = ['contact_email', 'email', 'contact_email_address', 'contactEmail']
-        for field in employer_fields:
-            if hasattr(request.user, field):
-                value = getattr(request.user, field)
-                print(f"   {field}: '{value}'")
-        
-        # Get employer from DB to be sure
-        from .models import Employer
-        try:
-            db_employer = Employer.objects.get(pk=request.user.employer_id)
-            print(f"\n💾 Database Employer Check:")
-            print(f"   DB contact_email: '{db_employer.contact_email}'")
-            print(f"   DB username: '{db_employer.username}'")
-            print(f"   DB employer_id: {db_employer.employer_id}")
-        except Employer.DoesNotExist:
-            print(f"\n❌ Employer not found in database!")
-        except Exception as e:
-            print(f"\n❌ Error getting employer from DB: {e}")
-        
-        # ✅ **AUTO-GENERATE EMAIL IF MISSING**
-        if not email:
-            print(f"\n📧 Email is empty in request, trying to get from employer...")
-            
-            # Try different sources for email
-            possible_emails = []
-            
-            # 1. From request.user (authenticated employer)
-            if hasattr(request.user, 'contact_email') and request.user.contact_email:
-                possible_emails.append(request.user.contact_email)
-                print(f"   Found in request.user.contact_email: '{request.user.contact_email}'")
-            
-            # 2. From database employer
-            try:
-                db_employer = Employer.objects.get(pk=request.user.employer_id)
-                if db_employer.contact_email:
-                    possible_emails.append(db_employer.contact_email)
-                    print(f"   Found in DB employer.contact_email: '{db_employer.contact_email}'")
-            except:
-                pass
-            
-            # 3. Generate from username
-            if not possible_emails:
-                generated_email = f"{request.user.username}@helawork.test"
-                possible_emails.append(generated_email)
-                print(f"   Generated email: '{generated_email}'")
-            
-            # Use the first available email
-            email = possible_emails[0]
-            print(f"   ✅ Selected email: '{email}'")
-        
-        print(f"\n🎯 Final Values:")
-        print(f"   order_id: '{order_id}'")
-        print(f"   email: '{email}'")
-        
-        # Validation
+        email = request.data.get('email', '')
+
         if not order_id:
-            print(f"\n❌ Validation failed: order_id is required")
             return Response({
                 'status': False,
-                'message': 'order_id is required'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        if not email:
-            print(f"\n❌ Validation failed: email is required")
+                'message': 'Order ID is required'
+            }, status=400)
+
+        # Get order and freelancer
+        order = get_object_or_404(Order, order_id=order_id, employer=request.user)
+        freelancer = order.freelancer
+        if not freelancer:
             return Response({
                 'status': False,
-                'message': 'email is required'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Get the order
-        print(f"\n🔍 Getting order from database...")
-        try:
-            order = Order.objects.get(order_id=order_id, employer=request.user)
-            print(f"   ✅ Order found: {order.order_id}")
-            print(f"   Order amount: {order.amount}")
-            print(f"   Order status: {order.status}")
-            print(f"   Order employer: {order.employer.username}")
-        except Order.DoesNotExist:
-            print(f"\n❌ Order not found: order_id='{order_id}', employer='{request.user.username}'")
+                'message': 'Order does not have a freelancer assigned'
+            }, status=400)
+
+        # Safely get freelancer info
+        freelancer_user = getattr(freelancer, 'user', None)
+        if not freelancer_user:
             return Response({
                 'status': False,
-                'message': 'Order not found'
-            }, status=status.HTTP_404_NOT_FOUND)
-        
-        # Check if order is already paid
-        if order.status == 'paid':
-            print(f"\n❌ Order already paid")
-            return Response({
-                'status': False,
-                'message': 'Order is already paid'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Generate reference
-        reference = f"HW_{order_id}_{secrets.token_hex(5)}"
-        print(f"\n🔢 Generated reference: {reference}")
-        
-        # Initialize Paystack payment
-        print(f"\n💳 Initializing Paystack payment...")
-        paystack_service = PaystackService()
-        
-        # Convert amount to cents
-        amount_in_cents = int(float(order.amount) * 100)
-        print(f"   Amount: {order.amount} KSH")
-        print(f"   Amount in cents: {amount_in_cents}")
-        print(f"   Email for Paystack: {email}")
-        print(f"   Currency: KES")
-        
-        # Initialize transaction
-        response = paystack_service.initialize_transaction(
-            email=email,
-            amount=amount_in_cents,
-            reference=reference,
-            callback_url=f"{settings.PAYSTACK_CALLBACK_URL}?reference={reference}",
-            currency="KES"
-        )
-        
-        print(f"\n🔄 Paystack Response:")
-        print(f"   Response status: {response.get('status')}")
-        print(f"   Response message: {response.get('message')}")
-        
-        if response and response.get('status'):
-            # Create transaction record
-            transaction = Transaction.objects.create(
-                order=order,
-                paystack_reference=reference,
-                amount=order.amount,
-                status='pending',
-                employer=request.user
-            )
-            
-            print(f"\n✅ SUCCESS: Payment initialized!")
-            print(f"   Authorization URL: {response['data']['authorization_url']}")
-            print(f"   Reference: {reference}")
-            print(f"   Transaction ID: {transaction.id}")
-            
-            return Response({
-                'status': True,
-                'message': 'Payment initialized successfully',
-                'data': {
-                    'authorization_url': response['data']['authorization_url'],
-                    'reference': reference,
-                    'order_id': str(order.order_id),
-                    'amount': float(order.amount),
-                    'email': email,
-                    'employer_name': request.user.username,
-                }
-            })
+                'message': 'Freelancer user info is missing'
+            }, status=400)
+
+        # Get Paystack subaccount for freelancer
+        paystack_subaccount = None
+        if hasattr(freelancer, 'profile') and getattr(freelancer.profile, 'paystack_subaccount_code', None):
+            paystack_subaccount = freelancer.profile.paystack_subaccount_code
         else:
-            error_msg = response.get('message', 'Failed to initialize payment')
-            print(f"\n❌ Paystack error: {error_msg}")
+            paystack_subaccount = getattr(freelancer, 'paystack_subaccount_code', None)
+
+        if not paystack_subaccount:
             return Response({
                 'status': False,
-                'message': error_msg
-            }, status=status.HTTP_400_BAD_REQUEST)
-            
+                'message': 'Freelancer does not have a Paystack subaccount configured'
+            }, status=400)
+
+        # Platform subaccount
+        platform_subaccount = getattr(settings, 'PAYSTACK_PLATFORM_SUBACCOUNT', None)
+        if not platform_subaccount:
+            return Response({
+                'status': False,
+                'message': 'Platform subaccount not configured in settings'
+            }, status=400)
+
+        # Generate email if missing
+        if not email:
+            email = f"{request.user.username.replace(' ', '.').lower()}@helawork.pay"
+
+        # Calculate split amounts in KES -> kobo
+        total_amount_kobo = int(order.amount * 100)
+        freelancer_share_kobo = int(total_amount_kobo * 0.90)
+        platform_share_kobo = total_amount_kobo - freelancer_share_kobo  # Ensure sum matches total
+
+        print(f"💰 Payment Breakdown: Total={total_amount_kobo} kobo, Freelancer={freelancer_share_kobo}, Platform={platform_share_kobo}")
+
+        # Prepare subaccounts
+        subaccounts = [
+            {'subaccount': paystack_subaccount, 'share': freelancer_share_kobo, 'bearer': 'subaccount'},
+            {'subaccount': platform_subaccount, 'share': platform_share_kobo, 'bearer': 'subaccount'},
+        ]
+
+        # Generate unique reference
+        reference = f"HW_{order_id}_{secrets.token_hex(5).upper()}"
+
+        # Initialize Paystack split transaction
+        paystack_service = PaystackService()
+        response = paystack_service.initialize_split_transaction(
+            email=email,
+            amount=total_amount_kobo,
+            reference=reference,
+            subaccounts=subaccounts,
+            callback_url=f"{settings.FRONTEND_URL}/payment/callback?reference={reference}"
+        )
+
+        if not response or not response.get('status'):
+            error_msg = response.get('message', 'Failed to initialize split payment') if response else 'No response from Paystack'
+            return Response({
+                'status': False,
+                'message': f'Paystack error: {error_msg}',
+                'paystack_response': response
+            }, status=400)
+
+        # Create PaymentTransaction safely
+        transaction = PaymentTransaction.objects.create(
+            order=order,  # Must be Order instance!
+            paystack_reference=reference,
+            amount=Decimal(order.amount),
+            platform_commission=Decimal(platform_share_kobo / 100),
+            freelancer_share=Decimal(freelancer_share_kobo / 100),
+            status='pending',
+            employer=request.user
+        )
+
+        print(f"✅ Transaction created: {transaction.id}")
+
+        return Response({
+            'status': True,
+            'message': 'Split payment initialized successfully',
+            'data': {
+                'authorization_url': response['data']['authorization_url'],
+                'reference': reference,
+                'access_code': response['data']['access_code'],
+                'order_id': str(order.order_id),
+                'amount': order.amount,
+                'email': email,
+                'split_details': {
+                    'total': order.amount,
+                    'freelancer_share': freelancer_share_kobo / 100,
+                    'platform_commission': platform_share_kobo / 100,
+                    'freelancer_percentage': 90,
+                    'platform_percentage': 10,
+                    'currency': 'KES'
+                }
+            }
+        })
+
     except Exception as e:
-        print(f"\n💥 UNEXPECTED ERROR:")
-        print(f"   Error type: {type(e).__name__}")
-        print(f"   Error message: {str(e)}")
         import traceback
-        print(f"   Traceback:\n{traceback.format_exc()}")
+        traceback.print_exc()
         return Response({
             'status': False,
             'message': str(e)
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+        }, status=500)
 @api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -2487,115 +2548,99 @@ def recommended_jobs(request):
             "message": f"Error fetching recommended jobs: {str(e)}",
             "recommended": []
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 @api_view(['POST'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def accept_proposal(request):
-    print(f"\n{'='*60}")
-    print("ACCEPT PROPOSAL - START")
-    print(f"{'='*60}")
-    
+    """
+    Accept a proposal, lock the task, create contract, and auto-create order.
+    Expects: {'proposal_id': int}
+    """
     try:
-        proposal = get_object_or_404(Proposal)
+        # 1️⃣ Validate employer
+        try:
+            employer = Employer.objects.get(pk=request.user.employer_id)
+        except Employer.DoesNotExist:
+            return Response({"success": False, "error": "Employer profile not found"}, status=400)
+
+        # 2️⃣ Get proposal
+        proposal_id = request.data.get('proposal_id')
+        if not proposal_id:
+            return Response({"success": False, "error": "proposal_id is required"}, status=400)
+
+        proposal = get_object_or_404(Proposal, pk=proposal_id)
         task = proposal.task
-        
-        print(f"Proposal ID: ")
-        print(f"Task: {task.title} (ID: {task.task_id})")
-        print(f"Freelancer: {proposal.freelancer.name} (ID: {proposal.freelancer.user_id})")
-        print(f"Employer making request: {request.user.username}")
 
-        
-        if request.user != task.employer:
-            print("✗ Unauthorized - only task employer can accept proposals")
-            return Response(
-                {"success": False, "error": "Unauthorized - only task employer can accept proposals"},
-                status=403
-            )
+        # 3️⃣ Ensure employer owns the task
+        if task.employer != employer:
+            return Response({"success": False, "error": "Unauthorized - only task employer can accept proposals"}, status=403)
 
-        # Prevent double acceptance
+        # 4️⃣ Prevent double acceptance
         if task.status != 'open' or task.assigned_user is not None:
-            print("✗ Task already assigned or not open")
-            return Response(
-                {"success": False, "error": "Task already assigned"},
-                status=400
-            )
+            return Response({"success": False, "error": "Task already assigned"}, status=400)
 
-        # Accept proposal
+        # 5️⃣ Accept proposal
         proposal.status = 'accepted'
         proposal.save()
-        print(f"✓ Proposal accepted")
 
-        # Reject all others
-        rejected_count = Proposal.objects.filter(task=task)\
-            .exclude(proposal_id=proposal.proposal_id)\
-            .update(status='rejected')
-        print(f"✓ Rejected {rejected_count} other proposals")
+        # 6️⃣ Reject all other proposals
+        Proposal.objects.filter(task=task).exclude(pk=proposal.pk).update(status='rejected')
 
-        # LOCK TASK
-        task.assigned_user = proposal.freelancer
+        # 7️⃣ Lock task
+        task.assigned_user = proposal.freelancer  # User instance
         task.status = 'in_progress'
         task.is_active = False
         task.save()
-        print(f"✓ Task locked and assigned to freelancer")
 
-        # Create ACTIVE contract
-        from django.utils import timezone
+        # 8️⃣ Ensure freelancer exists
+        freelancer_obj, _ = Freelancer.objects.get_or_create(user=proposal.freelancer)
+
+        # 9️⃣ Create contract
         contract = Contract.objects.create(
             task=task,
             freelancer=proposal.freelancer,
-            employer=task.employer,
+            employer=employer,
             employer_accepted=True,
             freelancer_accepted=True,
             is_active=True,
             start_date=timezone.now()
         )
-        print(f"✓ Contract created: ID={contract.contract_id}")
-        
-        # ✅ ✅ ✅ **AUTO-CREATE ORDER WHEN PROPOSAL IS ACCEPTED** ✅ ✅ ✅
-        from decimal import Decimal
-        import uuid
-        
-        # Get amount from proposal or task budget
-        amount = proposal.bid_amount if proposal.bid_amount else task.budget
-        if not amount:
-            amount = Decimal('0.00')
-        
-        # Check if order already exists (safety check)
+
+        # 🔟 Auto-create order
+        amount = proposal.bid_amount if proposal.bid_amount else task.budget or Decimal('0.00')
+
         existing_order = Order.objects.filter(
             task=task,
-            employer=request.user,
-            freelancer=proposal.freelancer,
+            employer=employer,
+            freelancer=freelancer_obj,
             status='pending'
         ).first()
-        
+
         if existing_order:
-            print(f"⚠ Order already exists: {existing_order.order_id}")
             order = existing_order
         else:
-            # Create NEW order for this contract
             order = Order.objects.create(
                 order_id=uuid.uuid4(),
-                employer=request.user,
+                employer=employer,
                 task=task,
-                freelancer=proposal.freelancer,
-                amount=Decimal(str(amount)),
+                freelancer=freelancer_obj,
+                amount=Decimal(amount),
                 currency='KSH',
                 status='pending'
             )
-            print(f"✅ Auto-created order: {order.order_id}")
-            print(f"   Amount: {order.amount}")
-            print(f"   Status: {order.status}")
-            
-            # Create notification for freelancer
+
+            # Notify freelancer
             Notification.objects.create(
                 user=proposal.freelancer,
                 title='Payment Order Created',
-                message=f'{request.user.username} has created a payment order for task: {task.title}',
+                message=f'{employer.username} has created a payment order for task: {task.title}',
                 notification_type='payment_received',
                 related_id=order.id
             )
-        
-        # Also notify freelancer about contract acceptance
+
+        # Notify freelancer about acceptance
         Notification.objects.create(
             user=proposal.freelancer,
             title='Proposal Accepted!',
@@ -2603,13 +2648,10 @@ def accept_proposal(request):
             notification_type='contract_accepted'
         )
 
-        print(f"\n{'='*60}")
-        print("SUCCESS: Proposal accepted, contract created, and order ready!")
-        print(f"{'='*60}")
-        
         return Response({
             "success": True,
-            "message": "Proposal accepted, contract created, and payment order is ready",
+            "message": "Proposal accepted, contract created, and payment order ready",
+            "proposal_id": proposal.proposal_id,
             "task_id": task.task_id,
             "task_title": task.title,
             "task_status": task.status,
@@ -2617,25 +2659,15 @@ def accept_proposal(request):
             "assigned_freelancer_name": proposal.freelancer.name,
             "contract_id": contract.contract_id,
             "contract_active": contract.is_active,
-            "order_created": True,
             "order_id": str(order.order_id),
             "order_amount": float(order.amount),
             "order_status": order.status,
-            "task_locked": True
         })
 
     except Exception as e:
-        print(f"\n{'='*60}")
-        print("ERROR in accept_proposal")
-        print(f"{'='*60}")
-        print(f"Error: {e}")
         import traceback
-        print(f"Traceback:\n{traceback.format_exc()}")
-        
-        return Response(
-            {"success": False, "error": "Internal server error", "detail": str(e)},
-            status=500
-        )
+        traceback.print_exc()
+        return Response({"success": False, "error": "Internal server error", "detail": str(e)}, status=500)
 
 @api_view(['POST'])
 @authentication_classes([CustomTokenAuthentication])
@@ -3050,95 +3082,86 @@ def create_order(request):
             'message': str(e)
         }, status=500)
 import secrets
-
-from webapp.paystack_service import PaystackService
-
 @api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def pending_payment_orders(request):
     """
-    GET /api/orders/pending-payment/
-    Get all pending payment orders for the authenticated employer
+    Get all pending orders for the authenticated employer,
+    including freelancer details safely.
     """
     try:
-        print(f"\n{'='*60}")
-        print("PENDING PAYMENT ORDERS API")
-        print(f"{'='*60}")
-        print(f"Employer: {request.user.username} (ID: {request.user.employer_id})")
-        
-        # Get pending orders for this employer
+        # If request.user is Employer instance, just filter directly
         orders = Order.objects.filter(
             employer=request.user,
             status='pending'
-        ).select_related('task', 'freelancer')
-        
-        print(f"Found {orders.count()} pending orders")
-        
+        )
+
         if not orders.exists():
             return Response({
                 'status': False,
                 'message': 'No pending payment orders found'
-            }, status=status.HTTP_200_OK)
-        
+            }, status=200)
+
         order_list = []
         for order in orders:
-            order_data = {
+            freelancer_data = None
+            if order.freelancer:
+                user = order.freelancer.user
+                freelancer_data = {
+                    'freelancer_id': order.freelancer.id,
+                    'name': user.name,
+                    'email': user.email,
+                }
+
+            order_list.append({
                 'order_id': str(order.order_id),
-                'id': str(order.order_id),  # For compatibility
+                'id': str(order.order_id),
                 'amount': float(order.amount),
                 'currency': order.currency,
                 'status': order.status,
                 'created_at': order.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-                'task': {
-                    'task_id': order.task.task_id,
-                    'title': order.task.title,
-                    'description': order.task.description,
-                } if order.task else None,
-                'freelancer': {
-                    'name': order.freelancer.name if order.freelancer else 'Unknown',
-                    'email': order.freelancer.email if order.freelancer else None,
-                } if order.freelancer else None
-            }
-            order_list.append(order_data)
-        
+                'task': None,  # Only add if Order has a task FK
+                'freelancer': freelancer_data
+            })
+
         return Response({
             'status': True,
             'orders': order_list,
             'count': len(order_list)
-        })
-        
+        }, status=200)
+
     except Exception as e:
-        print(f"Error: {str(e)}")
         import traceback
         traceback.print_exc()
-        return Response({
-            'status': False,
-            'message': str(e)
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({'status': False, 'message': str(e)}, status=500)
 
+
+# -----------------------------
+# ORDER DETAIL
+# -----------------------------
 @api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def order_detail(request, order_id):
     """
-    GET /api/payment/order/<str:order_id>/
-    Get order details by ID
+    Get a single order by ID for the authenticated employer.
     """
     try:
-        print(f"\n{'='*60}")
-        print("ORDER DETAIL API")
-        print(f"{'='*60}")
-        print(f"Order ID: {order_id}")
-        print(f"Employer: {request.user.username}")
-        
-        # Get the order
         order = get_object_or_404(Order, order_id=order_id, employer=request.user)
-        
-        # Get task and freelancer info
-        task = order.task
         freelancer = order.freelancer
-        
+        task = order.task
+
+        freelancer_data = None
+        if freelancer and freelancer.user:
+            user = freelancer.user
+            freelancer_data = {
+                'id': user.user_id,
+                'freelancer_id': user.user_id,
+                'name': user.name,
+                'email': user.email
+            }
+
         order_data = {
             'order_id': str(order.order_id),
             'id': str(order.order_id),
@@ -3150,36 +3173,24 @@ def order_detail(request, order_id):
                 'task_id': task.task_id,
                 'title': task.title,
                 'description': task.description,
-                'budget': float(task.budget) if task.budget else 0.0,
+                'budget': float(task.budget) if task and task.budget else 0.0,
             } if task else None,
-            'freelancer': {
-                'name': freelancer.name if freelancer else 'Unknown',
-                'email': freelancer.email if freelancer else None,
-                'user_id': freelancer.user_id if freelancer else None,
-            } if freelancer else None,
+            'freelancer': freelancer_data,
             'employer': {
                 'id': request.user.employer_id,
                 'username': request.user.username,
-                'email': request.user.contact_email,
+                'email': request.user.contact_email
             }
         }
-        
-        return Response({
-            'status': True,
-            'order': order_data
-        })
-        
+
+        return Response({'status': True, 'order': order_data}, status=200)
+
     except Order.DoesNotExist:
-        return Response({
-            'status': False,
-            'message': 'Order not found'
-        }, status=status.HTTP_404_NOT_FOUND)
+        return Response({'status': False, 'message': 'Order not found'}, status=404)
     except Exception as e:
-        print(f"Error: {str(e)}")
-        return Response({
-            'status': False,
-            'message': str(e)
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        import traceback
+        traceback.print_exc()
+        return Response({'status': False, 'message': str(e)}, status=500)
 
 @api_view(['POST'])
 @authentication_classes([EmployerTokenAuthentication])
@@ -3191,45 +3202,29 @@ def initialize_payment(request):
     """
     try:
         print(f"\n{'='*60}")
-        print("INITIALIZE PAYMENT API")
+        print("🚀 INITIALIZE PAYMENT API")
         print(f"{'='*60}")
         
         # Get request data
         order_id = request.data.get('order_id')
-        email = request.data.get('email')
+        email = request.data.get('email', '')
         
         print(f"Order ID: {order_id}")
         print(f"Email: {email}")
         print(f"Employer: {request.user.username}")
         
-        # Validation
-        if not order_id:
-            return Response({
-                'status': False,
-                'message': 'order_id is required'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        if not email:
-            return Response({
-                'status': False,
-                'message': 'email is required'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
         # Get the order
-        try:
-            order = Order.objects.get(order_id=order_id, employer=request.user)
-        except Order.DoesNotExist:
-            return Response({
-                'status': False,
-                'message': 'Order not found'
-            }, status=status.HTTP_404_NOT_FOUND)
+        order = get_object_or_404(Order, order_id=order_id, employer=request.user)
         
-        # Check if order is already paid
-        if order.status == 'paid':
-            return Response({
-                'status': False,
-                'message': 'Order is already paid'
-            }, status=status.HTTP_400_BAD_REQUEST)
+        # Generate email if empty
+        if not email:
+            email = f"{request.user.username.replace(' ', '.').lower()}@helawork.pay"
+            print(f"✅ Generated email: {email}")
+        
+        # Calculate amount in CENTS (not kobo!)
+        amount_ksh = float(order.amount)
+        amount_cents = int(amount_ksh * 100)  # Convert KSH to cents
+        print(f"💰 Amount: {amount_ksh} KSH = {amount_cents} cents")
         
         # Generate reference
         reference = f"HW_{order_id}_{secrets.token_hex(5)}"
@@ -3237,30 +3232,35 @@ def initialize_payment(request):
         # Initialize Paystack payment
         paystack_service = PaystackService()
         
-        # Convert amount to kobo (Paystack uses kobo for NGN)
-        amount_in_kobo = int(float(order.amount) * 100)
-        
-        # Initialize transaction
+        # For now, use regular transaction (not split)
         response = paystack_service.initialize_transaction(
             email=email,
-            amount=amount_in_kobo,
+            amount_cents=amount_cents,  # Pass in CENTS
             reference=reference,
-            callback_url=f"{settings.PAYSTACK_CALLBACK_URL}?reference={reference}"
+            callback_url=f"{settings.FRONTEND_URL}/payment/callback?reference={reference}",
+            currency="KES"
         )
+        
+        print(f"💰 Paystack response: {response}")
         
         if response and response.get('status'):
             # Create transaction record
-            transaction = Transaction.objects.create(
-                order=order,
-                paystack_reference=reference,
-                amount=order.amount,
-                status='pending',
-                employer=request.user
-            )
-            
-            print(f"✅ Payment initialized successfully")
-            print(f"Authorization URL: {response['data']['authorization_url']}")
-            print(f"Reference: {reference}")
+            try:
+                from .models import PaymentTransaction
+                transaction = PaymentTransaction.objects.create(
+                    order=order,
+                    paystack_reference=reference,
+                    amount=order.amount,
+                    amount_cents=amount_cents,  # Store cents too
+                    platform_commission=Decimal('0.00'),
+                    freelancer_share=order.amount,
+                    status='pending',
+                    employer=request.user
+                )
+                print(f"✅ PaymentTransaction created: {transaction.id}")
+                print(f"   Amount: {transaction.amount} KSH = {transaction.amount_cents} cents")
+            except Exception as e:
+                print(f"⚠️ Could not create PaymentTransaction: {e}")
             
             return Response({
                 'status': True,
@@ -3270,20 +3270,23 @@ def initialize_payment(request):
                     'reference': reference,
                     'access_code': response['data']['access_code'],
                     'order_id': str(order.order_id),
-                    'amount': float(order.amount),
-                    'email': email
+                    'amount_ksh': amount_ksh,
+                    'amount_cents': amount_cents,
+                    'email': email,
+                    'currency': 'KES'
                 }
             })
         else:
-            error_msg = response.get('message', 'Failed to initialize payment')
+            error_msg = response.get('message', 'Failed to initialize payment') if response else 'No response from Paystack'
             print(f"❌ Paystack error: {error_msg}")
             return Response({
                 'status': False,
-                'message': error_msg
+                'message': f'Payment failed: {error_msg}',
+                'paystack_response': response
             }, status=status.HTTP_400_BAD_REQUEST)
             
     except Exception as e:
-        print(f"Error: {str(e)}")
+        print(f"❌ Error in initialize_payment: {str(e)}")
         import traceback
         traceback.print_exc()
         return Response({
@@ -3291,6 +3294,80 @@ def initialize_payment(request):
             'message': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+@api_view(['GET'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def verify_order_payment(request, order_id):
+    """
+    Verify that an order is completed and the freelancer is correct.
+    """
+    try:
+        # Get the order
+        order = get_object_or_404(Order, order_id=order_id)
+
+        # Get freelancer_id from query params
+        freelancer_id = request.GET.get('freelancer_id')
+        if not freelancer_id:
+            return Response({
+                'status': False,
+                'message': 'Freelancer ID is required',
+                'code': 'MISSING_FREELANCER_ID'
+            }, status=400)
+
+        # Verify freelancer is assigned to this order
+        if not order.freelancer or str(order.freelancer.user.user_id) != freelancer_id:
+            return Response({
+                'status': False,
+                'message': 'Freelancer not assigned to this order',
+                'code': 'FREELANCER_MISMATCH'
+            }, status=400)
+
+        # Get freelancer profile safely
+        freelancer_user = order.freelancer.user
+        try:
+            freelancer_profile = UserProfile.objects.get(user=freelancer_user)
+        except UserProfile.DoesNotExist:
+            freelancer_profile = None
+
+        # Check if work is completed
+        if order.status != 'completed':
+            return Response({
+                'status': False,
+                'message': 'Work not completed yet',
+                'code': 'WORK_INCOMPLETE'
+            }, status=400)
+
+        return Response({
+            'status': True,
+            'message': 'Payment verified successfully',
+            'data': {
+                'order_id': str(order.order_id),
+                'freelancer_id': freelancer_user.user_id,
+                'freelancer_name': freelancer_user.name,
+                'freelancer_email': freelancer_user.email,
+                'freelancer_paystack_account': getattr(freelancer_profile, 'paystack_account_id', 'default_account') if freelancer_profile else 'default_account',
+                'amount': float(order.amount),
+                'currency': order.currency,
+                'order_status': order.status,
+                'work_completed': True,
+                'service_description': order.task.title if order.task else 'N/A',
+            }
+        })
+
+    except Order.DoesNotExist:
+        return Response({
+            'status': False,
+            'message': 'Order not found',
+            'code': 'ORDER_NOT_FOUND'
+        }, status=404)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return Response({
+            'status': False,
+            'message': str(e),
+            'code': 'SERVER_ERROR'
+        }, status=500)   
 @api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -3423,76 +3500,49 @@ def payment_callback(request):
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def employer_transactions(request):
-    """
-    GET /api/payment/transactions/
-    Get payment transactions for the employer via PaymentTransaction model
-    """
     try:
-        print(f"\n{'='*60}")
-        print("EMPLOYER PAYMENT TRANSACTIONS")
-        print(f"{'='*60}")
-        print(f"Employer: {request.user.username}")
-        
-        # Get PaymentTransaction records via Order
-        # PaymentTransaction -> Order -> Employer
-        payment_transactions = PaymentTransaction.objects.filter(
-            order__employer=request.user  # Go through Order to get Employer
-        ).select_related('order', 'order__task', 'order__freelancer').order_by('-created_at')
-        
-        print(f"Found {payment_transactions.count()} payment transactions")
-        
-        transactions_data = []
-        for pt in payment_transactions:
-            transaction_info = {
-                'id': pt.id,
-                'paystack_reference': pt.paystack_reference,
-                'amount': float(pt.amount),
-                'platform_commission': float(pt.platform_commission),
-                'freelancer_share': float(pt.freelancer_share),
-                'status': pt.status,
-                'created_at': pt.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+        employer = request.user  # Employer instance
+
+        transactions = (
+            PaymentTransaction.objects
+            .filter(order__employer=employer)
+            .select_related('order')
+            .order_by('-created_at')
+        )
+
+        data = []
+        for tx in transactions:
+            order = tx.order
+            data.append({
+                'transaction_id': tx.id,
+                'reference': tx.paystack_reference,
+                'amount': float(tx.amount),
+                'platform_commission': float(tx.platform_commission),
+                'freelancer_share': float(tx.freelancer_share),
+                'status': tx.status,
+                'created_at': tx.created_at.strftime('%Y-%m-%d %H:%M:%S'),
                 'order': {
-                    'order_id': str(pt.order.order_id),
-                    'amount': float(pt.order.amount),
-                    'status': pt.order.status,
-                } if pt.order else None,
-                'task': {
-                    'title': pt.order.task.title if pt.order and pt.order.task else 'Unknown',
-                } if pt.order and pt.order.task else None
-            }
-            transactions_data.append(transaction_info)
-        
-        # If no PaymentTransaction records, check if we have Orders
-        if not transactions_data:
-            orders = Order.objects.filter(employer=request.user)
-            print(f"Found {orders.count()} orders (but no PaymentTransaction records)")
-            
-            # Return orders as placeholder
-            for order in orders:
-                transactions_data.append({
-                    'id': str(order.order_id),
-                    'type': 'order',
+                    'order_id': str(order.order_id),
                     'amount': float(order.amount),
                     'status': order.status,
-                    'created_at': order.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-                    'note': 'Payment transaction not yet created'
-                })
-        
+                }
+            })
+
         return Response({
             'status': True,
-            'transactions': transactions_data,
-            'count': len(transactions_data),
-            'employer_id': request.user.employer_id
+            'count': len(data),
+            'transactions': data
         })
-        
+
     except Exception as e:
-        print(f"Error: {str(e)}")
         import traceback
         traceback.print_exc()
         return Response({
             'status': False,
             'message': str(e)
-        }, status=500) 
+        }, status=500)
+
+    
 @api_view(['GET'])
 def payment_status(request, order_id):
     """
