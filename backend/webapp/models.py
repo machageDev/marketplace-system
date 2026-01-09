@@ -390,10 +390,7 @@ class Contract(models.Model):
         self.is_paid = True
         self.payment_date = timezone.now()
         self.save()
-# models.py
 
-# models.py - Update Transaction model
-# models.py - Add these models
 
 class Transaction(models.Model):
     TRANSACTION_TYPES = [

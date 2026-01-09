@@ -1355,10 +1355,7 @@ def create_employer_rating(request):
         print(f"Employer: {request.user.username}")
         print(f"Request data: {request.data}")
         
-        # Get employer
         employer = request.user
-        
-        # Get required data
         data = request.data
         task_id = data.get('task')
         freelancer_id = data.get('rated_user')
@@ -1367,52 +1364,33 @@ def create_employer_rating(request):
         
         # Validate required fields
         if not task_id:
-            return Response(
-                {"success": False, "error": "task is required"}, 
-                status=400
-            )
-        
+            return Response({"success": False, "error": "task is required"}, status=400)
         if not freelancer_id:
-            return Response(
-                {"success": False, "error": "rated_user is required"}, 
-                status=400
-            )
-        
+            return Response({"success": False, "error": "rated_user is required"}, status=400)
         if not score:
-            return Response(
-                {"success": False, "error": "score is required (1-5)"}, 
-                status=400
-            )
+            return Response({"success": False, "error": "score is required (1-5)"}, status=400)
         
-        # Convert score to integer
+        # Convert score
         try:
             score = int(score)
             if score < 1 or score > 5:
-                return Response({
-                    "success": False,
-                    "error": "Score must be between 1 and 5"
-                }, status=400)
+                return Response({"success": False, "error": "Score must be between 1 and 5"}, status=400)
         except ValueError:
-            return Response({
-                "success": False,
-                "error": "Score must be a valid number"
-            }, status=400)
+            return Response({"success": False, "error": "Score must be a valid number"}, status=400)
         
-        # Get task and verify ownership
+        # Get task
         try:
             task = Task.objects.get(task_id=task_id, employer=employer)
             print(f"Task found: {task.title}, status: {task.status}")
         except Task.DoesNotExist:
-            return Response(
-                {"success": False, "error": "Task not found or you don't own this task"}, 
-                status=404
-            )
+            return Response({"success": False, "error": "Task not found or you don't own this task"}, status=404)
         
-        # Check task status
-        if task.status != 'submitted':
+        # ✅ FIXED: Allow both 'submitted' and 'completed' status
+        allowed_statuses = ['submitted', 'completed']
+        if task.status not in allowed_statuses:
             return Response({
                 "success": False,
-                "error": f"Task must be in 'submitted' status. Current status: {task.status}",
+                "error": f"Task must be in 'submitted' or 'completed' status. Current status: {task.status}",
                 "current_status": task.status
             }, status=400)
         
@@ -1421,12 +1399,9 @@ def create_employer_rating(request):
             freelancer = User.objects.get(user_id=freelancer_id)
             print(f"Freelancer found: {freelancer.name}")
         except User.DoesNotExist:
-            return Response(
-                {"success": False, "error": "Freelancer not found"}, 
-                status=404
-            )
+            return Response({"success": False, "error": "Freelancer not found"}, status=404)
         
-        # Get contract for this task and freelancer
+        # Get contract
         try:
             contract = Contract.objects.get(
                 task=task,
@@ -1435,10 +1410,7 @@ def create_employer_rating(request):
             )
             print(f"Contract found: {contract.contract_id}")
         except Contract.DoesNotExist:
-            return Response({
-                "success": False,
-                "error": "No active contract found for this task and freelancer"
-            }, status=400)
+            return Response({"success": False, "error": "No active contract found"}, status=400)
         
         # Get submission if exists
         submission = Submission.objects.filter(
@@ -1446,50 +1418,46 @@ def create_employer_rating(request):
             freelancer=freelancer
         ).first()
         
-        # Check if rating already exists (using rater_employer)
+        # Check if rating already exists
         if Rating.objects.filter(
             task=task, 
             rater_employer=employer, 
             rated_user=freelancer
         ).exists():
-            return Response({
-                "success": False,
-                "error": "You have already rated this freelancer for this task"
-            }, status=400)
+            return Response({"success": False, "error": "Already rated this freelancer"}, status=400)
         
-        # Create the rating - model will handle User creation
+        # Create rating
         rating = Rating.objects.create(
             task=task,
             contract=contract,
             submission=submission,
-            rater_employer=employer,  # Just pass the employer
+            rater_employer=employer,
             rated_user=freelancer,
             score=score,
             review=review,
-            # Don't set rater or rating_type - they will be auto-set in save() method
         )
         
         print(f"Rating created: {rating.rating_id}")
-        print(f"Auto-assigned rater: {rating.rater.name if rating.rater else 'None'}")
-        print(f"Rating type: {rating.rating_type}")
         
-        # Update task status to 'completed'
-        task.status = 'completed'
-        task.save()
-        print(f"Task status updated to: {task.status}")
+        # Update task status to 'completed' if not already
+        if task.status != 'completed':
+            task.status = 'completed'
+            task.save()
+            print(f"Task status updated to: {task.status}")
         
-        # Update submission status to 'accepted' if exists
-        if submission:
+        # Update submission status if exists
+        if submission and submission.status != 'accepted':
             submission.status = 'accepted'
             submission.save()
             print(f"Submission status updated to: {submission.status}")
         
-        # Update contract status
-        contract.status = 'completed'
-        contract.is_completed = True
-        contract.completed_date = timezone.now()
-        contract.save()
-        print(f"Contract marked as completed")
+        # Update contract
+        if contract.status != 'completed':
+            contract.status = 'completed'
+            contract.is_completed = True
+            contract.completed_date = timezone.now()
+            contract.save()
+            print(f"Contract marked as completed")
         
         return Response({
             "success": True,
@@ -1510,11 +1478,7 @@ def create_employer_rating(request):
         print(f"Error: {e}")
         import traceback
         traceback.print_exc()
-        return Response({
-            "success": False,
-            "error": str(e)
-        }, status=500)
-                
+        return Response({"success": False, "error": str(e)}, status=500)
 @api_view(['GET'])
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -1685,19 +1649,27 @@ def employer_rateable_tasks(request):
             
             employer = request.user
             
-            # Get SUBMITTED tasks
-            submitted_tasks = Task.objects.filter(
+            # Get tasks that are COMPLETED or ready for review
+            # Statuses that indicate task is done and ready for rating
+            rateable_statuses = ['completed', 'done', 'submitted', 'review']
+            
+            tasks_query = Task.objects.filter(
                 employer=employer,
-                assigned_user__isnull=False,
-                status='submitted'
+                assigned_user__isnull=False
             ).select_related('assigned_user')
             
-            print(f"Found {submitted_tasks.count()} submitted tasks")
+            print(f"Found {tasks_query.count()} tasks with assigned users")
             
             tasks_data = []
-            for task in submitted_tasks:
+            for task in tasks_query:
                 print(f"\nProcessing task: {task.task_id} - {task.title}")
+                print(f"Status: {task.status}")
                 print(f"Assigned user: {task.assigned_user.name} (ID: {task.assigned_user.user_id})")
+                
+                # Check if task status is appropriate for rating
+                if task.status.lower() not in [s.lower() for s in rateable_statuses]:
+                    print(f"  ✗ Status '{task.status}' not in rateable statuses: {rateable_statuses}")
+                    continue
                 
                 # Check if already rated (using rater_employer)
                 already_rated = Rating.objects.filter(
@@ -1712,8 +1684,7 @@ def employer_rateable_tasks(request):
                     # Get latest submission
                     submission = Submission.objects.filter(
                         task=task,
-                        freelancer=task.assigned_user,
-                        status__in=['submitted', 'resubmitted']
+                        freelancer=task.assigned_user
                     ).order_by('-submitted_at').first()
                     
                     if submission:
@@ -1749,7 +1720,7 @@ def employer_rateable_tasks(request):
             traceback.print_exc()
             return JsonResponse([], safe=False)
     
-    return JsonResponse([], safe=False) 
+    return JsonResponse([], safe=False)
 @api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
