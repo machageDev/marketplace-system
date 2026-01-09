@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/src/widgets/framework.dart';
+import 'package:helawork/api_config.dart';
 import 'package:helawork/freelancer/model/contract_model.dart';
 import 'package:helawork/freelancer/model/proposal_model.dart';
 
@@ -332,6 +333,7 @@ static Future<List<Map<String, dynamic>>> fetchTasks(http.Response response, {re
     rethrow;
   }
 }
+
  Future<Map<String, dynamic>> updateUserProfile(
     Map<String, dynamic> profile, String token) async {  // Remove userId parameter
   try {
@@ -3195,6 +3197,158 @@ static Future<Map<String, dynamic>> getContractDetails(int contractId) async {
     }
   } catch (e) {
     debugPrint('Error in getContractDetails: $e');
+    rethrow;
+  }
+}
+static Future<List<Map<String, dynamic>>> getFreelancerCompletedTasks() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('user_token');
+      
+      if (token == null) {
+        debugPrint("❌ No token found for freelancer completed tasks");
+        return [];
+      }
+      
+      debugPrint("📋 Fetching completed tasks from: ${AppConfig.getBaseUrl()}/api/tasks/freelancer/completed/");
+      
+      final response = await http.get(
+        Uri.parse('${AppConfig.getBaseUrl()}/api/tasks/freelancer/completed/'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      ).timeout(const Duration(seconds: 30));
+      
+      debugPrint("📋 Response status: ${response.statusCode}");
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        debugPrint("📋 Response success: ${data['success']}");
+        debugPrint("📋 Count: ${data['count']}");
+        
+        if (data['success'] == true) {
+          final tasks = (data['completed_tasks'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+          debugPrint("✅ Loaded ${tasks.length} completed tasks");
+          return tasks;
+        } else {
+          debugPrint("❌ API returned success: false");
+          debugPrint("❌ Error message: ${data['error']}");
+          return [];
+        }
+      } else {
+        debugPrint("❌ Failed with status: ${response.statusCode}");
+        debugPrint("❌ Response body: ${response.body}");
+        throw Exception('Failed to load completed tasks: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint("❌ Error fetching completed tasks: $e");
+      rethrow;
+    }
+  }
+// In api_service.dart - update getEmployerSubmissions method
+
+static Future<List<dynamic>> getEmployerSubmissions() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('user_token') ?? prefs.getString('employer_token');
+    
+    if (token == null || token.isEmpty) {
+      debugPrint("❌ No token found for employer submissions");
+      return [];
+    }
+    
+    debugPrint("📋 Fetching submissions from: ${AppConfig.getBaseUrl()}/api/submissions/employer/");
+    debugPrint("📋 Token: ${token.substring(0, 20)}...");
+    
+    final response = await http.get(
+      Uri.parse('${AppConfig.getBaseUrl()}/api/submissions/employer/'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    ).timeout(const Duration(seconds: 30));
+    
+    debugPrint("📋 Response status: ${response.statusCode}");
+    
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      debugPrint("📋 Response success: ${data['success']}");
+      debugPrint("📋 Count: ${data['count']}");
+      
+      if (data['success'] == true) {
+        final submissions = data['submissions'] ?? [];
+        debugPrint("✅ Loaded ${submissions.length} submissions");
+        return submissions;
+      } else {
+        debugPrint("❌ API returned success: false");
+        debugPrint("❌ Error message: ${data['error']}");
+        return [];
+      }
+    } else if (response.statusCode == 500) {
+      // Server error - try to parse error message
+      try {
+        final errorData = jsonDecode(response.body);
+        debugPrint("❌ Server error: ${errorData['error']}");
+        throw Exception(errorData['error'] ?? 'Server error');
+      } catch (e) {
+        throw Exception('Server error: ${response.statusCode}');
+      }
+    } else {
+      debugPrint("❌ Failed with status: ${response.statusCode}");
+      debugPrint("❌ Response body: ${response.body}");
+      throw Exception('Failed to load submissions: ${response.statusCode}');
+    }
+  } catch (e) {
+    debugPrint("❌ Error fetching submissions: $e");
+    rethrow;
+  }
+}
+// Approve submission and mark contract as completed
+static Future<Map<String, dynamic>> approveSubmission(int submissionId) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('user_token') ?? prefs.getString('employer_token');
+    
+    final response = await http.post(
+      Uri.parse('${AppConfig.getBaseUrl()}/api/submissions/$submissionId/approve/'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+    
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    throw Exception('Failed to approve submission');
+  } catch (e) {
+    print('Error approving submission: $e');
+    rethrow;
+  }
+}
+
+// Request revisions for submission
+static Future<Map<String, dynamic>> requestRevision(int submissionId, String notes) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('user_token') ?? prefs.getString('employer_token');
+    
+    final response = await http.post(
+      Uri.parse('${AppConfig.getBaseUrl()}/api/submissions/$submissionId/request-revision/'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'notes': notes}),
+    );
+    
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    throw Exception('Failed to request revision');
+  } catch (e) {
+    print('Error requesting revision: $e');
     rethrow;
   }
 }

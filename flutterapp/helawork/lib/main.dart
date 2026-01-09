@@ -15,13 +15,15 @@ import 'package:helawork/freelancer/provider/forgot_password_provider.dart';
 import 'package:helawork/freelancer/provider/proposal_provider.dart';
 import 'package:helawork/freelancer/provider/rating_provider.dart' as freelancer_rating;
 import 'package:helawork/freelancer/provider/recommended_job_provider.dart';
-import 'package:helawork/freelancer/provider/submission_provider.dart';
+import 'package:helawork/freelancer/provider/submission_provider.dart' as freelancer_submission;
+import 'package:helawork/client/provider/client_submission_provider.dart' as client_submission;
 import 'package:helawork/freelancer/provider/user_profile_provoder.dart';
 import 'package:helawork/freelancer/provider/wallet_provider.dart';
 import 'package:helawork/freelancer/screen/login_screen.dart';
 import 'package:helawork/wallet_service.dart';
 import 'package:provider/provider.dart';
 import 'package:helawork/freelancer/provider/task_provider.dart' as freelancer_task;
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -43,7 +45,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => ProposalProvider()),
         ChangeNotifierProvider(create: (_) => ContractProvider()),
         ChangeNotifierProvider(create: (_) => freelancer_rating.RatingProvider()),
-        ChangeNotifierProvider(create: (_) => SubmissionProvider()),
+        ChangeNotifierProvider(create: (_) => freelancer_submission.SubmissionProvider()),
         // Task Posters (formerly Clients)
         ChangeNotifierProvider(create: (_) => client_dashboard.DashboardProvider(apiService: ApiService())),
         ChangeNotifierProvider(create: (_) => client_auth.AuthProvider(apiService: ApiService())),
@@ -53,6 +55,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => client_rating.ClientRatingProvider()),
         ChangeNotifierProvider(create: (_) => RecommendedJobsProvider()),
         ChangeNotifierProvider(   create: (_) => client_contract.ClientContractProvider() ),
+        ChangeNotifierProvider(create: (_) => client_submission.SubmissionProvider()),
       ],
       child: const MyApp(),
     ),

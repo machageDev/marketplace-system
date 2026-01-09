@@ -20,7 +20,8 @@ class PaystackService:
             if method == 'POST':
                 response = requests.post(url, json=data, headers=headers, timeout=30)
             elif method == 'GET':
-                response = requests.get(url, headers=headers, timeout=30)
+                # For GET requests, 'data' should be sent as params[citation:3]
+                response = requests.get(url, headers=headers, params=data, timeout=30)
             
             response.raise_for_status()
             return response.json()
@@ -28,7 +29,44 @@ class PaystackService:
             print(f"Paystack API Error: {e}")
             if hasattr(e, 'response') and e.response is not None:
                 print(f"Response: {e.response.text}")
-            return None
+            return {"status": False, "message": f"API Error: {str(e)}"}
+    
+    # NEW METHOD: Fetch the official Paystack bank list[citation:1]
+    def list_banks(self, country="KE", currency="KES"):
+        """Fetch the list of banks and their codes from Paystack."""
+        endpoint = "/bank"
+        params = {'country': country, 'currency': currency}
+        return self._make_request('GET', endpoint, params)
+    
+    def resolve_account_number(self, account_number, bank_code):
+        """Verify bank account details[citation:3]"""
+        endpoint = "/bank/resolve"
+        params = {  # Send account_number and bank_code as query parameters[citation:3]
+            'account_number': account_number,
+            'bank_code': bank_code
+        }
+        return self._make_request('GET', endpoint, params)
+    
+    def create_transfer_recipient(self, data):
+        """Create transfer recipient for withdrawals"""
+        endpoint = "/transferrecipient"
+        return self._make_request('POST', endpoint, data)
+    
+    # ... keep all your other existing methods (initialize_transaction, etc.) below ...
+    def initiate_transfer(self, amount, recipient_code, reason=""):
+        """Initiate transfer to freelancer's bank"""
+        data = {
+            'source': 'balance',
+            'amount': amount,
+            'recipient': recipient_code,
+            'reason': reason,
+            'currency': 'KES'
+        }
+        return self._make_request('POST', '/transfer', data)
+    
+    def verify_transfer(self, transfer_code):
+        """Check transfer status"""
+        return self._make_request('GET', f'/transfer/{transfer_code}')
     
     def initialize_transaction(self, email, amount_cents, reference, callback_url=None, currency="KES"):
         """
@@ -37,7 +75,7 @@ class PaystackService:
         """
         data = {
             'email': email,
-            'amount': amount_cents,  # In CENTS
+            'amount': amount_cents,
             'reference': reference,
             'callback_url': callback_url,
             'currency': currency,
@@ -102,8 +140,6 @@ class PaystackService:
         
         return response
     
-    # ... keep other methods the same ...
-
     def transfer_to_subaccount(self, amount_cents, recipient, reason=""):
         """
         Transfer funds to subaccount

@@ -1,8 +1,8 @@
-
 import 'package:flutter/material.dart';
-import 'package:helawork/payment_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+
+import 'package:helawork/payment_service.dart';
 
 class PaymentScreen extends StatefulWidget {
   final String orderId;
@@ -13,18 +13,41 @@ class PaymentScreen extends StatefulWidget {
   final String currency;
   final String freelancerId;
   final String freelancerEmail;
+  final String email;
+  final String authToken;
+  final String contractId;
+  final String taskTitle;
+  final bool isValidOrderId;
 
-  const PaymentScreen({
-    super.key,
+  PaymentScreen({
+    Key? key,
     required this.orderId,
     required this.amount,
     required this.freelancerName,
-    required this.serviceDescription,
-    required this.freelancerPhotoUrl,
+    this.serviceDescription = '',
+    this.freelancerPhotoUrl = '',
+    this.currency = 'KSH',
     required this.freelancerId,
-    required this.freelancerEmail,
-    this.currency = 'KSH', required email, required String authToken, required int paymentService,
-  });
+    this.freelancerEmail = '',
+    this.email = '',
+    this.authToken = '',
+    required this.contractId,
+    required this.taskTitle,
+    required this.isValidOrderId,
+  }) : super(key: key) {
+    // Runtime validation
+    if (orderId.isEmpty) {
+      throw ArgumentError.value(orderId, 'orderId', 'Order ID cannot be empty');
+    }
+    if (!isValidOrderId) {
+      throw ArgumentError.value(isValidOrderId, 'isValidOrderId', 'Must be true for valid orders');
+    }
+  }
+
+  String get effectiveServiceDescription {
+    if (serviceDescription.isNotEmpty) return serviceDescription;
+    return taskTitle;
+  }
 
   @override
   State<PaymentScreen> createState() => _PaymentScreenState();
@@ -43,18 +66,39 @@ class _PaymentScreenState extends State<PaymentScreen> {
   @override
   void initState() {
     super.initState();
+    
+    // Validate order ID immediately
+    if (!widget.isValidOrderId || !_isValidUuid(widget.orderId)) {
+      setState(() {
+        _errorMessage = 'Invalid order ID. Please use a valid order ID from backend.';
+        _isLoading = false;
+      });
+      return;
+    }
+    
     _verifyAndInitializePayment();
+  }
+
+  bool _isValidUuid(String value) {
+    final uuidRegex = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', caseSensitive: false);
+    return uuidRegex.hasMatch(value);
   }
 
   Future<void> _verifyAndInitializePayment() async {
     try {
       print('🔍 VERIFYING PAYMENT DETAILS...');
+      print('📋 Contract ID: ${widget.contractId}');     
+      print('📋 Order ID: ${widget.orderId} (Valid UUID: ${_isValidUuid(widget.orderId)})');
+      print('👤 Freelancer ID: ${widget.freelancerId}');
+      print('📝 Service: ${widget.effectiveServiceDescription}');
       
-      // 1. Get token from SharedPreferences
       final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('user_token');
+      String token = widget.authToken;
+      if (token.isEmpty) {
+        token = prefs.getString('user_token') ?? '';
+      }
       
-      if (token == null || token.isEmpty) {
+      if (token.isEmpty) {
         setState(() {
           _errorMessage = 'Authentication token not found. Please log in again.';
           _isLoading = false;
@@ -62,55 +106,72 @@ class _PaymentScreenState extends State<PaymentScreen> {
         return;
       }
       
-      // 2. Create PaymentService WITH the token
-      _paymentService = PaymentService(authToken: token);
-      
-      // 3. VERIFY payment with backend before proceeding
-      print('✅ Verifying order ${widget.orderId}');
-      
-      final verification = await _paymentService!.verifyOrderPayment(
-        orderId: widget.orderId,
-        freelancerId: widget.freelancerId,
-      );
-      
-      print('✅ Verification response: ${verification['status']}');
-      
-      if (verification['status'] != true) {
-        // Show warning but continue anyway
-        print('⚠️ Warning: ${verification['message']}');
-        // Don't block payment, just show a warning
+      _employerEmail = widget.email;
+      if (_employerEmail!.isEmpty) {
+        _employerEmail = prefs.getString('user_email') ?? '';
       }
       
-      // Store verification data
-      _paymentVerification = verification['data'];
-      
-      // 4. Get employer email
-      _employerEmail = await _paymentService!.getEmployerEmail();
       print('✅ Employer Email: $_employerEmail');
       
       if (_employerEmail == null || _employerEmail!.isEmpty) {
-        setState(() {
-          _errorMessage = 'Email is required for payment.';
-          _isLoading = false;
-        });
-        return;
+        final enteredEmail = await _showEmailInputDialog();
+        if (enteredEmail != null && enteredEmail.isNotEmpty) {
+          _employerEmail = enteredEmail;
+          await prefs.setString('user_email', enteredEmail);
+        } else {
+          setState(() {
+            _errorMessage = 'Email is required for payment.';
+            _isLoading = false;
+          });
+          return;
+        }
       }
       
-      // 5. Initialize payment
+      _paymentService = PaymentService(authToken: token);
+      
+      String freelancerPaystackAccount = 'default_account';
+      
+      if (widget.freelancerId.isNotEmpty && widget.freelancerId != '0') {
+        print('✅ Verifying order payment...');
+        
+        final verification = await _paymentService!.verifyOrderPayment(
+          orderId: widget.orderId,
+          freelancerId: widget.freelancerId,
+        );
+        
+        print('✅ Verification response: ${verification['status']}');
+        print('✅ Verification message: ${verification['message']}');
+        
+        if (verification['status'] == true) {
+          _paymentVerification = verification['data'];
+          freelancerPaystackAccount = _paymentVerification?['freelancer_paystack_account'] ?? 'default_account';
+          print('✅ Freelancer account: $freelancerPaystackAccount');
+        } else {
+          print('⚠️ Warning: ${verification['message']}');
+        }
+      } else {
+        print('⚠️ Freelancer ID not provided, trying to fetch from order...');
+        freelancerPaystackAccount = await _getFreelancerPaystackAccount();
+      }
+      
       print('💰 INITIALIZING PAYMENT');
+      print('   Order: ${widget.orderId}');
+      print('   Amount: ${widget.amount}');
+      print('   Email: $_employerEmail');
+      print('   Freelancer Account: $freelancerPaystackAccount');
       
       final response = await _paymentService!.initializePayment(
         orderId: widget.orderId,
         email: _employerEmail!,
-        freelancerPaystackAccount: _paymentVerification?['freelancer_paystack_account'] ?? 'default_account',
+        freelancerPaystackAccount: freelancerPaystackAccount,
       );
       
       print('✅ Payment response: ${response['status']}');
+      print('✅ Payment message: ${response['message']}');
       
       if (response['status'] == true) {
         final authUrl = response['data']['authorization_url'];
         
-        // Validate URL
         if (authUrl == null || authUrl.isEmpty) {
           setState(() {
             _errorMessage = 'Invalid payment URL received';
@@ -127,6 +188,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
           });
           return;
         }
+        
+        print('✅ Payment URL: $authUrl');
         
         controller = WebViewController()
           ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -146,6 +209,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
               });
             },
             onNavigationRequest: (navigation) {
+              print('🌐 Navigation to: ${navigation.url}');
+              
               if (navigation.url.contains('paystack.co')) {
                 return NavigationDecision.navigate;
               }
@@ -153,7 +218,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
               if (navigation.url.contains('callback') || 
                   navigation.url.contains('verify') ||
                   navigation.url.contains('success') ||
-                  navigation.url.contains('failed')) {
+                  navigation.url.contains('failed') ||
+                  navigation.url.contains('cancel') ||
+                  navigation.url.contains('close')) {
                 _handlePaymentResponse(navigation.url);
                 return NavigationDecision.prevent;
               }
@@ -174,10 +241,78 @@ class _PaymentScreenState extends State<PaymentScreen> {
       }
     } catch (e) {
       print('❌ ERROR in _verifyAndInitializePayment: $e');
+      print('❌ Stack trace: ${e.toString()}');
       setState(() {
-        _errorMessage = 'Error: $e';
+        _errorMessage = 'Error initializing payment: ${e.toString()}';
         _isLoading = false;
       });
+    }
+  }
+
+  Future<String?> _showEmailInputDialog() async {
+    String? email;
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Enter Email for Payment'),
+        content: TextField(
+          onChanged: (value) => email = value,
+          decoration: const InputDecoration(
+            hintText: 'Enter your email address',
+            border: OutlineInputBorder(),
+            labelText: 'Email',
+          ),
+          keyboardType: TextInputType.emailAddress,
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (email != null && email!.isNotEmpty && email!.contains('@')) {
+                Navigator.pop(context);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter a valid email address'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blueAccent,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+    return email;
+  }
+
+  Future<String> _getFreelancerPaystackAccount() async {
+    try {
+      final pendingOrders = await _paymentService!.getPendingOrders();
+      
+      for (var order in pendingOrders) {
+        final orderId = order['order_id']?.toString() ?? order['id']?.toString();
+        if (orderId == widget.orderId) {
+          return order['freelancer_paystack_account'] ?? 
+                 order['paystack_subaccount'] ??
+                 order['freelancer']?['paystack_subaccount'] ??
+                 'default_account';
+        }
+      }
+      
+      return 'default_account';
+    } catch (e) {
+      print('⚠️ Error getting freelancer account: $e');
+      return 'default_account';
     }
   }
 
@@ -186,8 +321,16 @@ class _PaymentScreenState extends State<PaymentScreen> {
     
     if (url.contains('success') || url.contains('completed')) {
       _completePayment(true);
-    } else if (url.contains('failed') || url.contains('canceled')) {
+    } else if (url.contains('failed') || url.contains('canceled') || url.contains('cancelled')) {
       _completePayment(false);
+    } else if (url.contains('close')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Payment window closed. Check your email for payment confirmation.'),
+          duration: Duration(seconds: 3),
+        ),
+      );
+      Navigator.pop(context, false);
     }
   }
 
@@ -197,20 +340,50 @@ class _PaymentScreenState extends State<PaymentScreen> {
     _isPaymentComplete = true;
     
     if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Payment successful!'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      try {
+        if (_paymentService != null) {
+          print('✅ Verifying payment for order: ${widget.orderId}');
+          final verification = await _paymentService!.verifyPayment(widget.orderId);
+          print('✅ Verification result: ${verification['status']}');
+          print('✅ Verification message: ${verification['message']}');
+          
+          if (verification['status'] == true) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('✅ Payment successful! Order completed.'),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 3),
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('⚠️ Payment may have succeeded but verification failed: ${verification['message']}'),
+                backgroundColor: Colors.orange,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        print('⚠️ Error verifying payment: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Payment appears successful! Please check your order status.'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
       
       await Future.delayed(const Duration(seconds: 2));
       Navigator.pop(context, true);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Payment failed. Please try again.'),
+          content: Text('❌ Payment failed or was cancelled. Please try again.'),
           backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
         ),
       );
       Navigator.pop(context, false);
@@ -251,40 +424,56 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 
   Widget _buildVerificationBadge() {
-    if (_paymentVerification == null) return const SizedBox();
+    final hasFreelancerId = widget.freelancerId.isNotEmpty && widget.freelancerId != '0';
+    final isValidOrder = widget.isValidOrderId && _isValidUuid(widget.orderId);
     
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.green.shade50,
+        color: hasFreelancerId && isValidOrder ? Colors.green.shade50 : Colors.orange.shade50,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.green.shade100),
+        border: Border.all(
+          color: hasFreelancerId && isValidOrder ? Colors.green.shade100 : Colors.orange.shade100,
+        ),
       ),
       child: Row(
         children: [
-          const Icon(Icons.verified, color: Colors.green, size: 16),
+          Icon(
+            hasFreelancerId && isValidOrder ? Icons.verified : Icons.warning,
+            color: hasFreelancerId && isValidOrder ? Colors.green : Colors.orange,
+            size: 16,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Payment Verified',
+                Text(
+                  hasFreelancerId && isValidOrder ? 'Ready to Pay' : 'Payment Info Incomplete',
                   style: TextStyle(
-                    color: Colors.green,
+                    color: hasFreelancerId && isValidOrder ? Colors.green : Colors.orange,
                     fontWeight: FontWeight.w600,
                     fontSize: 12,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Freelancer: ${widget.freelancerName}',
+                  'Order: ${widget.orderId.substring(0, 8)}...',
                   style: TextStyle(
-                    color: Colors.green.shade700,
+                    color: hasFreelancerId && isValidOrder ? Colors.green.shade700 : Colors.orange.shade700,
                     fontSize: 11,
                   ),
                 ),
+                if (!hasFreelancerId || !isValidOrder)
+                  Text(
+                    !isValidOrder ? 'Invalid order ID' : 'Missing freelancer ID',
+                    style: TextStyle(
+                      color: Colors.orange.shade700,
+                      fontSize: 10,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -317,245 +506,312 @@ class _PaymentScreenState extends State<PaymentScreen> {
           onPressed: _cancelPayment,
         ),
       ),
-      body: _errorMessage != null
-          ? _buildErrorState()
-          : Column(
-              children: [
-                Container(
-                  margin: const EdgeInsets.all(16),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.grey.withOpacity(0.2),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
+      body: SafeArea(
+        child: _errorMessage != null
+            ? _buildErrorState()
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  return SingleChildScrollView(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: constraints.maxHeight,
                       ),
-                    ],
-                    border: Border.all(color: Colors.blueAccent.withOpacity(0.2)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildVerificationBadge(),
-                      
-                      Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 24,
-                            backgroundImage: widget.freelancerPhotoUrl.isNotEmpty
-                                ? NetworkImage(widget.freelancerPhotoUrl)
-                                : const NetworkImage('https://via.placeholder.com/150') as ImageProvider,
-                            backgroundColor: Colors.blueAccent.withOpacity(0.1),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  widget.freelancerName,
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.blueAccent,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  widget.serviceDescription,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey[600],
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      
-                      const SizedBox(height: 16),
-                      
-                      Column(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: Colors.blueAccent.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.receipt, color: Colors.blueAccent, size: 16),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    'Order #${widget.orderId}',
-                                    style: const TextStyle(
-                                      color: Colors.blueAccent,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: Colors.green.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.email, color: Colors.green, size: 16),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    _employerEmail ?? 'Loading email...',
-                                    style: const TextStyle(
-                                      color: Colors.green,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      
-                      const SizedBox(height: 16),
-                      
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        margin: const EdgeInsets.only(bottom: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.blueAccent.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.blueAccent.withOpacity(0.3)),
-                        ),
-                        child: Row(
+                      child: IntrinsicHeight(
+                        child: Column(
                           children: [
-                            const Icon(Icons.info, color: Colors.blueAccent, size: 16),
-                            const SizedBox(width: 8),
+                            // Top content section - this can scroll
                             Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Payment to ${widget.freelancerName}',
-                                    style: TextStyle(
-                                      color: Colors.blueAccent,
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 12,
+                              child: SingleChildScrollView(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(16),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(12),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.grey.withOpacity(0.2),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                        border: Border.all(color: Colors.blueAccent.withOpacity(0.2)),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          _buildVerificationBadge(),
+                                          
+                                          Row(
+                                            children: [
+                                              CircleAvatar(
+                                                radius: 24,
+                                                backgroundImage: widget.freelancerPhotoUrl.isNotEmpty
+                                                    ? NetworkImage(widget.freelancerPhotoUrl)
+                                                    : null,
+                                                backgroundColor: Colors.blueAccent.withOpacity(0.1),
+                                                child: widget.freelancerPhotoUrl.isEmpty
+                                                    ? const Icon(Icons.person, color: Colors.blueAccent)
+                                                    : null,
+                                              ),
+                                              const SizedBox(width: 12),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      widget.freelancerName,
+                                                      style: const TextStyle(
+                                                        fontSize: 16,
+                                                        fontWeight: FontWeight.w600,
+                                                        color: Colors.blueAccent,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 4),
+                                                    Text(
+                                                      widget.effectiveServiceDescription,
+                                                      style: TextStyle(
+                                                        fontSize: 14,
+                                                        color: Colors.grey[600],
+                                                      ),
+                                                      maxLines: 2,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                    if (widget.freelancerEmail.isNotEmpty) ...[
+                                                      const SizedBox(height: 4),
+                                                      Text(
+                                                        widget.freelancerEmail,
+                                                        style: TextStyle(
+                                                          fontSize: 12,
+                                                          color: Colors.grey[500],
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          
+                                          const SizedBox(height: 16),
+                                          
+                                          Column(
+                                            children: [
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.blueAccent.withOpacity(0.1),
+                                                  borderRadius: BorderRadius.circular(8),
+                                                ),
+                                                child: Row(
+                                                  children: [
+                                                    const Icon(Icons.receipt, color: Colors.blueAccent, size: 16),
+                                                    const SizedBox(width: 8),
+                                                    Expanded(
+                                                      child: Column(
+                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                        children: [
+                                                          Text(
+                                                            'Contract #${widget.contractId}',
+                                                            style: TextStyle(
+                                                              color: Colors.blueAccent,
+                                                              fontWeight: FontWeight.w500,
+                                                              fontSize: 12,
+                                                            ),
+                                                          ),
+                                                          Text(
+                                                            'Order #${widget.orderId.substring(0, 8)}...',
+                                                            style: const TextStyle(
+                                                              color: Colors.blueAccent,
+                                                              fontWeight: FontWeight.w500,
+                                                              fontSize: 12,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              const SizedBox(height: 8),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.green.withOpacity(0.1),
+                                                  borderRadius: BorderRadius.circular(8),
+                                                ),
+                                                child: Row(
+                                                  children: [
+                                                    const Icon(Icons.email, color: Colors.green, size: 16),
+                                                    const SizedBox(width: 8),
+                                                    Expanded(
+                                                      child: Column(
+                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                        children: [
+                                                          Text(
+                                                            'Paying from:',
+                                                            style: TextStyle(
+                                                              color: Colors.green.shade700,
+                                                              fontSize: 10,
+                                                            ),
+                                                          ),
+                                                          Text(
+                                                            _employerEmail ?? 'Loading...',
+                                                            style: const TextStyle(
+                                                              color: Colors.green,
+                                                              fontWeight: FontWeight.w500,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          
+                                          const SizedBox(height: 16),
+                                          
+                                          Container(
+                                            padding: const EdgeInsets.all(12),
+                                            margin: const EdgeInsets.only(bottom: 12),
+                                            decoration: BoxDecoration(
+                                              color: Colors.blueAccent.withOpacity(0.1),
+                                              borderRadius: BorderRadius.circular(8),
+                                              border: Border.all(color: Colors.blueAccent.withOpacity(0.3)),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                const Icon(Icons.info, color: Colors.blueAccent, size: 16),
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Text(
+                                                        '90/10 Split Payment',
+                                                        style: TextStyle(
+                                                          color: Colors.blueAccent,
+                                                          fontWeight: FontWeight.w600,
+                                                          fontSize: 12,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(height: 4),
+                                                      Text(
+                                                        '90% to freelancer, 10% platform fee',
+                                                        style: TextStyle(
+                                                          color: Colors.blueAccent,
+                                                          fontSize: 11,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          
+                                          _buildAmountRowWithCents(
+                                            'Service Fee (To ${widget.freelancerName})',
+                                            widget.amount * 0.9,
+                                            freelancerCents,
+                                          ),
+                                          const SizedBox(height: 8),
+                                          _buildAmountRowWithCents(
+                                            'Platform Fee (10%)',
+                                            widget.amount * 0.1,
+                                            platformCents,
+                                          ),
+                                          const Divider(height: 20, thickness: 1),
+                                          _buildAmountRowWithCents(
+                                            'TOTAL AMOUNT',
+                                            widget.amount,
+                                            totalCents,
+                                            isTotal: true,
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    '${_formatAmount(widget.amount)} = $totalCents cents',
-                                    style: TextStyle(
-                                      color: Colors.blueAccent,
-                                      fontSize: 12,
-                                    ),
+                                    
+                                    const SizedBox(height: 16),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            
+                            // Fixed height webview section
+                            Container(
+                              height: 300, // Fixed height for webview
+                              margin: const EdgeInsets.symmetric(horizontal: 16),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.grey.withOpacity(0.1),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
                                   ),
                                 ],
+                              ),
+                              child: Stack(
+                                children: [
+                                  if (_paymentInitialized)
+                                    WebViewWidget(controller: controller),
+                                  
+                                  if (_isLoading)
+                                    Container(
+                                      color: Colors.white,
+                                      child: Center(
+                                        child: Column(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            CircularProgressIndicator(
+                                              valueColor: AlwaysStoppedAnimation<Color>(Colors.blueAccent),
+                                            ),
+                                            const SizedBox(height: 16),
+                                            Text(
+                                              _paymentInitialized 
+                                                  ? 'Loading payment gateway...' 
+                                                  : 'Preparing payment...',
+                                              style: const TextStyle(
+                                                color: Colors.blueAccent,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            
+                            // Cancel button
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                              child: OutlinedButton(
+                                onPressed: _cancelPayment,
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.red,
+                                  side: const BorderSide(color: Colors.red),
+                                  minimumSize: const Size(double.infinity, 50),
+                                ),
+                                child: const Text('Cancel Payment'),
                               ),
                             ),
                           ],
                         ),
                       ),
-                      
-                      _buildAmountRowWithCents(
-                        'Service Fee (To ${widget.freelancerName})',
-                        widget.amount * 0.9,
-                        freelancerCents,
-                      ),
-                      const SizedBox(height: 8),
-                      _buildAmountRowWithCents(
-                        'Platform Fee (10%)',
-                        widget.amount * 0.1,
-                        platformCents,
-                      ),
-                      const Divider(height: 20, thickness: 1),
-                      _buildAmountRowWithCents(
-                        'TOTAL AMOUNT',
-                        widget.amount,
-                        totalCents,
-                        isTotal: true,
-                      ),
-                    ],
-                  ),
-                ),
-                
-                Expanded(
-                  child: Container(
-                    margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey.withOpacity(0.3)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.grey.withOpacity(0.1),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
                     ),
-                    child: Stack(
-                      children: [
-                        if (_paymentInitialized)
-                          WebViewWidget(controller: controller),
-                        
-                        if (_isLoading)
-                          Container(
-                            color: Colors.white,
-                            child: Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  CircularProgressIndicator(
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.blueAccent),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    _paymentInitialized 
-                                        ? 'Loading payment gateway...' 
-                                        : 'Preparing payment...',
-                                    style: const TextStyle(
-                                      color: Colors.blueAccent,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-                
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                  child: OutlinedButton(
-                    onPressed: _cancelPayment,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red,
-                      side: const BorderSide(color: Colors.red),
-                      minimumSize: const Size(double.infinity, 50),
-                    ),
-                    child: const Text('Cancel Payment'),
-                  ),
-                ),
-              ],
-            ),
+                  );
+                },
+              ),
+      ),
     );
   }
 
@@ -581,6 +837,29 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 fontWeight: FontWeight.w500,
               ),
             ),
+            const SizedBox(height: 8),
+            if (!widget.isValidOrderId || !_isValidUuid(widget.orderId))
+              const Column(
+                children: [
+                  Text(
+                    'Note: Invalid order ID detected.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.orange,
+                      fontSize: 12,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Please use a valid order ID from backend.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
             const SizedBox(height: 24),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -619,12 +898,14 @@ class _PaymentScreenState extends State<PaymentScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              label,
-              style: TextStyle(
-                color: isTotal ? Colors.blueAccent : Colors.grey[700],
-                fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
-                fontSize: isTotal ? 16 : 14,
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: isTotal ? Colors.blueAccent : Colors.grey[700],
+                  fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
+                  fontSize: isTotal ? 16 : 14,
+                ),
               ),
             ),
             Text(

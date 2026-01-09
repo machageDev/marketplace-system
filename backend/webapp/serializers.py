@@ -1,7 +1,7 @@
 from django.utils import timezone  
 from rest_framework import serializers 
 from rest_framework import serializers
-from .models import Notification, Order, Submission, TaskCompletion, Rating, Contract, Task
+from .models import Freelancer, Notification, Order, Submission, TaskCompletion, Rating, Contract, Task
 from .models import Contract, Proposal, TaskCompletion, Transaction, User, UserProfile, Wallet
 from .models import Employer, User
 from .models import Task
@@ -136,6 +136,8 @@ class ContractSerializer(serializers.ModelSerializer):
     employer_name = serializers.CharField(source="employer.user.get_full_name", read_only=True)
     can_complete = serializers.SerializerMethodField()
     completion_status = serializers.SerializerMethodField()
+    order_id = serializers.SerializerMethodField()  # ✅ ADD THIS
+    order_status = serializers.SerializerMethodField()  # ✅ ADD THIS
     
     class Meta:
         model = Contract
@@ -160,6 +162,8 @@ class ContractSerializer(serializers.ModelSerializer):
             "employer_accepted",
             "freelancer_accepted",
             "is_fully_accepted",
+            "order_id",  # ✅ ADD THIS
+            "order_status",  # ✅ ADD THIS
         ]
         read_only_fields = ["contract_id", "created_at"]
     
@@ -177,6 +181,49 @@ class ContractSerializer(serializers.ModelSerializer):
             return 'Active - Awaiting Payment'
         else:
             return 'Pending Acceptance'
+    
+    # ✅ ADD THESE METHODS
+    def get_order_id(self, obj):
+        """Get the associated order ID for this contract"""
+        try:
+            # Find order linked to this contract's task and freelancer
+            order = Order.objects.filter(
+                task=obj.task,
+                employer=obj.employer,
+                freelancer__user=obj.freelancer,
+                status='pending'
+            ).first()
+            
+            if order:
+                return str(order.order_id)
+            
+            # If no pending order, check for any order
+            order = Order.objects.filter(
+                task=obj.task,
+                employer=obj.employer,
+                freelancer__user=obj.freelancer
+            ).first()
+            
+            return str(order.order_id) if order else None
+            
+        except Exception as e:
+            print(f"Error getting order ID for contract {obj.contract_id}: {e}")
+            return None
+    
+    def get_order_status(self, obj):
+        """Get the status of the associated order"""
+        try:
+            order = Order.objects.filter(
+                task=obj.task,
+                employer=obj.employer,
+                freelancer__user=obj.freelancer
+            ).first()
+            
+            return order.status if order else None
+            
+        except Exception as e:
+            print(f"Error getting order status for contract {obj.contract_id}: {e}")
+            return None
 class ContractCompletionSerializer(serializers.ModelSerializer):
     """Serializer for marking contract as completed"""
     class Meta:
@@ -198,6 +245,8 @@ class EmployerContractSerializer(serializers.ModelSerializer):
     task_details = serializers.SerializerMethodField()
     freelancer_details = serializers.SerializerMethodField()
     actions_available = serializers.SerializerMethodField()
+    order_id = serializers.SerializerMethodField()  # ✅ ADD THIS
+    payment_ready = serializers.SerializerMethodField()  # ✅ ADD THIS
     
     class Meta:
         model = Contract
@@ -211,6 +260,8 @@ class EmployerContractSerializer(serializers.ModelSerializer):
             'is_completed',
             'payment_date',
             'actions_available',
+            'order_id',  # ✅ ADD THIS
+            'payment_ready',  # ✅ ADD THIS
         ]
     
     def get_task_details(self, obj):
@@ -218,6 +269,7 @@ class EmployerContractSerializer(serializers.ModelSerializer):
             'id': obj.task.id,
             'title': obj.task.title,
             'budget': obj.task.budget,
+            'task_id': obj.task.task_id,  # ✅ Include task_id too
         }
     
     def get_freelancer_details(self, obj):
@@ -225,6 +277,7 @@ class EmployerContractSerializer(serializers.ModelSerializer):
             'id': obj.freelancer.id,
             'name': obj.freelancer.get_full_name(),
             'email': obj.freelancer.email,
+            'user_id': obj.freelancer.user_id,  # ✅ Include user_id
         }
     
     def get_actions_available(self, obj):
@@ -240,7 +293,53 @@ class EmployerContractSerializer(serializers.ModelSerializer):
         if not obj.is_completed:
             actions.append('view_submission')
         
-        return actions            
+        return actions
+    
+    # ✅ ADD THIS METHOD
+    def get_order_id(self, obj):
+        """Get the order ID for payment"""
+        try:
+            # Get the order for this contract
+            order = Order.objects.filter(
+                task=obj.task,
+                employer=obj.employer,
+                freelancer__user=obj.freelancer
+            ).first()
+            
+            if order:
+                return str(order.order_id)
+            
+            # If no order exists, check if we should create one
+            if not obj.is_paid and obj.is_fully_accepted:
+                # Create order on the fly
+                from decimal import Decimal
+                import uuid
+                
+                # Get freelancer instance
+                freelancer = Freelancer.objects.filter(user=obj.freelancer).first()
+                
+                if freelancer:
+                    order = Order.objects.create(
+                        order_id=uuid.uuid4(),
+                        employer=obj.employer,
+                        task=obj.task,
+                        freelancer=freelancer,
+                        amount=Decimal(str(obj.task.budget or 0)),
+                        currency='KSH',
+                        status='pending'
+                    )
+                    return str(order.order_id)
+            
+            return None
+            
+        except Exception as e:
+            print(f"Error getting order ID: {e}")
+            return None
+    
+    # ✅ ADD THIS METHOD
+    def get_payment_ready(self, obj):
+        """Check if payment is ready to be made"""
+        return not obj.is_paid and obj.is_fully_accepted and self.get_order_id(obj) is not None           
 from .models import Employer, EmployerProfile
 class EmployerLoginSerializer(serializers.Serializer):
     username = serializers.CharField()
@@ -1222,12 +1321,59 @@ class NotificationSerializer(serializers.ModelSerializer):
             return timesince(obj.created_at, now) + ' ago'
         return ''        
 class OrderSerializer(serializers.ModelSerializer):
-    freelancer_name = serializers.CharField(source='service.freelancer.user.get_full_name', read_only=True)
-    service_title = serializers.CharField(source='service.title', read_only=True)
+    # Change these lines - your current ones might be wrong
+    freelancer_name = serializers.SerializerMethodField()
+    service_title = serializers.SerializerMethodField()
+    task_title = serializers.SerializerMethodField()
+    employer_name = serializers.SerializerMethodField()
+    contract_id = serializers.SerializerMethodField()
     
     class Meta:
         model = Order
-        fields = ['order_id', 'client', 'service', 'amount', 'status', 'created_at', 'freelancer_name', 'service_title']        
+        fields = [
+            'order_id', 
+            'employer', 
+            'task', 
+            'freelancer', 
+            'amount', 
+            'currency',
+            'status', 
+            'created_at', 
+            'freelancer_name',
+            'task_title',
+            'employer_name',
+            'contract_id',
+        ]
+    
+    def get_freelancer_name(self, obj):
+        if obj.freelancer and obj.freelancer.user:
+            return obj.freelancer.user.name
+        return None
+    
+    def get_task_title(self, obj):
+        if obj.task:
+            return obj.task.title
+        return None
+    
+    def get_employer_name(self, obj):
+        if obj.employer:
+            return obj.employer.username
+        return None
+    
+    def get_contract_id(self, obj):
+        """Get contract ID for this order"""
+        if obj.task and obj.employer and obj.freelancer:
+            try:
+                contract = Contract.objects.filter(
+                    task=obj.task,
+                    employer=obj.employer,
+                    freelancer=obj.freelancer.user
+                ).first()
+                
+                return contract.contract_id if contract else None
+            except:
+                return None
+        return None
 class PaymentInitializeSerializer(serializers.Serializer):
     order_id = serializers.CharField(max_length=50)
     email = serializers.EmailField()

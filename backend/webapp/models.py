@@ -393,22 +393,108 @@ class Contract(models.Model):
 # models.py
 
 # models.py - Update Transaction model
+# models.py - Add these models
+
 class Transaction(models.Model):
-    transaction_id = models.AutoField(primary_key=True)
+    TRANSACTION_TYPES = [
+        ('payment', 'Payment from Client'),
+        ('withdrawal', 'Withdrawal to Freelancer'),
+        ('refund', 'Refund to Client'),
+        ('commission', 'Platform Commission'),
+    ]
     
-    # Add these fields if missing
-    order = models.ForeignKey('Order', on_delete=models.CASCADE, null=True, blank=True)
-    paystack_reference = models.CharField(max_length=100, unique=True)
-    employer = models.ForeignKey('Employer', on_delete=models.CASCADE, null=True, blank=True)
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
-    status = models.CharField(max_length=20, default='pending')
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+        ('reversed', 'Reversed'),
+    ]
+    default='payment',
+    
+    transaction_id = models.AutoField(primary_key=True)
+    transaction_type = models.CharField(max_length=20, choices=TRANSACTION_TYPES, default='payment')
+    
+    # Payment info
+    paystack_reference = models.CharField(max_length=100, unique=True, null=True, blank=True)
+    paystack_transfer_code = models.CharField(max_length=100, null=True, blank=True)
+    
+    # Relationships
+    order = models.ForeignKey('Order', on_delete=models.SET_NULL, null=True, blank=True)
+    contract = models.ForeignKey('Contract', on_delete=models.SET_NULL, null=True, blank=True)
+    task = models.ForeignKey('Task', on_delete=models.SET_NULL, null=True, blank=True)
+    client = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='client_transactions')
+    freelancer = models.ForeignKey('Freelancer', on_delete=models.SET_NULL, null=True, blank=True, related_name='freelancer_transactions')
+    
+    # Amounts
+    amount = models.DecimalField(max_digits=12, decimal_places=2)  # Total amount
+    freelancer_share = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    platform_fee = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    paystack_fee = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    
+    # Status and metadata
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    metadata = models.JSONField(default=dict, blank=True)  # Store raw Paystack response
+    notes = models.TextField(blank=True)
+    
+    # Audit
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
     
     class Meta:
-        db_table = 'transactions'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['paystack_reference']),
+            models.Index(fields=['transaction_type', 'status']),
+            models.Index(fields=['freelancer', 'created_at']),
+        ]
     
     def __str__(self):
-        return f"Transaction {self.transaction_id} - {self.paystack_reference}"
+        return f"{self.transaction_type.upper()}-{self.transaction_id}"
+
+
+class WithdrawalRequest(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending Approval'),
+        ('approved', 'Approved - Processing'),
+        ('processing', 'Being Processed by Paystack'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+        ('cancelled', 'Cancelled'),
+    ]
+    
+    request_id = models.AutoField(primary_key=True)
+    freelancer = models.ForeignKey('Freelancer', on_delete=models.CASCADE)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    
+    # Bank details (from freelancer profile)
+    bank_name = models.CharField(max_length=100)
+    account_number = models.CharField(max_length=20)
+    account_name = models.CharField(max_length=200)
+    
+    # Paystack references
+    paystack_recipient_code = models.CharField(max_length=100)
+    paystack_transfer_code = models.CharField(max_length=100, null=True, blank=True)
+    
+    # Status tracking
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    admin_notes = models.TextField(blank=True)
+    failure_reason = models.TextField(blank=True)
+    
+    # Timestamps
+    requested_at = models.DateTimeField(auto_now_add=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    
+    # Relationships
+    transaction = models.OneToOneField(Transaction, on_delete=models.SET_NULL, null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-requested_at']
+    
+    def __str__(self):
+        return f"Withdrawal-{self.request_id} ({self.freelancer.user.get_full_name()})"
 
 class PaymentRecord(models.Model):
     tx_ref = models.CharField(max_length=100, unique=True)
@@ -491,6 +577,7 @@ class Submission(models.Model):
     deployment_instructions = models.TextField(blank=True, null=True)
     test_instructions = models.TextField(blank=True, null=True)
     release_notes = models.TextField(blank=True, null=True)
+    
     
     # Acceptance checklist (freelancer self-verification)
     checklist_tests_passing = models.BooleanField(default=False)
@@ -623,13 +710,154 @@ class Notification(models.Model):
     class Meta:
         ordering = ['-created_at']
 
-
 class Freelancer(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='freelancer_profile')
     is_verified = models.BooleanField(default=False)
+    
+    # ============ PAYSTACK SUBACCOUNT FIELDS ============
+    # REQUIRED: These fields MUST exist for payment routing to work
+    paystack_subaccount_code = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        unique=True,
+        help_text="Paystack Subaccount Code (starts with ACCT_). Save this after creating subaccount."
+    )
+    is_paystack_setup = models.BooleanField(
+        default=False,
+        help_text="True when freelancer has completed Paystack setup"
+    )
+    paystack_setup_date = models.DateTimeField(
+        blank=True, 
+        null=True,
+        help_text="When Paystack account was created"
+    )
+    
+    # ============ BANK DETAILS (Required for Paystack subaccount) ============
+    # These fields are needed to CREATE the Paystack subaccount
+    business_name = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Business/Display name for Paystack (e.g., 'John Doe Freelancing')"
+    )
+    bank_name = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Bank name (e.g., 'Equity Bank')"
+    )
+    bank_code = models.CharField(
+        max_length=10,
+        blank=True,
+        help_text="Paystack bank code (e.g., '058' for GTBank, '031' for Equity)"
+    )
+    account_number = models.CharField(
+        max_length=20,
+        blank=True,
+        help_text="Bank account number"
+    )
+    account_name = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Account holder name as registered with bank"
+    )
+    
+    # ============ PAYMENT METADATA ============
+    total_earnings = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0.00,
+        help_text="Total amount earned by freelancer"
+    )
+    pending_payout = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0.00,
+        help_text="Amount pending payout"
+    )
+    last_payout_date = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text="Last successful payout date"
+    )
 
     def __str__(self):
-        return f"{self.user.name} - Freelancer"
+        return f"{self.name} - Freelancer"
+    
+    # ADD THESE PROPERTIES:
+    @property
+    def name(self):
+        """Get freelancer's name from user model"""
+        try:
+            if self.user and hasattr(self.user, 'name'):
+                return self.user.name
+        except:
+            pass
+        return "Unknown Freelancer"
+    
+    @property 
+    def email(self):
+        """Get freelancer's email from user model"""
+        try:
+            if self.user and hasattr(self.user, 'email'):
+                return self.user.email
+        except:
+            pass
+        return ""
+    
+    @property
+    def username(self):
+        """Get username as fallback"""
+        try:
+            if self.user and hasattr(self.user, 'username'):
+                return self.user.username
+        except:
+            pass
+        return "unknown"
+    
+    @property
+    def get_full_name(self):
+        """Alias for name property for compatibility"""
+        return self.name
+    
+    # ============ PAYSTACK HELPER METHODS ============
+    @property
+    def has_paystack_account(self):
+        """Check if freelancer has Paystack subaccount setup"""
+        return bool(self.paystack_subaccount_code)
+    
+    @property
+    def can_receive_payments(self):
+        """Check if freelancer is ready to receive payments"""
+        return self.has_paystack_account and self.is_paystack_setup
+    
+    def get_paystack_display_info(self):
+        """Get formatted Paystack info for debugging"""
+        if not self.has_paystack_account:
+            return "No Paystack account setup"
+        
+        return f"""
+        Paystack Status: {'✅ Active' if self.is_paystack_setup else '⏳ Pending Setup'}
+        Subaccount Code: {self.paystack_subaccount_code}
+        Business Name: {self.business_name or 'Not set'}
+        Bank: {self.bank_name or 'Not set'} ({self.account_number or 'No account'})
+        """
+    
+    def mark_paystack_setup_complete(self, subaccount_code, business_name=None):
+        """Mark Paystack setup as complete"""
+        self.paystack_subaccount_code = subaccount_code
+        self.is_paystack_setup = True
+        self.paystack_setup_date = timezone.now()
+        
+        if business_name:
+            self.business_name = business_name
+            
+        self.save()
+        return True
+    
+    class Meta:
+        verbose_name = "Freelancer"
+        verbose_name_plural = "Freelancers"
+        ordering = ['user__name']
 class Order(models.Model):
     ORDER_STATUS = [
         ('pending', 'Pending'),
@@ -691,6 +919,8 @@ class PaymentTransaction(models.Model):
         ('success', 'Success'),
         ('failed', 'Failed'),
     ]
+    
+    
     
     order = models.ForeignKey(Order, on_delete=models.CASCADE)
     paystack_reference = models.CharField(max_length=100, unique=True)

@@ -10,7 +10,6 @@ class PaymentService {
   PaymentService({String? baseUrl, this.authToken})
       : baseUrl = baseUrl ?? AppConfig.getBaseUrl();
 
-  /// Get authentication token from SharedPreferences
   Future<String?> _getUserToken() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -33,20 +32,17 @@ class PaymentService {
     }
   }
 
-  /// Get employer email for payment
   Future<String> getEmployerEmail() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       
       String? email;
       
-      // 1. Check if email is stored in shared preferences
       email = prefs.getString('user_email');
       if (email != null && email.isNotEmpty) {
         return email;
       }
       
-      // 2. Check employer profile
       final employerProfile = prefs.getString('employer_profile');
       if (employerProfile != null) {
         try {
@@ -60,7 +56,6 @@ class PaymentService {
         }
       }
       
-      // 3. Get username and generate email
       final username = prefs.getString('userName') ?? 'employer';
       email = '${username.replaceAll(' ', '.').toLowerCase()}@helawork.com';
       
@@ -72,7 +67,6 @@ class PaymentService {
     }
   }
 
-  /// VERIFY payment before processing
   Future<Map<String, dynamic>> verifyOrderPayment({
     required String orderId,
     required String freelancerId,
@@ -87,7 +81,6 @@ class PaymentService {
         };
       }
 
-      // Check if freelancerId is provided
       if (freelancerId.isEmpty) {
         return {
           'status': false,
@@ -96,10 +89,9 @@ class PaymentService {
         };
       }
 
-      // Try the verification endpoint
       try {
         final url = Uri.parse('$baseUrl/api/orders/$orderId/verify-payment/?freelancer_id=$freelancerId');
-        print('🔍 Calling verification URL: $url');
+        print('🔗 Calling verification URL: $url');
         
         final response = await http.get(
           url,
@@ -109,7 +101,7 @@ class PaymentService {
           },
         );
 
-        print('🔍 Verification status: ${response.statusCode}');
+        print('📥 Verification status: ${response.statusCode}');
         
         if (response.statusCode == 200) {
           final Map<String, dynamic> data = jsonDecode(response.body);
@@ -129,7 +121,6 @@ class PaymentService {
             };
           }
         } else if (response.statusCode == 404 || response.statusCode == 500) {
-          // Endpoint doesn't exist or has error, use fallback
           print('⚠️ Verification endpoint not available, using fallback');
           return await _fallbackVerification(orderId, freelancerId, token);
         } else {
@@ -141,7 +132,6 @@ class PaymentService {
           };
         }
       } catch (e) {
-        // If endpoint doesn't exist, use fallback
         print('⚠️ Verification error: $e, using fallback');
         return await _fallbackVerification(orderId, freelancerId, token);
       }
@@ -156,7 +146,6 @@ class PaymentService {
     }
   }
 
-  /// Fallback verification
   Future<Map<String, dynamic>> _fallbackVerification(
     String orderId, 
     String freelancerId, 
@@ -167,7 +156,7 @@ class PaymentService {
       
       if (token == null) {
         return {
-          'status': true, // Allow payment even without verification
+          'status': true,
           'message': 'Proceeding with payment (token not available)',
           'data': {
             'order_id': orderId,
@@ -177,7 +166,6 @@ class PaymentService {
         };
       }
 
-      // Get pending orders to find this order
       try {
         final pendingOrdersUrl = Uri.parse('$baseUrl/api/orders/pending-payment/');
         final response = await http.get(
@@ -229,7 +217,6 @@ class PaymentService {
         print('⚠️ Error in fallback verification: $e');
       }
       
-      // If not found, still allow payment but with warning
       return {
         'status': true,
         'message': 'Proceeding with payment (order not verified)',
@@ -250,7 +237,7 @@ class PaymentService {
     } catch (e) {
       print('❌ ERROR in _fallbackVerification: $e');
       return {
-        'status': true, // Still allow payment
+        'status': true,
         'message': 'Proceeding despite verification error',
         'data': {
           'order_id': orderId,
@@ -261,7 +248,6 @@ class PaymentService {
     }
   }
 
-  /// Fetch pending orders for payment
   Future<List<Map<String, dynamic>>> getPendingOrders() async {
     try {
       final String? token = authToken ?? await _getUserToken();
@@ -281,18 +267,17 @@ class PaymentService {
       );
       
       print('📋 Response status: ${response.statusCode}');
+      print('📋 Full Response Body: ${response.body}');
       
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
         
-        if (data['status'] == true) {
-          if (data.containsKey('orders')) {
-            final orders = data['orders'] as List?;
-            return orders != null ? List<Map<String, dynamic>>.from(orders) : [];
-          } else if (data.containsKey('data')) {
-            final orders = data['data'] as List?;
-            return orders != null ? List<Map<String, dynamic>>.from(orders) : [];
-          }
+        if (data.containsKey('orders')) {
+          final orders = data['orders'] as List?;
+          return orders != null ? List<Map<String, dynamic>>.from(orders) : [];
+        } else if (data.containsKey('data')) {
+          final orders = data['data'] as List?;
+          return orders != null ? List<Map<String, dynamic>>.from(orders) : [];
         }
         return [];
       } else if (response.statusCode == 401) {
@@ -306,7 +291,6 @@ class PaymentService {
     }
   }
 
-  /// Initialize payment for a specific order
   Future<Map<String, dynamic>> initializePayment({
     required String orderId,
     required String email,
@@ -314,9 +298,20 @@ class PaymentService {
   }) async {
     try {
       print('🚀 Initializing payment for order: $orderId');
-      print('📧 Using email: $email');
+      print('📧 Email: $email');
       
-      // Input validation
+      // Validate order ID - MUST be a valid UUID
+      final uuidRegex = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', caseSensitive: false);
+      
+      if (!uuidRegex.hasMatch(orderId)) {
+        print('❌ ERROR: Invalid order ID format: $orderId');
+        return {
+          'status': false,
+          'message': 'Invalid order ID. Must be a valid UUID from backend.',
+          'code': 'INVALID_ORDER_ID'
+        };
+      }
+      
       if (orderId.isEmpty) {
         return {
           'status': false,
@@ -342,7 +337,6 @@ class PaymentService {
         };
       }
 
-      // Get token
       final String? token = authToken ?? await _getUserToken();
       
       if (token == null || token.isEmpty) {
@@ -354,15 +348,15 @@ class PaymentService {
       }
       
       final requestBody = {
-        'order_id': orderId.trim(),
+        'order_id': orderId.trim(), // Use original order ID
         'email': email.trim(),
         'freelancer_paystack_account': freelancerPaystackAccount.trim(),
       };
 
-      print('📤 Request body: $requestBody');
+      print('📦 Request body: $requestBody');
       
       final url = Uri.parse('$baseUrl/api/payment/initialize/');
-      print('🌐 Calling URL: $url');
+      print('🔗 Calling URL: $url');
 
       final response = await http.post(
         url,
@@ -408,8 +402,8 @@ class PaymentService {
       } else if (response.statusCode == 404) {
         return {
           'status': false,
-          'message': 'Payment endpoint not found',
-          'code': 'ENDPOINT_NOT_FOUND'
+          'message': 'Order not found. Please create an order first.',
+          'code': 'ORDER_NOT_FOUND'
         };
       } else {
         return {
@@ -429,7 +423,6 @@ class PaymentService {
     }
   }
 
-  /// Verify payment using reference
   Future<Map<String, dynamic>> verifyPayment(String reference) async {
     try {
       print('✅ Verifying payment reference: $reference');
@@ -444,7 +437,7 @@ class PaymentService {
       }
 
       final url = Uri.parse('$baseUrl/api/payment/verify/$reference/');
-      print('🌐 Calling URL: $url');
+      print('🔗 Calling URL: $url');
 
       final response = await http.get(
         url,
@@ -476,6 +469,109 @@ class PaymentService {
       }
     } catch (e) {
       print('❌ ERROR in verifyPayment: $e');
+      return {
+        'status': false,
+        'message': 'Network error: $e',
+        'code': 'NETWORK_ERROR'
+      };
+    }
+  }
+
+  // NEW METHOD: Get or create order for task
+  Future<Map<String, dynamic>> getOrCreateOrderForTask(String taskId) async {
+    try {
+      final String? token = authToken ?? await _getUserToken();
+      if (token == null) {
+        return {'status': false, 'message': 'Not authenticated'};
+      }
+      
+      final url = Uri.parse('$baseUrl/api/payment/create-order/');
+      final response = await http.post(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({'task_id': taskId}),
+      );
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['status'] == true) {
+          return {
+            'status': true,
+            'order_id': data['order']['order_id'],
+            'amount': data['order']['amount'].toDouble(),
+          };
+        } else {
+          return {'status': false, 'message': data['message']};
+        }
+      } else {
+        return {'status': false, 'message': 'Failed to create order'};
+      }
+    } catch (e) {
+      return {'status': false, 'message': 'Error: $e'};
+    }
+  }
+
+  Future<Map<String, dynamic>> getOrderForContract(String contractId) async {
+    try {
+      final String? token = authToken ?? await _getUserToken();
+      if (token == null || token.isEmpty) {
+        return {
+          'status': false,
+          'message': 'Authentication token not found',
+          'code': 'AUTH_ERROR'
+        };
+      }
+
+      if (contractId.isEmpty || contractId == '0') {
+        return {
+          'status': false,
+          'message': 'Contract ID is required',
+          'code': 'MISSING_CONTRACT_ID'
+        };
+      }
+
+      final url = Uri.parse('$baseUrl/api/contracts/$contractId/order/');
+      print('🔗 Getting order for contract: $url');
+      
+      final response = await http.get(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      print('📥 Get order response status: ${response.statusCode}');
+      print('📥 Get order response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = jsonDecode(response.body);
+        return data;
+      } else if (response.statusCode == 404) {
+        return {
+          'status': false,
+          'message': 'Contract not found',
+          'code': 'CONTRACT_NOT_FOUND'
+        };
+      } else if (response.statusCode == 401) {
+        return {
+          'status': false,
+          'message': 'Unauthorized. Please log in again.',
+          'code': 'AUTH_ERROR'
+        };
+      } else {
+        return {
+          'status': false,
+          'message': 'Server error: ${response.statusCode}',
+          'code': 'SERVER_ERROR',
+          'body': response.body,
+        };
+      }
+    } catch (e) {
+      print('❌ ERROR in getOrderForContract: $e');
       return {
         'status': false,
         'message': 'Network error: $e',
