@@ -308,6 +308,65 @@ class UserProfile(models.Model):
 
     def __str__(self):
         return f"Profile of {self.user.name}"
+# Skill Verification System
+class Skill(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    category = models.CharField(max_length=50, blank=True)
+    description = models.TextField(blank=True)
+
+    def __str__(self):
+        return self.name
+
+class UserSkill(models.Model):
+    VERIFICATION_STATUS = [
+        ('self_reported', 'Self-Reported'),
+        ('test_passed', 'Platform Test Passed'),
+        ('verified', 'Portfolio Verified'),
+    ]
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="verified_skills")
+    skill = models.ForeignKey(Skill, on_delete=models.CASCADE)
+    verification_status = models.CharField(max_length=20, choices=VERIFICATION_STATUS, default='self_reported')
+    verification_evidence = models.URLField(blank=True, null=True)
+    date_verified = models.DateField(null=True, blank=True)
+    
+    class Meta:
+        unique_together = ('user', 'skill')
+    
+    def get_badge_color(self):
+        if self.verification_status == 'verified': return '#10B981'  # Green
+        elif self.verification_status == 'test_passed': return '#3B82F6'  # Blue
+        else: return '#6B7280'  # Gray
+
+    def __str__(self):
+        return f"{self.user.name} - {self.skill.name} ({self.verification_status})"
+
+# Portfolio Management System
+class PortfolioItem(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="portfolio_items")
+    title = models.CharField(max_length=200)
+    description = models.TextField()
+    image = models.ImageField(upload_to='portfolio/', blank=True, null=True)
+    video_url = models.URLField(blank=True, null=True)
+    project_url = models.URLField(blank=True, null=True)
+    client_quote = models.TextField(blank=True, null=True)
+    skills_used = models.ManyToManyField(Skill, blank=True, related_name="portfolio_pieces")
+    completion_date = models.DateField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.title} by {self.user.name}"
+
+class WorkHistory(models.Model):
+    """Tracks completed tasks on the platform for the 'Work Passport'."""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="work_history")
+    task = models.ForeignKey('Task', on_delete=models.CASCADE)  # Assumes you have a Task model
+    earnings = models.DecimalField(max_digits=10, decimal_places=2)
+    client_rating = models.IntegerField(null=True, blank=True)  # Rating out of 5
+    client_feedback = models.TextField(blank=True)
+    completion_date = models.DateField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.task.title} - {self.earnings} KES"
 
 
 class Proposal(models.Model):

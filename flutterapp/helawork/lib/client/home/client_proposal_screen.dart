@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:helawork/client/home/client_proposal_view_screen.dart';
+import 'package:helawork/client/home/freelancer_profile_screen.dart';
 import 'package:helawork/client/models/client_proposal.dart';
 import 'package:helawork/client/provider/client_proposal_provider.dart';
 import 'package:provider/provider.dart';
@@ -134,20 +135,30 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
             ),
             const SizedBox(height: 10),
 
-            // Freelancer info
-            Row(
-              children: [
-                const Icon(Icons.person, size: 16, color: Colors.grey),
-                const SizedBox(width: 6),
-                Text(
-                  'Freelancer: ${proposal.freelancerName}',
-                  style: const TextStyle(
-                    color: Colors.black87,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                  ),
+            // Freelancer info (clickable)
+            InkWell(
+              onTap: () => _viewFreelancerProfile(context, proposal.freelancerId),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 4.0),
+                child: Row(
+                  children: [
+                    const Icon(Icons.person, size: 16, color: Colors.grey),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Freelancer: ${proposal.freelancerName}',
+                        style: const TextStyle(
+                          color: Colors.blue,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    const Icon(Icons.arrow_forward_ios, size: 12, color: Colors.blue),
+                  ],
                 ),
-              ],
+              ),
             ),
             const SizedBox(height: 8),
 
@@ -363,6 +374,15 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => ProposalViewScreen(proposal: proposal),
+      ),
+    );
+  }
+
+  void _viewFreelancerProfile(BuildContext context, String freelancerId) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => FreelancerProfileScreen(freelancerId: freelancerId),
       ),
     );
   }

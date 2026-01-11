@@ -4,7 +4,7 @@ from rest_framework import serializers
 from .models import Freelancer, Notification, Order, Submission, TaskCompletion, Rating, Contract, Task
 from .models import Contract, Proposal, TaskCompletion, Transaction, User, UserProfile, Wallet
 from .models import Employer, User
-from .models import Task
+from .models import Task, Skill, UserSkill, PortfolioItem
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -13,8 +13,44 @@ class UserSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+class SkillSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Skill
+        fields = ['id', 'name', 'category', 'description']
+
+class UserSkillSerializer(serializers.ModelSerializer):
+    skill = SkillSerializer(read_only=True)
+    badge_color = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = UserSkill
+        fields = ['id', 'skill', 'verification_status', 'verification_evidence', 'date_verified', 'badge_color']
+    
+    def get_badge_color(self, obj):
+        return obj.get_badge_color()
+
+class PortfolioItemSerializer(serializers.ModelSerializer):
+    skills_used = SkillSerializer(many=True, read_only=True)
+    image = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = PortfolioItem
+        fields = ['id', 'title', 'description', 'image', 'video_url', 'project_url', 
+                  'client_quote', 'skills_used', 'completion_date', 'created_at']
+    
+    def get_image(self, obj):
+        if obj.image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.image.url)
+            return obj.image.url
+        return None
+
 class UserProfileSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
+    verified_skills = serializers.SerializerMethodField()
+    portfolio_items = serializers.SerializerMethodField()
+    work_passport_data = serializers.SerializerMethodField()
 
     class Meta:
         model = UserProfile
@@ -26,8 +62,78 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "portfolio_link", 
             "hourly_rate",
             "profile_picture",
+            "verified_skills",
+            "portfolio_items",
+            "work_passport_data",
         ]
         read_only_fields = ("user",)
+    
+    def get_verified_skills(self, obj):
+        user_skills = UserSkill.objects.filter(user=obj.user).select_related('skill')
+        return UserSkillSerializer(user_skills, many=True).data
+    
+    def get_portfolio_items(self, obj):
+        portfolio_items = PortfolioItem.objects.filter(user=obj.user).prefetch_related('skills_used')
+        request = self.context.get('request')
+        return PortfolioItemSerializer(portfolio_items, many=True, context={'request': request}).data
+    
+    def get_work_passport_data(self, obj):
+        # Calculate work passport data from completed tasks
+        from .models import TaskCompletion, Rating, UserSkill, Contract
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        completed_tasks = TaskCompletion.objects.filter(user=obj.user, status='approved')
+        total_earnings = sum(float(task.amount) for task in completed_tasks)
+        
+        ratings = Rating.objects.filter(rated_user=obj.user)
+        avg_rating = 0
+        review_count = ratings.count()
+        if ratings.exists():
+            avg_rating = sum(r.score for r in ratings) / review_count
+        
+        # Count verified skills (test_passed or verified status)
+        verified_skills_count = UserSkill.objects.filter(
+            user=obj.user,
+            verification_status__in=['test_passed', 'verified']
+        ).count()
+        
+        # Calculate platform tenure (days since first contract or task completion)
+        platform_tenure_days = 0
+        try:
+            # Try to get earliest contract or task completion
+            earliest_contract = Contract.objects.filter(freelancer=obj.user).order_by('start_date').first()
+            earliest_completion = completed_tasks.order_by('completion_date').first()
+            
+            earliest_date = None
+            if earliest_contract and earliest_completion:
+                earliest_date = min(earliest_contract.start_date, earliest_completion.completion_date)
+            elif earliest_contract:
+                earliest_date = earliest_contract.start_date
+            elif earliest_completion:
+                earliest_date = earliest_completion.completion_date
+            
+            if earliest_date:
+                platform_tenure_days = (timezone.now().date() - earliest_date).days
+        except:
+            pass
+        
+        # Client satisfaction summary
+        satisfaction_summary = "No ratings yet"
+        if review_count > 0:
+            positive_ratings = ratings.filter(score__gte=4).count()
+            satisfaction_percentage = (positive_ratings / review_count) * 100
+            satisfaction_summary = f"{satisfaction_percentage:.0f}% positive ({positive_ratings}/{review_count})"
+        
+        return {
+            "total_earnings": total_earnings,
+            "completed_tasks": completed_tasks.count(),
+            "avg_rating": round(avg_rating, 2),
+            "review_count": review_count,
+            "verified_skills_count": verified_skills_count,
+            "platform_tenure_days": platform_tenure_days,
+            "client_satisfaction_summary": satisfaction_summary
+        }
 
     def create(self, validated_data):
         print(f"\n=== SERIALIZER CREATE ===")

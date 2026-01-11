@@ -4158,7 +4158,7 @@ def pending_payment_orders(request):
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def get_wallet_data(request):
-    """GET /api/wallet/ - Returns full wallet data including bank info"""
+  
     try:
         freelancer = request.user.freelancer
         

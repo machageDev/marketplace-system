@@ -10,7 +10,7 @@ class WalletService {
       final response = await http.get(
         Uri.parse('$baseUrl/'),
         headers: {
-          'Authorization': 'Token $token',
+          'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
       );
@@ -67,7 +67,7 @@ class WalletService {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/balance/'),
-        headers: {'Authorization': 'Token $token'},
+        headers: {'Authorization': 'Bearer $token'},
       );
 
       if (response.statusCode == 200) {
@@ -97,7 +97,7 @@ class WalletService {
       final response = await http.post(
         Uri.parse('$baseUrl/withdraw/'),
         headers: {
-          'Authorization': 'Token $token',
+          'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
         body: json.encode({'amount': amount}),
@@ -120,7 +120,7 @@ class WalletService {
       final response = await http.post(
         Uri.parse('$baseUrl/topup/'),
         headers: {
-          'Authorization': 'Token $token',
+          'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
         body: json.encode({'amount': amount}),
@@ -156,7 +156,7 @@ class WalletService {
       final response = await http.post(
         Uri.parse('$baseUrl/register-bank/'),
         headers: {
-          'Authorization': 'Token $token',
+          'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
         body: json.encode({

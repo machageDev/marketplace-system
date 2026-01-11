@@ -1,6 +1,12 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:helawork/api_service.dart';
+import 'package:helawork/freelancer/model/skill.dart';
+import 'package:helawork/freelancer/model/user_skill.dart';
+import 'package:helawork/freelancer/model/portfolio_item.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class UserProfileProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
@@ -15,6 +21,26 @@ class UserProfileProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   String get errorMessage => _errorMessage;
   bool get profileExists => _profileExists;
+  
+  // Get verified skills from profile
+  List<UserSkill> get verifiedSkills {
+    if (_profile['verified_skills'] != null && _profile['verified_skills'] is List) {
+      return (_profile['verified_skills'] as List)
+          .map((item) => UserSkill.fromJson(item))
+          .toList();
+    }
+    return [];
+  }
+  
+  // Get portfolio items from profile
+  List<PortfolioItem> get portfolioItems {
+    if (_profile['portfolio_items'] != null && _profile['portfolio_items'] is List) {
+      return (_profile['portfolio_items'] as List)
+          .map((item) => PortfolioItem.fromJson(item))
+          .toList();
+    }
+    return [];
+  }
 
   // Load profile from API
   Future<void> loadProfile() async {
@@ -206,5 +232,97 @@ class UserProfileProvider with ChangeNotifier {
     _profile = {};
     _profileExists = false;
     notifyListeners();
+  }
+  
+  // Load enhanced profile (same as loadProfile, but kept for consistency)
+  Future<void> loadEnhancedProfile() async {
+    await loadProfile();
+  }
+  
+  // Add skill to user's verified skills
+  Future<void> addSkill(Skill skill, String verificationStatus, String evidence) async {
+    try {
+      final token = await _secureStorage.read(key: "auth_token");
+      if (token == null) {
+        _errorMessage = 'Please log in to add skill';
+        notifyListeners();
+        return;
+      }
+      
+      final response = await http.post(
+        Uri.parse('${ApiService.baseUrl}/api/skills/my/'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'skill_id': skill.id,
+          'verification_status': verificationStatus,
+          'verification_evidence': evidence,
+        }),
+      );
+      
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        // Reload profile to get updated skills
+        await loadProfile();
+      } else {
+        final data = jsonDecode(response.body);
+        _errorMessage = data['message'] ?? 'Failed to add skill';
+        notifyListeners();
+      }
+    } catch (e) {
+      _errorMessage = 'Error adding skill: $e';
+      notifyListeners();
+    }
+  }
+  
+  // Add portfolio item
+  Future<void> addPortfolioItem(PortfolioItem item, File? image) async {
+    try {
+      final token = await _secureStorage.read(key: "auth_token");
+      if (token == null) {
+        _errorMessage = 'Please log in to add portfolio item';
+        notifyListeners();
+        return;
+      }
+      
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('${ApiService.baseUrl}/api/portfolio/'),
+      );
+      
+      request.headers.addAll({
+        'Authorization': 'Bearer $token',
+      });
+      
+      request.fields['title'] = item.title;
+      request.fields['description'] = item.description;
+      request.fields['completion_date'] = item.completionDate;
+      if (item.videoUrl != null) request.fields['video_url'] = item.videoUrl!;
+      if (item.projectUrl != null) request.fields['project_url'] = item.projectUrl!;
+      if (item.clientQuote != null) request.fields['client_quote'] = item.clientQuote!;
+      if (item.skillsUsed.isNotEmpty) {
+        request.fields['skills_used'] = jsonEncode(item.skillsUsed.map((s) => s.id).toList());
+      }
+      
+      if (image != null) {
+        request.files.add(await http.MultipartFile.fromPath('image', image.path));
+      }
+      
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+      
+      if (response.statusCode == 201) {
+        // Reload profile to get updated portfolio
+        await loadProfile();
+      } else {
+        final data = jsonDecode(response.body);
+        _errorMessage = data['message'] ?? 'Failed to add portfolio item';
+        notifyListeners();
+      }
+    } catch (e) {
+      _errorMessage = 'Error adding portfolio item: $e';
+      notifyListeners();
+    }
   }
 }

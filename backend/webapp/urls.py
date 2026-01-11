@@ -1,5 +1,8 @@
 from django.urls import path
 from . import views
+from .skill_views import get_all_skills, manage_user_skills, manage_portfolio
+from .freelancer_profile_view_view import view_freelancer_profile
+from .freelancer_views import get_freelancer_work_passport, get_freelancer_verified_skills, get_freelancer_portfolio
 
 urlpatterns = [
     # ============ AUTH & USER ============
@@ -98,4 +101,21 @@ urlpatterns = [
     path('api/wallet/withdraw/', views.withdraw_funds, name='withdraw-funds'),
     path('api/wallet/topup/', views.top_up_wallet, name='top-up-wallet'),
     path('api/wallet/register-bank/', views.register_bank, name='register-bank'),
+    
+    # Skill and Portfolio endpoints
+    path('api/skills/all/', get_all_skills, name='all_skills'),
+    path('api/skills/my/', manage_user_skills, name='my_skills'),
+    path('api/portfolio/', manage_portfolio, name='portfolio_list'),
+    path('api/portfolio/<int:portfolio_id>/', manage_portfolio, name='portfolio_detail'),
+    
+    # ============ FREELANCER PROFILE ============
+    path('api/freelancers/<int:user_id>/', view_freelancer_profile, name='freelancer-profile'),
+    
+    # ============ FREELANCER READ-ONLY ENDPOINTS ============
+    path('api/freelancer/work-passport/', get_freelancer_work_passport, name='freelancer-work-passport'),
+    path('api/freelancer/work-passport/<int:user_id>/', get_freelancer_work_passport, name='freelancer-work-passport-by-id'),
+    path('api/freelancer/verified-skills/', get_freelancer_verified_skills, name='freelancer-verified-skills'),
+    path('api/freelancer/verified-skills/<int:user_id>/', get_freelancer_verified_skills, name='freelancer-verified-skills-by-id'),
+    path('api/freelancer/portfolio/', get_freelancer_portfolio, name='freelancer-portfolio'),
+    path('api/freelancer/portfolio/<int:user_id>/', get_freelancer_portfolio, name='freelancer-portfolio-by-id'),
 ]

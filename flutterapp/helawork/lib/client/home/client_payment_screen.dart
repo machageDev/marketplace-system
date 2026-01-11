@@ -20,7 +20,7 @@ class PaymentScreen extends StatefulWidget {
   final bool isValidOrderId;
 
   PaymentScreen({
-    Key? key,
+    super.key,
     required this.orderId,
     required this.amount,
     required this.freelancerName,
@@ -34,7 +34,7 @@ class PaymentScreen extends StatefulWidget {
     required this.contractId,
     required this.taskTitle,
     required this.isValidOrderId,
-  }) : super(key: key) {
+  }) {
     // Runtime validation
     if (orderId.isEmpty) {
       throw ArgumentError.value(orderId, 'orderId', 'Order ID cannot be empty');

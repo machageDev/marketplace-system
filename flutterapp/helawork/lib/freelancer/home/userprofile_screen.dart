@@ -1,6 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:helawork/freelancer/provider/user_profile_provoder.dart';
+import 'package:helawork/freelancer/widgets/skill_badge.dart';
+import 'package:helawork/freelancer/widgets/portfolio_card.dart';
+import 'package:helawork/freelancer/widgets/work_passport_summary.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
@@ -426,6 +429,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Work Passport Summary (TOP PRIORITY - Credibility Snapshot)
+                if (profile['work_passport_data'] != null) _buildWorkPassportSection(provider),
+                
+                // Verified Skills Section (Competence Proof)
+                if (provider.verifiedSkills.isNotEmpty) _buildVerifiedSkillsSection(provider),
+                
+                // Portfolio Showcase Section (Evidence)
+                if (provider.portfolioItems.isNotEmpty) _buildPortfolioSection(provider),
+                
                 // Bio Section
                 if (profile['bio'] != null && profile['bio'].toString().isNotEmpty)
                   _buildProfileSection(
@@ -434,21 +446,21 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     content: profile['bio'],
                   ),
                 
-                // Skills Section
-                if (profile['skills'] != null && profile['skills'].toString().isNotEmpty)
-                  _buildProfileSection(
-                    icon: Icons.work,
-                    title: 'Skills',
-                    content: profile['skills'],
-                    isSkills: true,
-                  ),
-                
                 // Experience Section
                 if (profile['experience'] != null && profile['experience'].toString().isNotEmpty)
                   _buildProfileSection(
                     icon: Icons.timeline,
                     title: 'Experience',
                     content: profile['experience'],
+                  ),
+                
+                // Skills Section (existing text-based skills - fallback only)
+                if (profile['skills'] != null && profile['skills'].toString().isNotEmpty)
+                  _buildProfileSection(
+                    icon: Icons.work,
+                    title: 'Skills',
+                    content: profile['skills'],
+                    isSkills: true,
                   ),
                 
                 // Portfolio Link
@@ -634,6 +646,102 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             ),
         ],
       ),
+    );
+  }
+
+  Widget _buildVerifiedSkillsSection(UserProfileProvider provider) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.verified, color: iconColor, size: 22),
+              const SizedBox(width: 12),
+              Text(
+                'Verified Skills',
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: provider.verifiedSkills.map((userSkill) {
+              return SkillBadge(userSkill: userSkill);
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPortfolioSection(UserProfileProvider provider) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.work_outline, color: iconColor, size: 22),
+              const SizedBox(width: 12),
+              Text(
+                'Portfolio Showcase',
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ...provider.portfolioItems.map((item) {
+            return PortfolioCard(portfolioItem: item);
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWorkPassportSection(UserProfileProvider provider) {
+    final workPassportData = provider.profile['work_passport_data'] ?? {};
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      child: WorkPassportSummary(workPassportData: workPassportData),
     );
   }
 

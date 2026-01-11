@@ -232,7 +232,7 @@ class AuthProvider with ChangeNotifier {
   // Debug method to print all stored data
   Future<void> printStoredData() async {
     final prefs = await SharedPreferences.getInstance();
-    print('🔍 DEBUG: All stored authentication data:');
+    print(' DEBUG: All stored authentication data:');
     prefs.getKeys().forEach((key) {
       final value = prefs.get(key);
       print('   $key: $value');

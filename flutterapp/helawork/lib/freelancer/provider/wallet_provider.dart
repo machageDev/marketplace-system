@@ -7,7 +7,7 @@ class WalletProvider extends ChangeNotifier {
 
   double balance = 0.0;
   bool loading = true;
-  Map<String, dynamic>? _walletData; // Add this to store full wallet data
+  Map<String, dynamic>? _walletData; 
 
   WalletProvider._internal({
     required this.walletService,
@@ -102,9 +102,7 @@ class WalletProvider extends ChangeNotifier {
 
   // ✅ ADD THIS: Update bank account status after registration
   void updateBankAccountStatus(Map<String, dynamic> bankData) {
-    if (_walletData == null) {
-      _walletData = {};
-    }
+    _walletData ??= {};
     
     _walletData!.addAll({
       'bank_verified': true,

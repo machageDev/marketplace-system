@@ -1567,6 +1567,52 @@ static Future<List<dynamic>> getFreelancerProposals() async {
     rethrow;
   }
 }
+
+// Get freelancer profile by ID
+static Future<Map<String, dynamic>> getFreelancerProfile(String freelancerId) async {
+  try {
+    // Get token (employer token for clients)
+    final String? token = await _getUserToken();
+    
+    if (token == null) {
+      throw Exception('No authentication token found. Please login.');
+    }
+
+    print('Fetching freelancer profile for ID: $freelancerId');
+    print('URL: ${ApiService.baseUrl}/api/freelancers/$freelancerId/');
+    
+    final response = await http.get(
+      Uri.parse('${ApiService.baseUrl}/api/freelancers/$freelancerId/'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    print('Freelancer profile response: ${response.statusCode}');
+    print('Response body: ${response.body}');
+
+    if (response.statusCode == 200) {
+      final Map<String, dynamic> data = jsonDecode(response.body);
+      if (data['success'] == true) {
+        print('✅ Successfully loaded freelancer profile');
+        return data;
+      } else {
+        throw Exception(data['message'] ?? 'Failed to load profile');
+      }
+    } else if (response.statusCode == 401) {
+      throw Exception('Authentication failed. Please login again.');
+    } else if (response.statusCode == 404) {
+      throw Exception('Freelancer profile not found');
+    } else {
+      final errorData = jsonDecode(response.body);
+      throw Exception(errorData['message'] ?? 'Failed to load profile: ${response.statusCode}');
+    }
+  } catch (e) {
+    print('Error in getFreelancerProfile: $e');
+    rethrow;
+  }
+}
  
 Future<Map<String, dynamic>> acceptProposal(String proposalId) async {
   try {
