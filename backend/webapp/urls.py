@@ -1,7 +1,7 @@
 from django.urls import path
 from . import views
 from .skill_views import get_all_skills, manage_user_skills, manage_portfolio
-from .freelancer_profile_view_view import view_freelancer_profile
+from .freelancer_profile_view_view import view_freelancer_profile, view_get_user_ratings
 from .freelancer_views import get_freelancer_work_passport, get_freelancer_verified_skills, get_freelancer_portfolio
 
 urlpatterns = [
@@ -110,6 +110,7 @@ urlpatterns = [
     
     # ============ FREELANCER PROFILE ============
     path('api/freelancers/<int:user_id>/', view_freelancer_profile, name='freelancer-profile'),
+    path('api/freelancers/<int:user_id>/ratings/', view_get_user_ratings, name='freelancer-ratings'),
     
     # ============ FREELANCER READ-ONLY ENDPOINTS ============
     path('api/freelancer/work-passport/', get_freelancer_work_passport, name='freelancer-work-passport'),

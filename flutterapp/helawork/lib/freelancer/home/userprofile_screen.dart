@@ -264,7 +264,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
               // Hourly Rate
               _buildTextField(
-                label: "Hourly Rate (\$ per hour)",
+                label: "Hourly Rate (ksh per hour)",
                 initialValue: provider.profile['hourly_rate']?.toString() ?? '',
                 keyboardType: TextInputType.number,
                 onChanged: (val) => provider.setProfileField('hourly_rate', val),
@@ -477,7 +477,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   _buildProfileSection(
                     icon: Icons.attach_money,
                     title: 'Hourly Rate',
-                    content: '\$${profile['hourly_rate']}/hour',
+                    content: 'Ksh${profile['hourly_rate']}/hour',
                   ),
                 
                 // Last Updated

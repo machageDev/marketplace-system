@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:helawork/api_service.dart';
 
@@ -52,12 +54,13 @@ class ClientRatingProvider with ChangeNotifier {
     print("=====================================");
   }
 
-  // ✅ CORRECT: Employer rates Freelancer
+  // ✅ CORRECT: Employer rates Freelancer WITH EXTENDED DATA
   Future<bool> submitEmployerRating({
     required int taskId,
     required int freelancerId,
     required int score,
     String review = '',
+    Map<String, dynamic>? extendedData, // Add extended data parameter
   }) async {
     _isLoading = true;
     _error = null;
@@ -69,10 +72,14 @@ class ClientRatingProvider with ChangeNotifier {
         freelancerId: freelancerId,
         score: score,
         review: review,
+        extendedData: extendedData, // Pass extended data to API service
       );
       
       if (result['success'] == true) {
         print("✅ Employer rating submitted successfully");
+        if (extendedData != null) {
+          print("📊 Extended data included: $extendedData");
+        }
         // Remove the rated task from the list
         _tasksForRating.removeWhere((task) => task['id'] == taskId || task['task_id'] == taskId);
         return true;
@@ -177,5 +184,34 @@ class ClientRatingProvider with ChangeNotifier {
   // Helper method to get current user ID
   int _getCurrentUserId() {
     return 1; // Replace with actual user ID logic
+  }
+  
+  // Helper method to parse extended data from rating response
+  Map<String, dynamic> parseExtendedData(dynamic ratingData) {
+    try {
+      if (ratingData is Map && ratingData.containsKey('extended_data')) {
+        final extendedData = ratingData['extended_data'];
+        if (extendedData is String && extendedData.isNotEmpty) {
+          return jsonDecode(extendedData);
+        } else if (extendedData is Map) {
+          return Map<String, dynamic>.from(extendedData);
+        }
+      }
+      
+      // Fallback: Try to parse from review text (legacy format)
+      if (ratingData['review'] is String) {
+        final review = ratingData['review'] as String;
+        final markerIndex = review.indexOf('__EXTENDED_DATA__:');
+        if (markerIndex != -1) {
+          final jsonString = review.substring(markerIndex + '__EXTENDED_DATA__:'.length);
+          return jsonDecode(jsonString);
+        }
+      }
+      
+      return {};
+    } catch (e) {
+      print("❌ Error parsing extended data: $e");
+      return {};
+    }
   }
 }

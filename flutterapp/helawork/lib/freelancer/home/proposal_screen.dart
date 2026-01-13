@@ -228,7 +228,7 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
                 decoration: const InputDecoration(
                   labelText: "Bid Amount",
                   border: OutlineInputBorder(),
-                  prefixText: '\$ ',
+                  prefixText: 'KSH ',
                 ),
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 validator: (val) {

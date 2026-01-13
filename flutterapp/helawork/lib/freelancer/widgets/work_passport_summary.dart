@@ -125,7 +125,7 @@ class WorkPassportSummary extends StatelessWidget {
           _buildStatCard(
             icon: Icons.star,
             label: 'Average Rating',
-            value: avgRating > 0 ? '${avgRating.toStringAsFixed(1)} (${reviewCount} reviews)' : 'No ratings yet',
+            value: avgRating > 0 ? '${avgRating.toStringAsFixed(1)} ($reviewCount reviews)' : 'No ratings yet',
             color: const Color(0xFFFFD700),
             fullWidth: true,
           ),

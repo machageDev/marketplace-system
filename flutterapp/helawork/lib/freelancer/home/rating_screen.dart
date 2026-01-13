@@ -1,9 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:helawork/freelancer/home/submitting_rating.dart';
 import 'package:helawork/freelancer/provider/auth_provider.dart';
 import 'package:helawork/freelancer/provider/rating_provider.dart';
-import 'package:helawork/freelancer/widgets/rating_card.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 
 class RatingsScreen extends StatefulWidget {
   const RatingsScreen({super.key});
@@ -80,7 +81,7 @@ class _RatingsScreenState extends State<RatingsScreen> {
           backgroundColor: Colors.orange[800],
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(12),
           ),
         ),
       );
@@ -90,6 +91,7 @@ class _RatingsScreenState extends State<RatingsScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -790,14 +792,443 @@ class _RatingsScreenState extends State<RatingsScreen> {
       );
     }
 
+    // Display ratings in a beautiful format
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: filteredRatings.length,
       separatorBuilder: (context, index) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
-        return RatingCard(rating: filteredRatings[index]);
+        final rating = filteredRatings[index];
+        return _buildRatingCard(rating);
       },
     );
+  }
+
+  // FIXED: This method now properly parses JSON from database and displays it beautifully
+  Widget _buildRatingCard(Map<String, dynamic> rating) {
+    // Extract basic data
+    final double overallRating = _extractDouble(rating, ['rating', 'overall', 'value'], 0.0);
+    final String raterName = rating['rater_name'] ?? rating['client_name'] ?? rating['from_user']?['name'] ?? 'Anonymous';
+    final String taskTitle = rating['task_title'] ?? rating['task']?['title'] ?? 'Web applications';
+    final String? comment = rating['comment'] ?? rating['feedback'] ?? rating['review'];
+    
+    // Parse date
+    DateTime? createdAt;
+    if (rating['created_at'] != null) {
+      if (rating['created_at'] is String) {
+        createdAt = DateTime.tryParse(rating['created_at']);
+      } else if (rating['created_at'] is int) {
+        createdAt = DateTime.fromMillisecondsSinceEpoch(rating['created_at'] * 1000);
+      }
+    }
+    
+    // Check for __EXTENDED_DATA__ in comment or extended_data field
+    Map<String, dynamic>? extendedData;
+    String? cleanComment = comment;
+    
+    // Check if comment contains __EXTENDED_DATA__
+    if (comment != null && comment.contains('__EXTENDED_DATA__')) {
+      final jsonStart = comment.indexOf('{');
+      if (jsonStart != -1) {
+        try {
+          final jsonString = comment.substring(jsonStart);
+          extendedData = jsonDecode(jsonString);
+          // Extract clean comment (part before __EXTENDED_DATA__)
+          final cleanCommentEnd = comment.indexOf('__EXTENDED_DATA__');
+          if (cleanCommentEnd > 0) {
+            cleanComment = comment.substring(0, cleanCommentEnd).trim();
+          }
+        } catch (e) {
+          debugPrint('Error parsing JSON from comment: $e');
+        }
+      }
+    }
+    
+    // Also check extended_data field
+    if (extendedData == null && rating['extended_data'] is String) {
+      final extData = rating['extended_data'] as String;
+      if (extData.contains('__EXTENDED_DATA__')) {
+        final jsonStart = extData.indexOf('{');
+        if (jsonStart != -1) {
+          try {
+            final jsonString = extData.substring(jsonStart);
+            extendedData = jsonDecode(jsonString);
+          } catch (e) {
+            debugPrint('Error parsing extended_data: $e');
+          }
+        }
+      } else {
+        // Try parsing as pure JSON
+        try {
+          extendedData = jsonDecode(extData);
+        } catch (e) {
+          debugPrint('Error parsing extended_data as JSON: $e');
+        }
+      }
+    } else if (rating['extended_data'] is Map) {
+      extendedData = Map<String, dynamic>.from(rating['extended_data']);
+    }
+    
+    // Extract data from parsed JSON
+    Map<String, dynamic>? categoryScores;
+    List<String> performanceTags = [];
+    bool wouldRecommend = false;
+    bool wouldRehire = false;
+    
+    if (extendedData != null) {
+      categoryScores = extendedData['category_scores'] is Map 
+          ? Map<String, dynamic>.from(extendedData['category_scores'])
+          : null;
+      
+      if (extendedData['performance_tags'] is List) {
+        final tags = extendedData['performance_tags'];
+        if (tags is List) {
+          performanceTags = List<String>.from(tags);
+        }
+      }
+      
+      wouldRecommend = extendedData['would_recommend'] ?? false;
+      wouldRehire = extendedData['would_rehire'] ?? false;
+    }
+    
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[300]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header with user info and rating
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // User avatar
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[900],
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: Center(
+                    child: Text(
+                      raterName[0].toUpperCase(),
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // User info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        raterName,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey[900],
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        taskTitle,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Rating and date
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    // Overall rating
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.star,
+                          color: Colors.amber,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          overallRating.toStringAsFixed(1),
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.grey[900],
+                          ),
+                        ),
+                      ],
+                    ),
+                    // Date
+                    if (createdAt != null)
+                      Text(
+                        DateFormat('MMM dd, yyyy').format(createdAt),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[500],
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          
+          // Category scores with progress bars (if available)
+          if (categoryScores != null && categoryScores.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Divider(height: 1, color: Colors.grey[900]),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Category Ratings',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ...categoryScores.entries.map((entry) {
+                    final score = _extractDoubleFromDynamic(entry.value);
+                    return _buildCategoryProgressBar(
+                      _formatCategoryName(entry.key),
+                      score,
+                    );
+                  }),
+                  const SizedBox(height: 12),
+                ],
+              ),
+            ),
+          
+          // Performance tags as badge chips (if available)
+          if (performanceTags.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: performanceTags.map((tag) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[50],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.check_circle,
+                          size: 12,
+                          color: Colors.blue[700],
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _formatCategoryName(tag),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.blue[700],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          
+          // Comment (if available and clean)
+          if (cleanComment != null && cleanComment.isNotEmpty && cleanComment != comment)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              child: Text(
+                cleanComment,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[700],
+                  height: 1.4,
+                ),
+              ),
+            ),
+          
+          // Footer with verification and recommendation
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.grey[50],
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(12),
+                bottomRight: Radius.circular(12),
+              ),
+              border: Border(
+                top: BorderSide(color: Colors.grey[300]!),
+              ),
+            ),
+            child: Row(
+              children: [
+                // Verified checkmark if would_recommend is true
+                if (wouldRecommend)
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.verified,
+                        size: 16,
+                        color: Colors.green,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Verified',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.green,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                    ],
+                  ),
+                
+                // Recommendation text
+                Expanded(
+                  child: Text(
+                    _getRecommendationText(wouldRecommend, wouldRehire),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  // Helper to build category progress bar
+  Widget _buildCategoryProgressBar(String category, double score) {
+    final percentage = (score / 5.0) * 100;
+    
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                category,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey[700],
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Text(
+                '${score.toStringAsFixed(1)}/5.0',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Container(
+            height: 6,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Colors.grey[200],
+              borderRadius: BorderRadius.circular(3),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: percentage.toInt(),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: _getProgressBarColor(percentage),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 100 - percentage.toInt(),
+                  child: const SizedBox(),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Color _getProgressBarColor(double percentage) {
+    if (percentage >= 80) return Colors.green;
+    if (percentage >= 60) return Colors.blue;
+    if (percentage >= 40) return Colors.amber;
+    return Colors.orange;
+  }
+
+  // Helper methods
+  String _getRecommendationText(bool wouldRecommend, bool wouldRehire) {
+    if (wouldRecommend && wouldRehire) {
+      return 'Highly recommended • Would rehire';
+    } else if (wouldRecommend) {
+      return 'Recommended for future work';
+    } else if (wouldRehire) {
+      return 'Would work with again';
+    } else {
+      return 'Rating submitted';
+    }
+  }
+
+  double _extractDouble(Map<String, dynamic> data, List<String> keys, double defaultValue) {
+    dynamic current = data;
+    for (final key in keys) {
+      if (current is Map && current.containsKey(key)) {
+        current = current[key];
+      } else {
+        return defaultValue;
+      }
+    }
+    if (current is num) return current.toDouble();
+    if (current is String) return double.tryParse(current) ?? defaultValue;
+    return defaultValue;
+  }
+
+  double _extractDoubleFromDynamic(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
+  }
+
+  String _formatCategoryName(String name) {
+    final formatted = name.replaceAll(RegExp(r'([A-Z])'), r' $1').trim();
+    if (formatted.isEmpty) return name;
+    return formatted[0].toUpperCase() + formatted.substring(1);
   }
 
   Widget _buildRatingStats(RatingProvider provider, List<dynamic> ratings) {
@@ -817,7 +1248,7 @@ class _RatingsScreenState extends State<RatingsScreen> {
         children: [
           _buildStatItem(
             value: averageRating.toStringAsFixed(1),
-            label: 'Average',
+            label: 'Average Rating',
             icon: Icons.star,
             color: Colors.blueAccent,
           ),
@@ -828,7 +1259,7 @@ class _RatingsScreenState extends State<RatingsScreen> {
           ),
           _buildStatItem(
             value: totalRatings.toString(),
-            label: 'Total',
+            label: 'Total Ratings',
             icon: Icons.numbers,
             color: Colors.green,
           ),

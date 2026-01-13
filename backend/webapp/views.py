@@ -604,7 +604,7 @@ def create_task(request):
 
     
 @api_view(['GET'])
-@authentication_classes([EmployerTokenAuthentication])
+@authentication_classes([EmployerTokenAuthentication,CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def get_freelancer_proposals(request):
     try:
@@ -627,8 +627,6 @@ def get_freelancer_proposals(request):
             {'error': str(e)},
             status=status.HTTP_400_BAD_REQUEST
         )
-    
-  
 
 
 @api_view(['GET'])

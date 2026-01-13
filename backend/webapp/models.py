@@ -701,6 +701,13 @@ class Rating(models.Model):
     score = models.IntegerField(choices=[(i, i) for i in range(1, 6)])
     review = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    category_scores = models.JSONField(null=True, blank=True, help_text="Per-category rating breakdown")
+    
+    # ADD THESE NEW FIELDS for work passport data
+    would_recommend = models.BooleanField(null=True, blank=True, default=None)
+    would_rehire = models.BooleanField(null=True, blank=True, default=None)
+    performance_tags = models.JSONField(null=True, blank=True, help_text="List of performance tags")
+    calculated_composite = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
     
     class Meta:
         unique_together = [['task', 'rater', 'rated_user'], ['task', 'rater_employer', 'rated_user']]

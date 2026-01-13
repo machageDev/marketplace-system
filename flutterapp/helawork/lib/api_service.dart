@@ -1613,6 +1613,63 @@ static Future<Map<String, dynamic>> getFreelancerProfile(String freelancerId) as
     rethrow;
   }
 }
+// Get freelancer ratings/reviews
+static Future<Map<String, dynamic>> getFreelancerRatings(String freelancerId, {int page = 1}) async {
+  try {
+    // Get token (employer token for clients)
+    final String? token = await _getUserToken();
+    
+    if (token == null) {
+      throw Exception('No authentication token found. Please login.');
+    }
+
+    print('Fetching ratings for freelancer ID: $freelancerId');
+    print('URL: ${ApiService.baseUrl}/api/freelancers/$freelancerId/ratings/?page=$page');
+    
+    final response = await http.get(
+      Uri.parse('${ApiService.baseUrl}/api/freelancers/$freelancerId/ratings/?page=$page'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    print('Freelancer ratings response: ${response.statusCode}');
+
+    if (response.statusCode == 200) {
+      final Map<String, dynamic> data = jsonDecode(response.body);
+      if (data['success'] == true) {
+        print('✅ Successfully loaded freelancer ratings');
+        return data;
+      } else {
+        throw Exception(data['message'] ?? 'Failed to load ratings');
+      }
+    } else if (response.statusCode == 401) {
+      throw Exception('Authentication failed. Please login again.');
+    } else if (response.statusCode == 404) {
+      // Return empty ratings if endpoint not found (some freelancers may have no ratings)
+      return {
+        'success': true,
+        'ratings': [],
+        'average_rating': 0.0,
+        'total_ratings': 0
+      };
+    } else {
+      final errorData = jsonDecode(response.body);
+      throw Exception(errorData['message'] ?? 'Failed to load ratings: ${response.statusCode}');
+    }
+  } catch (e) {
+    print('Error in getFreelancerRatings: $e');
+    // Return empty ratings on error
+    return {
+      'success': false,
+      'message': e.toString(),
+      'ratings': [],
+      'average_rating': 0.0,
+      'total_ratings': 0
+    };
+  }
+}
  
 Future<Map<String, dynamic>> acceptProposal(String proposalId) async {
   try {
@@ -2333,6 +2390,7 @@ Future<Map<String, dynamic>> submitEmployerRating({
   required int freelancerId,
   required int score,
   String review = '',
+  Map<String, dynamic>? extendedData, // Add this parameter
 }) async {
   try {
     final String? token = await _getUserToken();
@@ -2343,6 +2401,22 @@ Future<Map<String, dynamic>> submitEmployerRating({
 
     debugPrint('🚀 Employer Submit Rating:');
     debugPrint('   Task: $taskId, Freelancer: $freelancerId, Score: $score');
+    if (extendedData != null) {
+      debugPrint('   Extended Data: $extendedData');
+    }
+
+    // Prepare the request body
+    final Map<String, dynamic> requestBody = {
+      'task': taskId,
+      'rated_user': freelancerId,
+      'score': score,
+      'review': review,
+    };
+    
+    // Add extended_data if provided
+    if (extendedData != null && extendedData.isNotEmpty) {
+      requestBody['extended_data'] = jsonEncode(extendedData);
+    }
 
     final response = await http.post(
       Uri.parse('$baseUrl/ratings/'),
@@ -2350,13 +2424,7 @@ Future<Map<String, dynamic>> submitEmployerRating({
         "Content-Type": "application/json",
         "Authorization": "Bearer $token",
       },
-      body: jsonEncode({
-        'task': taskId,
-        // ❌ NO 'contract' field for employers!
-        'rated_user': freelancerId,
-        'score': score,
-        'review': review,
-      }),
+      body: jsonEncode(requestBody),
     );
 
     debugPrint('📡 Employer Rating Response: ${response.statusCode}');
