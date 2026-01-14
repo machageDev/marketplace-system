@@ -2,9 +2,10 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class WalletService {
-  final String baseUrl = "http://192.168.100.188:8000/api/wallet"; // change to your backend IP
+  //final String baseUrl = "http://192.168.100.188:8000/api/wallet"; 
 
-  // ✅ ADD THIS METHOD: Get full wallet data including bank info
+   static const String baseUrl = 'https://marketplace-system-1.onrender.com';
+ 
   Future<Map<String, dynamic>?> getWalletData(String token) async {
     try {
       final response = await http.get(
@@ -15,11 +16,11 @@ class WalletService {
         },
       );
 
-      print('🔄 Fetching wallet data: Status ${response.statusCode}');
+      print(' Fetching wallet data: Status ${response.statusCode}');
       
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        print('✅ Wallet data received: $data');
+        print(' Wallet data received: $data');
         
         if (data['status'] == true) {
           return data['data'];
@@ -31,7 +32,7 @@ class WalletService {
           };
         }
       } else if (response.statusCode == 404) {
-        // Try alternative endpoint for backward compatibility
+        
         return await _getLegacyWalletData(token);
       }
       
@@ -57,7 +58,7 @@ class WalletService {
       
       return null;
     } catch (e) {
-      print('⚠️ Legacy wallet data fallback failed: $e');
+      print(' Legacy wallet data fallback failed: $e');
       return null;
     }
   }
@@ -87,7 +88,7 @@ class WalletService {
       
       return null;
     } catch (e) {
-      print('❌ Error in getBalance: $e');
+      print(' Error in getBalance: $e');
       return null;
     }
   }
@@ -110,7 +111,7 @@ class WalletService {
       
       return false;
     } catch (e) {
-      print('❌ Error in withdraw: $e');
+      print(' Error in withdraw: $e');
       return false;
     }
   }
@@ -140,12 +141,12 @@ class WalletService {
       
       return null;
     } catch (e) {
-      print('❌ Error in topUp: $e');
+      print(' Error in topUp: $e');
       return null;
     }
   }
 
-  // ✅ ADD THIS: Register bank account
+  
   Future<Map<String, dynamic>?> registerBankAccount(
     String token, 
     String accountNumber,
@@ -188,7 +189,7 @@ class WalletService {
         'errors': errorData['errors'],
       };
     } catch (e) {
-      print('❌ Error in registerBankAccount: $e');
+      print(' Error in registerBankAccount: $e');
       return {
         'success': false,
         'message': 'Network error: $e',
@@ -196,14 +197,14 @@ class WalletService {
     }
   }
 
-  // ✅ ADD THIS: Check if bank is registered
+  
   Future<bool> checkBankRegistration(String token) async {
     try {
       final walletData = await getWalletData(token);
       return walletData?['bank_verified'] == true || 
              walletData?['paystack_recipient_code'] != null;
     } catch (e) {
-      print('❌ Error checking bank registration: $e');
+      print(' Error checking bank registration: $e');
       return false;
     }
   }

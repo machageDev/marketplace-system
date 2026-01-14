@@ -353,10 +353,10 @@ class PaymentService {
         'freelancer_paystack_account': freelancerPaystackAccount.trim(),
       };
 
-      print('📦 Request body: $requestBody');
+      print(' Request body: $requestBody');
       
       final url = Uri.parse('$baseUrl/api/payment/initialize/');
-      print('🔗 Calling URL: $url');
+      print(' Calling URL: $url');
 
       final response = await http.post(
         url,
@@ -367,8 +367,8 @@ class PaymentService {
         body: jsonEncode(requestBody),
       );
 
-      print('📥 Response status: ${response.statusCode}');
-      print('📥 Response body: ${response.body}');
+      print(' Response status: ${response.statusCode}');
+      print(' Response body: ${response.body}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final Map<String, dynamic> responseData = jsonDecode(response.body);
@@ -414,7 +414,7 @@ class PaymentService {
         };
       }
     } catch (e) {
-      print('❌ ERROR in initializePayment: $e');
+      print(' ERROR in initializePayment: $e');
       return {
         'status': false,
         'message': 'Network error: $e',

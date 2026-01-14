@@ -23,12 +23,12 @@ FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 
 # SECURITY WARNING: keep the secret key used in production secret!
 # CHANGED: Read from environment variable with fallback for development
-#SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-ve@o6bn-j5^xfcu$g!%$k-&%%1o+ga0-fdf*oo727m=lqeirf@")
-SECRET_KEY = 'django-insecure-wnli4_56vo0r%3n)6m_qeu5k^@2@(dyry=rm+cp1ic^fw939pq'
+SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-ve@o6bn-j5^xfcu$g!%$k-&%%1o+ga0-fdf*oo727m=lqeirf@")
+#SECRET_KEY = 'django-insecure-wnli4_56vo0r%3n)6m_qeu5k^@2@(dyry=rm+cp1ic^fw939pq'
 # SECURITY WARNING: don't run with debug turned on in production!
 # CHANGED: Read from environment variable, default to False for production
-#DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
-DEBUG = True
+DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
+#DEBUG = True
 
 # CHANGED: Read from environment variable for production
 ALLOWED_HOSTS = [
@@ -90,19 +90,28 @@ import dj_database_url
 
 # CHANGED: Use environment variable for database configuration
 # This will automatically use DATABASE_URL on Render, fallback to local for development
+'''DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': 'systemdb',       
+            'USER': 'postgres',         
+            'PASSWORD': 'admin',
+            'HOST': 'localhost',
+            'PORT': '5432',
+        }
+    }'''
+
+
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'systemdb',       
-        'USER': 'postgres',         
-        'PASSWORD': 'admin',
-        'HOST': 'localhost',
-        'PORT': '5432',
-    }
+    'default': dj_database_url.parse(
+        "postgresql://helawork_m611_user:Ob2b5HO1Tjw37wIXM25dAuPTYTAy0bv2@dpg-d5jh7v9r0fns73d3hdog-a.oregon-postgres.render.com/helawork_m611",
+        conn_max_age=600,
+        ssl_require=True
+    )
 }
 
-
-
+#postgresql://helawork_user:pxDchEMaIRzIxmtv7Bh1qfySQ0QhgHs1@dpg-d4n7dv24d50c73f8jm80-a.oregon-postgres.render.com/helawork
+ 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
