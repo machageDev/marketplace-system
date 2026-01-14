@@ -51,7 +51,7 @@ INSTALLED_APPS = [
     'webapp',
     'rest_framework',
     'corsheaders',
-    'ratelimit',
+    
 ]
 
 MIDDLEWARE = [
