@@ -1327,9 +1327,11 @@ Future<Map<String, dynamic>> createTask({
     return {'success': false, 'error': 'Network error: $e'};
   }
 }
-Future<Map<String, dynamic>> fetchEmployerTasks(BuildContext context) async {
+// Inside api_service.dart
+ Future<Map<String, dynamic>> fetchEmployerTasks(BuildContext context) async {
   try {
-    final String? token = await _getUserToken();
+    // Note: I am assuming _getUserToken is a static method or logic within this class
+    final String? token = await _getUserToken(); 
     
     final response = await http.get(
       Uri.parse(employerTasksUrl),
@@ -1342,8 +1344,8 @@ Future<Map<String, dynamic>> fetchEmployerTasks(BuildContext context) async {
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
       
-      // We use the helper method above to ensure all tasks are mapped correctly
-      final List<Map<String, dynamic>> mappedTasks = await fetchTasks(response, context: context);
+      // Ensure fetchTasks is also called statically if defined as such
+      final List<Map<String, dynamic>> mappedTasks = await ApiService.fetchTasks(response, context: context);
 
       return {
         'success': true,
@@ -1352,13 +1354,12 @@ Future<Map<String, dynamic>> fetchEmployerTasks(BuildContext context) async {
         'employer': data['employer'] ?? {},
       };
     } else {
-      return {'success': false, 'error': 'Status ${response.statusCode}'};
+      return {'success': false, 'error': 'Server returned ${response.statusCode}'};
     }
   } catch (e) {
-    return {'success': false, 'error': 'Network error: $e'};
+    return {'success': false, 'error': 'Connection error: $e'};
   }
 }
-
 // Get task statistics
 Future<Map<String, dynamic>> fetchTaskStats() async {
   try {

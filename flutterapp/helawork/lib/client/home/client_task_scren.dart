@@ -118,6 +118,10 @@ class _TasksScreenState extends State<TasksScreen> {
   int _getTaskId(dynamic task) =>
       (task is Map<String, dynamic>) ? (task['task_id'] ?? task['id'] ?? 0) : 0;
 
+  // NEW: Get service type
+  String _getServiceType(dynamic task) =>
+      (task is Map<String, dynamic>) ? (task['service_type'] ?? 'remote') : 'remote';
+
   void _viewTaskDetails(dynamic task, BuildContext context) {
     final taskId = _getTaskId(task);
     if (taskId > 0) {
@@ -127,7 +131,6 @@ class _TasksScreenState extends State<TasksScreen> {
           pageBuilder: (_, __, ___) => TaskDetailScreen(
             taskId: taskId,
             task: task,
-            employer: task['employer'] ?? {},
           ),
           transitionsBuilder: (_, animation, __, child) {
             return SlideTransition(
@@ -172,7 +175,6 @@ class _TasksScreenState extends State<TasksScreen> {
             bottom: Radius.circular(20),
           ),
         ),
-        // Remove the back arrow
         automaticallyImplyLeading: false,
         actions: [
           IconButton(
@@ -427,7 +429,7 @@ class _TasksScreenState extends State<TasksScreen> {
       physics: const NeverScrollableScrollPhysics(),
       crossAxisSpacing: 16,
       mainAxisSpacing: 16,
-      childAspectRatio: 1.8, // Increased for more height
+      childAspectRatio: 1.8,
       children: [
         _buildSimpleStatCard('Total', total.toString(), Icons.assignment, _primaryColor),
         _buildSimpleStatCard('Open', open.toString(), Icons.lock_open, _successColor),
@@ -569,6 +571,8 @@ class _TasksScreenState extends State<TasksScreen> {
     final status = _getTaskStatus(task);
     final statusColor = _getStatusColor(status);
     final statusIcon = _getStatusIcon(status);
+    final serviceType = _getServiceType(task);
+    final isOnSite = serviceType == 'on_site';
 
     return GestureDetector(
       onTap: () => _viewTaskDetails(task, context),
@@ -634,6 +638,28 @@ class _TasksScreenState extends State<TasksScreen> {
                   ],
                 ),
                 const SizedBox(height: 8),
+                
+                // Service Type Indicator (NEW)
+                Row(
+                  children: [
+                    Icon(
+                      isOnSite ? Icons.location_on : Icons.laptop,
+                      color: isOnSite ? Colors.orange : Colors.blue,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      isOnSite ? 'On-Site Task' : 'Remote Task',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: isOnSite ? Colors.orange[800] : Colors.blue[800],
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                
                 // Description
                 Text(
                   _getTaskDescription(task),
@@ -645,6 +671,7 @@ class _TasksScreenState extends State<TasksScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 12),
+                
                 // Details row
                 Wrap(
                   spacing: 8,
@@ -668,6 +695,7 @@ class _TasksScreenState extends State<TasksScreen> {
                   ],
                 ),
                 const SizedBox(height: 8),
+                
                 // View details button
                 Align(
                   alignment: Alignment.centerRight,

@@ -8,13 +8,17 @@ class TaskDetailScreen extends StatefulWidget {
   final Map<String, dynamic> task;
   final Map<String, dynamic> employer;
   final bool isTaken; 
+  final bool isFromContract;
+  final Map<String, dynamic>? assignedFreelancer;
 
   const TaskDetailScreen({
     super.key,
     required this.taskId,
     required this.task,
     required this.employer,
-    required this.isTaken, required bool isFromContract, Map<String, dynamic>? assignedFreelancer, 
+    required this.isTaken,
+    required this.isFromContract,
+    this.assignedFreelancer,
   });
 
   @override
@@ -53,6 +57,10 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final serviceType = widget.task['service_type'] ?? 'remote';
+    final isOnSite = serviceType == 'on_site';
+    final locationAddress = widget.task['location_address'];
+
     return Scaffold(
       backgroundColor: const Color(0xFF0F111A),
       appBar: AppBar(
@@ -74,7 +82,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
             child: Column(
               children: [
                 // Main Task Card
-                _buildMainTaskCard(),
+                _buildMainTaskCard(isOnSite, locationAddress),
                 const SizedBox(height: 16),
 
                 // Description Section
@@ -98,7 +106,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     );
   }
 
-  Widget _buildMainTaskCard() {
+  Widget _buildMainTaskCard(bool isOnSite, String? locationAddress) {
     return Card(
       elevation: 2,
       color: const Color(0xFF1E1E2C),
@@ -110,6 +118,37 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Service Type Badge (NEW)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: isOnSite 
+                    ? Colors.orange.withOpacity(0.1) 
+                    : Colors.blue.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(5),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    isOnSite ? Icons.location_on : Icons.laptop,
+                    size: 14,
+                    color: isOnSite ? Colors.orange[300] : Colors.blue[300],
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    isOnSite ? "📍 ON-SITE TASK" : "💻 REMOTE TASK",
+                    style: TextStyle(
+                      color: isOnSite ? Colors.orange[300] : Colors.blue[300],
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            
             // Title and Status
             Row(
               children: [
@@ -148,6 +187,27 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               ],
             ),
             const SizedBox(height: 8),
+
+            // Show address only if it's on-site (NEW)
+            if (isOnSite && locationAddress != null && locationAddress.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Icon(Icons.location_pin, size: 14, color: Colors.orange[300]),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        "Location: $locationAddress",
+                        style: TextStyle(
+                          color: Colors.grey[300],
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
             // Description preview
             Text(
@@ -238,6 +298,11 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   }
 
   Widget _buildTaskDetailsCard() {
+    final serviceType = widget.task['service_type'] ?? 'remote';
+    final isOnSite = serviceType == 'on_site';
+    final locationAddress = widget.task['location_address'];
+    final paymentType = widget.task['payment_type'];
+
     return Card(
       elevation: 2,
       color: const Color(0xFF1E1E2C),
@@ -262,10 +327,16 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               children: [
                 if (widget.task['category'] != null)
                   _buildDetailItem('Category', widget.task['category']),
-                if (widget.task['skills'] != null)
-                  _buildDetailItem('Required Skills', widget.task['skills']),
+                if (widget.task['skills'] != null || widget.task['required_skills'] != null)
+                  _buildDetailItem('Required Skills', widget.task['skills'] ?? widget.task['required_skills'] ?? 'Not specified'),
+                if (serviceType != null)
+                  _buildDetailItem('Service Type', isOnSite ? 'On-Site (Physical)' : 'Remote (Digital)'),
+                if (paymentType != null)
+                  _buildDetailItem('Payment Type', paymentType == 'fixed' ? 'Fixed Price' : 'Hourly Rate'),
                 if (widget.task['created_at'] != null)
                   _buildDetailItem('Posted On', widget.task['created_at']),
+                if (isOnSite && locationAddress != null && locationAddress.isNotEmpty)
+                  _buildDetailItem('Location', locationAddress),
               ],
             ),
           ],

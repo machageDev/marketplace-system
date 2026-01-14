@@ -604,16 +604,12 @@ def create_task(request):
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def create_task(request):
-    
     try:
-    
         employer = Employer.objects.get(username=request.user.username)
         
+        skills = request.data.get('skills', '')
         
-        skills = request.data.get('skills')
-        if skills is None or skills == '':
-            skills = ''  
-        
+        # ADD THESE LINES to capture the new fields from Flutter
         task_data = {
             'employer': employer.employer_id,
             'title': request.data.get('title'),
@@ -621,11 +617,16 @@ def create_task(request):
             'category': request.data.get('category'),
             'budget': request.data.get('budget'),
             'deadline': request.data.get('deadline'),
-            'required_skills': skills,  
-            'is_urgent': request.data.get('isUrgent', False)
+            'required_skills': skills,
+            'is_urgent': request.data.get('isUrgent', False),
+            
+            # --- THE MISSING HYBRID FIELDS ---
+            'service_type': request.data.get('serviceType'), # Flutter sends 'serviceType'
+            'location_address': request.data.get('locationAddress'), # Flutter sends 'locationAddress'
+            'latitude': request.data.get('latitude'),
+            'longitude': request.data.get('longitude'),
         }
         
-        # Create task
         serializer = TaskSerializer(data=task_data)
         if serializer.is_valid():
             task = serializer.save()
@@ -635,6 +636,8 @@ def create_task(request):
                 'task': TaskSerializer(task).data
             }, status=status.HTTP_201_CREATED)
         else:
+            # If it's invalid, this will tell you if service_type is wrong
+            print(f"Serializer Errors: {serializer.errors}") 
             return Response({
                 'success': False,
                 'message': 'Invalid data',
@@ -642,16 +645,9 @@ def create_task(request):
             }, status=status.HTTP_400_BAD_REQUEST)
             
     except Employer.DoesNotExist:
-        return Response({
-            'success': False,
-            'message': 'Employer profile not found'
-        }, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'success': False, 'message': 'Employer profile not found'}, status=400)
     except Exception as e:
-        return Response({
-            'success': False,
-            'message': f'Error creating task: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+        return Response({'success': False, 'message': str(e)}, status=500)
     
 @api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication,CustomTokenAuthentication])

@@ -4,7 +4,7 @@ class TaskDetailScreen extends StatelessWidget {
   final int taskId;
   final dynamic task;
 
-  const TaskDetailScreen({super.key, required this.taskId, required this.task, required employer});
+  const TaskDetailScreen({super.key, required this.taskId, required this.task});
 
   String _getStatusText(String status) {
     switch (status.toLowerCase()) {
@@ -34,6 +34,9 @@ class TaskDetailScreen extends StatelessWidget {
     final status = task['status'] ?? 'open';
     final deadline = task['deadline'];
     final createdAt = task['created_at'];
+    final serviceType = task['service_type'] ?? 'remote';
+    final isOnSite = serviceType == 'on_site';
+    final locationAddress = task['location_address'];
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
@@ -87,6 +90,28 @@ class TaskDetailScreen extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(height: 8),
+                            
+                            // Service Type Indicator (NEW)
+                            Row(
+                              children: [
+                                Icon(
+                                  isOnSite ? Icons.location_on : Icons.laptop,
+                                  color: isOnSite ? Colors.orange : Colors.blue,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  isOnSite ? 'On-Site Task' : 'Remote Task',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: isOnSite ? Colors.orange[800] : Colors.blue[800],
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            
                             if (budget != null)
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -162,10 +187,28 @@ class TaskDetailScreen extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 15,
                       height: 1.6,
-                      color: Colors.white, // WHITE TEXT ON BLUE BACKGROUND
+                      color: Colors.white,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Service Type & Location Section (Conditional) - BLUE CARD
+            _buildBlueSectionCard(
+              icon: isOnSite ? Icons.location_on : Icons.computer,
+              title: isOnSite ? 'Location Details' : 'Work Type',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (isOnSite && locationAddress != null)
+                    _buildBlueFeatureChip('Location Address', locationAddress, Icons.location_on),
+                  if (!isOnSite)
+                    _buildBlueFeatureChip('Work Type', 'Remote Work (Digital)', Icons.computer),
+                  if (isOnSite && task['latitude'] != null && task['longitude'] != null)
+                    _buildBlueFeatureChip('Coordinates', '${task['latitude']}, ${task['longitude']}', Icons.map),
                 ],
               ),
             ),
@@ -184,6 +227,8 @@ class TaskDetailScreen extends StatelessWidget {
                     children: [
                       _buildBlueFeatureChip('Category', category, Icons.label),
                       _buildBlueFeatureChip('Skills', skills, Icons.code),
+                      if (task['payment_type'] != null)
+                        _buildBlueFeatureChip('Payment Type', task['payment_type'], Icons.payment),
                     ],
                   ),
                 ],
@@ -198,10 +243,10 @@ class TaskDetailScreen extends StatelessWidget {
               child: Column(
                 children: [
                   _buildBlueDetailRow('Task ID', taskId.toString(), Icons.fingerprint),
-                  if (task['location'] != null)
-                    _buildBlueDetailRow('Location', task['location'], Icons.location_on),
                   if (task['duration'] != null)
                     _buildBlueDetailRow('Duration', task['duration'], Icons.timer),
+                  if (task['is_urgent'] != null && task['is_urgent'] == true)
+                    _buildBlueDetailRow('Priority', 'URGENT', Icons.priority_high),
                 ],
               ),
             ),
@@ -234,7 +279,7 @@ class TaskDetailScreen extends StatelessWidget {
     );
   }
 
-  // NEW: Blue section card
+  // Blue section card
   Widget _buildBlueSectionCard({required IconData icon, required String title, required Widget child}) {
     return Container(
       decoration: BoxDecoration(
@@ -286,7 +331,7 @@ class TaskDetailScreen extends StatelessWidget {
     );
   }
 
-  // NEW: Blue feature chip
+  // Blue feature chip
   Widget _buildBlueFeatureChip(String label, String value, IconData icon) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -312,12 +357,17 @@ class TaskDetailScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 2),
-              Text(
-                value.length > 20 ? '${value.substring(0, 20)}...' : value,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
+              SizedBox(
+                width: 200,
+                child: Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -327,7 +377,7 @@ class TaskDetailScreen extends StatelessWidget {
     );
   }
 
-  // NEW: Blue detail row
+  // Blue detail row
   Widget _buildBlueDetailRow(String label, String value, IconData icon) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12),

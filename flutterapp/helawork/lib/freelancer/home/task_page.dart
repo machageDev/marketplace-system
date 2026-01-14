@@ -371,6 +371,9 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
     final bool isTaken = _isTaskTaken(task);
     final assignedFreelancer = _getAssignedFreelancer(task);
     final freelancerName = _getFreelancerName(assignedFreelancer);
+    final serviceType = task['service_type'] ?? 'remote';
+    final isOnSite = serviceType == 'on_site';
+    final locationAddress = task['location_address'];
     
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -381,6 +384,37 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Service Type Badge (NEW)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: isOnSite 
+                    ? Colors.orange.withOpacity(0.1) 
+                    : Colors.blue.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(5),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    isOnSite ? Icons.location_on : Icons.laptop,
+                    size: 12,
+                    color: isOnSite ? Colors.orange[900] : Colors.blue[900],
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    isOnSite ? "📍 ON-SITE" : "💻 REMOTE",
+                    style: TextStyle(
+                      color: isOnSite ? Colors.orange[900] : Colors.blue[900],
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            
             Row(
               children: [
                 Expanded(
@@ -418,6 +452,29 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
                 _buildTaskStatus(task, isTaken, isAssignedToMe, freelancerName),
               ],
             ),
+            
+            // Show address only if it's on-site (NEW)
+            if (isOnSite && locationAddress != null && locationAddress.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(
+                  children: [
+                    Icon(Icons.location_pin, size: 14, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        "Location: $locationAddress",
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 12,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             
             if (isTaken && !isAssignedToMe)
               Container(
