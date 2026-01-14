@@ -549,6 +549,56 @@ def employer_profile(request, employer_id):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
+'''@api_view(['POST'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def create_task(request):
+    try:
+        # Get employer profile
+        employer = Employer.objects.get(username=request.user.username)
+        
+        # Extract skills safely
+        skills = request.data.get('skills', '')
+        
+        # Prepare data for the new hybrid model
+        task_data = {
+            'employer': employer.employer_id,
+            'title': request.data.get('title'),
+            'description': request.data.get('description'),
+            'category': request.data.get('category', 'other'),
+            'service_type': request.data.get('service_type', 'remote'), # 'remote' or 'on_site'
+            'payment_type': request.data.get('payment_type', 'fixed'),   # 'fixed' or 'hourly'
+            'budget': request.data.get('budget'),
+            'deadline': request.data.get('deadline'),
+            'required_skills': skills,
+            'is_urgent': request.data.get('isUrgent', False),
+            
+            # Location fields (New for TaskRabbit features)
+            'location_address': request.data.get('location_address'),
+            'latitude': request.data.get('latitude'),
+            'longitude': request.data.get('longitude'),
+        }
+        
+        # Validate and Save
+        serializer = TaskSerializer(data=task_data)
+        if serializer.is_valid():
+            task = serializer.save()
+            return Response({
+                'success': True,
+                'message': 'Task created successfully',
+                'task': TaskSerializer(task).data
+            }, status=status.HTTP_201_CREATED)
+        else:
+            return Response({
+                'success': False,
+                'message': 'Validation Error',
+                'errors': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+    except Employer.DoesNotExist:
+        return Response({'success': False, 'message': 'Employer profile not found'}, status=400)
+    except Exception as e:
+        return Response({'success': False, 'message': str(e)}, status=500)    '''
 # Create Task
 @api_view(['POST'])
 @authentication_classes([EmployerTokenAuthentication])

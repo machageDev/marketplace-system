@@ -1314,15 +1314,20 @@ String _getErrorMessage(int statusCode) {
       return 'Registration failed. Please try again.';
   }
 }
-
 Future<Map<String, dynamic>> createTask({
   required String title,
   required String description,
   required String category,
+  required String serviceType, // 'remote' or 'on_site'
+  required String paymentType, // 'fixed' or 'hourly'
   double? budget,
   DateTime? deadline,
   String? skills,
   bool isUrgent = false,
+  // New Location Fields
+  String? locationAddress,
+  double? latitude,
+  double? longitude,
 }) async {
   try {
     final String? token = await _getUserToken();
@@ -1337,42 +1342,35 @@ Future<Map<String, dynamic>> createTask({
         'title': title,
         'description': description,
         'category': category,
+        'service_type': serviceType,
+        'payment_type': paymentType,
         'budget': budget,
-        'deadline': deadline?.toIso8601String().split('T')[0], // Date only for DateField
+        'deadline': deadline?.toIso8601String().split('T')[0],
         'required_skills': skills,
         'is_urgent': isUrgent,
-        // No employer field - it will be set automatically from the authenticated user
+        'location_address': locationAddress,
+        'latitude': latitude,
+        'longitude': longitude,
       }),
     );
 
-    print('Create Task Response: ${response.statusCode} - ${response.body}');
-
     if (response.statusCode == 201) {
-      final responseData = json.decode(response.body);
       return {
         'success': true,
         'message': 'Task created successfully!',
-        'data': responseData,
+        'data': json.decode(response.body),
       };
     } else {
       final errorData = json.decode(response.body);
       return {
         'success': false,
-        'error': errorData['error'] ?? 
-                errorData['message'] ?? 
-                'Failed to create task. Status: ${response.statusCode}',
-        'statusCode': response.statusCode,
+        'error': errorData['message'] ?? 'Failed to create task.',
       };
     }
   } catch (e) {
-    print('Create Task Error: $e');
-    return {
-      'success': false,
-      'error': 'Network error: $e',
-    };
+    return {'success': false, 'error': 'Network error: $e'};
   }
 }
-// Fetch employer tasks - Updated
 Future<Map<String, dynamic>> fetchEmployerTasks() async {
   try {
     final String? token = await _getUserToken();

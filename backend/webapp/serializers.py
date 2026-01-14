@@ -170,19 +170,20 @@ class EmployerSerializer(serializers.ModelSerializer):
 
 class TaskSerializer(serializers.ModelSerializer):
     is_taken = serializers.SerializerMethodField()
+    service_type_display = serializers.CharField(source='get_service_type_display', read_only=True)
 
     class Meta:
         model = Task
         fields = [
-            'task_id',
-            'title',
-            'description',
-            'budget',
-            'status',
-            'assigned_user',
-            'is_taken',
-            'created_at'
+            'task_id', 'employer', 'title', 'description', 'category',
+            'service_type', 'service_type_display', 'payment_type', 
+            'budget', 'location_address', 'latitude', 'longitude',
+            'deadline', 'required_skills', 'is_urgent', 'status', 
+            'payment_status', 'is_paid', 'assigned_user', 
+            'is_taken', 'created_at'
         ]
+        # Make these read-only so users can't manually set them via the API
+        read_only_fields = ['payment_status', 'is_paid', 'status']
 
     def get_is_taken(self, obj):
         return obj.status != 'open' or obj.assigned_user is not None

@@ -26,7 +26,7 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
   List<dynamic> _recommendedJobs = [];
   String? _userToken;
   
-  final String baseUrl = 'http://192.168.100.188:8000';
+  final String baseUrl = 'https://marketplace-system-1.onrender.com';
   
   bool _tasksLoaded = false;
 

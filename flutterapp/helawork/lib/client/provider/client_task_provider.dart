@@ -11,19 +11,21 @@ class TaskProvider extends ChangeNotifier {
   String get errorMessage => _errorMessage;
   List<dynamic> get tasks => _tasks;
 
-  // Create Task
- // In TaskProvider, update the createTask method to handle the UI feedback better
-Future<Map<String, dynamic>> createTask({
+  Future<Map<String, dynamic>> createTask({
   required String title,
   required String description,
   required String category,
+  required String serviceType,
+  required String paymentType,
   double? budget,
   DateTime? deadline,
   String? skills,
   bool isUrgent = false,
+  String? locationAddress,
+  double? latitude,
+  double? longitude,
 }) async {
   _isLoading = true;
-  _errorMessage = '';
   notifyListeners();
 
   try {
@@ -31,45 +33,29 @@ Future<Map<String, dynamic>> createTask({
       title: title,
       description: description,
       category: category,
+      serviceType: serviceType,
+      paymentType: paymentType,
       budget: budget,
       deadline: deadline,
       skills: skills,
       isUrgent: isUrgent,
+      locationAddress: locationAddress,
+      latitude: latitude,
+      longitude: longitude,
     );
 
     _isLoading = false;
-    
     if (result['success'] == true) {
-      // Add the new task to the local list
-      if (result['data'] != null) {
-        _tasks.insert(0, result['data']);
-      }
-      _errorMessage = ''; // Clear any previous errors
+      _tasks.insert(0, result['data']);
       notifyListeners();
-      return {
-        'success': true,
-        'message': result['message'] ?? 'Task created successfully!',
-        'data': result['data'],
-      };
-    } else {
-      _errorMessage = result['error'] ?? result['message'] ?? 'Failed to create task';
-      notifyListeners();
-      return {
-        'success': false,
-        'message': _errorMessage,
-      };
     }
+    return result;
   } catch (e) {
     _isLoading = false;
-    _errorMessage = e.toString();
     notifyListeners();
-    return {
-      'success': false,
-      'message': e.toString(),
-    };
+    return {'success': false, 'message': e.toString()};
   }
 }
-
   // Fetch all tasks
   Future<void> fetchTasks(dynamic context) async {
     _isLoading = true;

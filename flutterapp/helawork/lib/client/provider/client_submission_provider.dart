@@ -22,7 +22,7 @@ Future<void> fetchSubmissions() async {
   try {
     debugPrint("📋 Fetching submissions for review...");
     _submissions = await ApiService.getEmployerSubmissions();
-    debugPrint("✅ Loaded ${_submissions.length} submissions");
+    debugPrint(" Loaded ${_submissions.length} submissions");
     
     if (_submissions.isEmpty) {
       _errorMessage = "No submissions found. Submissions will appear here when freelancers submit their work.";

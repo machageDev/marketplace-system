@@ -177,7 +177,7 @@ class EmployerProfile(models.Model):
     def __str__(self):
         return self.get_display_name()
     
-class Task(models.Model):
+'''class Task(models.Model):
     TASK_CATEGORIES = [
         ('web', 'Web Development'),
         ('mobile', 'Mobile Development'),
@@ -223,7 +223,116 @@ class Task(models.Model):
     
     @property
     def has_assigned_freelancer(self):
-        return self.assigned_user is not None
+        return self.assigned_user is not None'''
+
+
+class Task(models.Model):
+
+    # CATEGORIES (Digital + Physical)
+    TASK_CATEGORIES = [
+        ('web_dev', 'Web Development'),
+        ('digital_marketing', 'Digital Marketing'),
+        ('cleaning', 'Cleaning & Housekeeping'),
+        ('handyman', 'Handyman & Repairs'),
+        ('delivery', 'Delivery Services'),
+        ('moving', 'Moving & Packing'),
+        ('other', 'Other'),
+    ]
+
+    # SERVICE TYPE
+    SERVICE_TYPE = [
+        ('remote', 'Remote (Digital Online Work)'),
+        ('on_site', 'On-Site (Physical Work)'),
+    ]
+
+    # PAYMENT TYPE
+    PAYMENT_TYPE = [
+        ('fixed', 'Fixed Price'),
+        ('hourly', 'Hourly Rate'),
+    ]
+
+    # STATUS FLOW
+    TASK_STATUS = [
+        ('open', 'Open'),
+        ('assigned', 'Assigned'),
+        ('in_progress', 'In Progress'),
+        ('awaiting_confirmation', 'Awaiting Employer Confirmation'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    # MAIN FIELDS
+    task_id = models.AutoField(primary_key=True)
+    title = models.CharField(max_length=255)
+    description = models.TextField()
+    category = models.CharField(max_length=50, choices=TASK_CATEGORIES, default='other')
+
+    # CLASSIFICATION
+    service_type = models.CharField(max_length=20, choices=SERVICE_TYPE, default='remote')
+    payment_type = models.CharField(max_length=20, choices=PAYMENT_TYPE, default='fixed')
+
+    # PAYMENT LOGIC
+    budget = models.DecimalField( max_digits=10, decimal_places=2, default=0.00,)
+
+    # PAYMENT TRACKING + ESCROW
+    is_paid = models.BooleanField(default=False)
+    amount_held_in_escrow = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    
+    payment_status = models.CharField(
+        max_length=20,
+        choices=[
+            ('pending', 'Pending Payment'),
+            ('escrowed', 'Held in Escrow by Helawork'),
+            ('released', 'Paid to Worker'),
+            ('refunded', 'Refunded to Employer'),
+        ],
+        default='pending'
+    )
+
+    paystack_reference = models.CharField(max_length=100, blank=True, null=True)
+
+    # LOCATION (Only required for on-site tasks)
+    location_address = models.CharField(max_length=255, null=True, blank=True)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+
+    # TIMELINE / SCHEDULE
+    deadline = models.DateTimeField(null=True, blank=True)
+    is_urgent = models.BooleanField(default=False)
+
+    # SKILLS AND FILES
+    required_skills = models.CharField(max_length=255, blank=True)
+    attachments = models.FileField(upload_to='task_files/', null=True, blank=True)
+
+    # SYSTEM FLAGS
+    is_approved = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    status = models.CharField(max_length=25, choices=TASK_STATUS, default='open')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    # RELATIONSHIPS
+    employer = models.ForeignKey('Employer', on_delete=models.CASCADE, related_name="tasks")
+    assigned_user = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, blank=True)
+
+    # DISPLAY / PROPERTIES
+    def __str__(self):
+        return f"{self.get_service_type_display()} - {self.title}"
+
+    @property
+    def is_physical(self):
+        return self.service_type == 'on_site'
+
+    @property
+    def is_digital(self):
+        return self.service_type == 'remote'
+
+    @property
+    def is_open_for_assignment(self):
+        return self.status == "open" and self.is_active and self.is_approved
+
+    @property
+    def is_completed_and_paid(self):
+        return self.status == "completed" and self.payment_status == "released"
 
 class TaskCompletion(models.Model):
     completion_id = models.AutoField(primary_key=True)
