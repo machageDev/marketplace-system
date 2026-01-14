@@ -266,6 +266,10 @@ class Task(models.Model):
     title = models.CharField(max_length=255)
     description = models.TextField()
     category = models.CharField(max_length=50, choices=TASK_CATEGORIES, default='other')
+    SERVICE_CHOICES = [
+        ('remote', 'Remote'),
+        ('on_site', 'On-Site'),
+    ]
 
     # CLASSIFICATION
     service_type = models.CharField(max_length=20, choices=SERVICE_TYPE, default='remote')

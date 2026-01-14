@@ -136,6 +136,61 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
     );
   }
 
+  // Build Service Type Selector Card
+  Widget _buildServiceTypeCard({required String type, required String label, required IconData icon}) {
+    bool isSelected = _serviceType == type;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _serviceType = type),
+        child: Container(
+          height: 120,
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.yellow[600] : Colors.white,
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(
+              color: isSelected ? Colors.amber[700]! : Colors.grey[300]!,
+              width: isSelected ? 2 : 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: isSelected ? Colors.amber.withOpacity(0.2) : Colors.grey.withOpacity(0.1),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 32,
+                color: isSelected ? Colors.amber[900] : Colors.grey[700],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: isSelected ? Colors.amber[900] : Colors.grey[700],
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 5),
+              if (isSelected)
+                Icon(
+                  Icons.check_circle,
+                  size: 16,
+                  color: Colors.amber[900],
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isLoading = context.watch<TaskProvider>().isLoading;
@@ -221,58 +276,32 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                     children: [
                       // 1. SERVICE TYPE SELECTOR (Hybrid Logic)
                       const Text(
-                        "What kind of service is this?",
+                        "What kind of service is this? *",
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
                           fontSize: 16,
                         ),
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 15),
+                      
+                      // Service Type Cards
                       Row(
                         children: [
-                          Expanded(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: _serviceType == 'remote' ? Colors.white : Colors.white.withOpacity(0.3),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: ChoiceChip(
-                                label: const Center(child: Text("Remote (Digital)")),
-                                selected: _serviceType == 'remote',
-                                onSelected: (val) => setState(() => _serviceType = 'remote'),
-                                selectedColor: Colors.white,
-                                backgroundColor: Colors.transparent,
-                                labelStyle: TextStyle(
-                                  color: _serviceType == 'remote' ? Colors.blueAccent : Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
+                          _buildServiceTypeCard(
+                            type: 'remote',
+                            label: 'Remote\n(Digital Work)',
+                            icon: Icons.computer,
                           ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: _serviceType == 'on_site' ? Colors.white : Colors.white.withOpacity(0.3),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: ChoiceChip(
-                                label: const Center(child: Text("On-Site (Physical)")),
-                                selected: _serviceType == 'on_site',
-                                onSelected: (val) => setState(() => _serviceType = 'on_site'),
-                                selectedColor: Colors.white,
-                                backgroundColor: Colors.transparent,
-                                labelStyle: TextStyle(
-                                  color: _serviceType == 'on_site' ? Colors.blueAccent : Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
+                          const SizedBox(width: 15),
+                          _buildServiceTypeCard(
+                            type: 'on_site',
+                            label: 'On-Site\n(Physical Work)',
+                            icon: Icons.location_on,
                           ),
                         ],
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 25),
 
                       // 2. FORM FIELDS
                       _buildTextField(

@@ -31,7 +31,7 @@ class TaskProvider extends ChangeNotifier {
   try {
     final result = await ApiService().createTask(
       title: title,
-      description: description,
+      description: description,      
       category: category,
       serviceType: serviceType,
       paymentType: paymentType,
@@ -75,13 +75,13 @@ class TaskProvider extends ChangeNotifier {
   }
 
   // Fetch employer's tasks
-  Future<Map<String, dynamic>> fetchEmployerTasks() async {
+  Future<Map<String, dynamic>> fetchEmployerTasks(BuildContext context) async {
     _isLoading = true;
     _errorMessage = '';
     notifyListeners();
 
     try {
-      final result = await ApiService().fetchEmployerTasks();
+      final result = await ApiService().fetchEmployerTasks( context);
       _isLoading = false;
       
       if (result['success'] == true) {

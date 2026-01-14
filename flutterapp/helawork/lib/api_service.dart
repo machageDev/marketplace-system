@@ -247,93 +247,7 @@ Future<List<dynamic>> getEmployerRatings(int employerId) async {
     final response = await http.get(Uri.parse(earningUrl));
     return json.decode(response.body);
   }
-static Future<List<Map<String, dynamic>>> fetchTasks(http.Response response, {required BuildContext context}) async {
-  try {
-    print('Task API Response Status: ${response.statusCode}');
-    
-    if (response.statusCode == 200) {
-      final dynamic data = jsonDecode(response.body);
-      
-      print('Task API Raw Response:');
-      print(data);
-      
-      // Handle your Django API format: {"status": true, "tasks": [...], "count": 8}
-      if (data is Map && data.containsKey('tasks')) {
-        final List<dynamic> tasksList = data['tasks'];
-        
-        if (tasksList.isEmpty) {
-          return [
-            {
-              "task_id": 0, 
-              "id": 0,
-              "title": "No tasks available",
-              "description": "Check back later for new tasks",
-              "employer": {"username": "System"},
-              "is_taken": false,  
-              "has_contract": false,  
-            }
-          ];
-        }
-        
-        return tasksList.map((task) {
-          final mappedTask = Map<String, dynamic>.from(task);
-          
-          // Map your fields
-          mappedTask['id'] = mappedTask['id'] ?? mappedTask['task_id'] ?? 0;
-          mappedTask['is_taken'] = mappedTask['is_taken'] ?? false;
-          mappedTask['has_contract'] = mappedTask['has_contract'] ?? false;
-          mappedTask['overall_status'] = mappedTask['overall_status'] ?? mappedTask['status'] ?? 'open';
-          mappedTask['assigned_freelancer'] = mappedTask['assigned_freelancer'] ?? mappedTask['assigned_user'];
-          
-          mappedTask['completed'] = mappedTask['completed'] ?? false;
-          mappedTask['employer'] = mappedTask['employer'] ?? {
-            'username': 'Unknown Client',
-            'company_name': 'Unknown Company'
-          };
-          
-          return mappedTask;
-        }).toList();
-        
-      } else if (data is List) {
-        // Handle direct List format (old format)
-        if (data.isEmpty) {
-          return [
-            {
-              "task_id": 0, 
-              "id": 0,
-              "title": "No tasks available",
-              "description": "Check back later for new tasks",
-              "employer": {"username": "System"},
-              "is_taken": false,  
-              "has_contract": false,  
-            }
-          ];
-        }
-        
-        return data.map((task) {
-          final mappedTask = Map<String, dynamic>.from(task);
-          // ... same mapping logic as above
-          return mappedTask;
-        }).toList();
-        
-      } else if (data is Map && data.containsKey('error')) {
-        throw Exception("API Error: ${data['error']}");
-      } else if (data is Map && data.containsKey('data')) {
-        // Handle {"data": [...]} format
-        final List<dynamic> taskList = data['data'];
-        return taskList.map((task) => Map<String, dynamic>.from(task)).toList();
-      } else {
-        print('Unexpected format. Keys: ${data is Map ? data.keys : "Not a Map"}');
-        throw Exception("Unexpected response format");
-      }
-    } else {
-      throw Exception("Failed to load tasks: ${response.statusCode} - ${response.body}");
-    }
-  } catch (e) {
-    print('Error fetching tasks: $e');
-    rethrow;
-  }
-}
+  
 
  Future<Map<String, dynamic>> updateUserProfile(
     Map<String, dynamic> profile, String token) async {  // Remove userId parameter
@@ -717,8 +631,50 @@ static Future<Proposal> submitProposal(Proposal proposal, {PlatformFile? pdfFile
     print('===================================');
     throw Exception("Error submitting proposal: $e");
   }
+}static Future<List<Map<String, dynamic>>> fetchTasks(http.Response response, {required BuildContext context}) async {
+  try {
+    if (response.statusCode == 200) {
+      final dynamic data = jsonDecode(response.body);
+      List<dynamic> tasksList = [];
+
+      if (data is Map && data.containsKey('tasks')) {
+        tasksList = data['tasks'];
+      } else if (data is List) {
+        tasksList = data;
+      }
+
+      if (tasksList.isEmpty) {
+        return [{"id": 0, "title": "No tasks available", "employer": {"username": "System"}}];
+      }
+
+      return tasksList.map((task) {
+        final mappedTask = Map<String, dynamic>.from(task);
+        
+        // standard ID mapping
+        mappedTask['id'] = mappedTask['id'] ?? mappedTask['task_id'] ?? 0;
+        
+        // HYBRID MODEL FIELDS
+        mappedTask['service_type'] = mappedTask['service_type'] ?? 'remote';
+        mappedTask['payment_type'] = mappedTask['payment_type'] ?? 'fixed';
+        mappedTask['location_address'] = mappedTask['location_address'] ?? 'No location provided';
+        mappedTask['latitude'] = mappedTask['latitude']; 
+        mappedTask['longitude'] = mappedTask['longitude'];
+        mappedTask['is_urgent'] = mappedTask['is_urgent'] ?? false;
+        
+        // Existing status/employer mapping
+        mappedTask['overall_status'] = mappedTask['overall_status'] ?? mappedTask['status'] ?? 'open';
+        mappedTask['employer'] = mappedTask['employer'] ?? {'username': 'Unknown Client'};
+        
+        return mappedTask;
+      }).toList();
+    } else {
+      throw Exception("Failed to load tasks: ${response.statusCode}");
+    }
+  } catch (e) {
+    print('Error mapping hybrid task data: $e');
+    rethrow;
+  }
 }
-  // In fetchProposals method
 static Future<List<Proposal>> fetchProposals() async {
   final String? token = await _getUserToken();
   final url = Uri.parse(proposalsUrl);  
@@ -1371,7 +1327,7 @@ Future<Map<String, dynamic>> createTask({
     return {'success': false, 'error': 'Network error: $e'};
   }
 }
-Future<Map<String, dynamic>> fetchEmployerTasks() async {
+Future<Map<String, dynamic>> fetchEmployerTasks(BuildContext context) async {
   try {
     final String? token = await _getUserToken();
     
@@ -1385,22 +1341,21 @@ Future<Map<String, dynamic>> fetchEmployerTasks() async {
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
+      
+      // We use the helper method above to ensure all tasks are mapped correctly
+      final List<Map<String, dynamic>> mappedTasks = await fetchTasks(response, context: context);
+
       return {
         'success': true,
-        'tasks': data['tasks'] ?? data['data'] ?? [],
-        'stats': data['stats'] ?? data['statistics'] ?? {},
+        'tasks': mappedTasks,
+        'count': data['count'] ?? 0,
+        'employer': data['employer'] ?? {},
       };
     } else {
-      return {
-        'success': false,
-        'error': 'Failed to load tasks: ${response.statusCode}',
-      };
+      return {'success': false, 'error': 'Status ${response.statusCode}'};
     }
   } catch (e) {
-    return {
-      'success': false,
-      'error': 'Network error: $e',
-    };
+    return {'success': false, 'error': 'Network error: $e'};
   }
 }
 
@@ -2469,8 +2424,8 @@ static Future<Map<String, dynamic>> createRating({
       },
       body: jsonEncode({
         'task': taskId,
-        'contract': contractId,  // ✅ Freelancer sends contract
-        'rated_user': ratedUserId,  // Employer/client being rated
+        'contract': contractId,  
+        'rated_user': ratedUserId,  
         'score': score,
         'review': review,
       }),

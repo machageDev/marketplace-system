@@ -28,7 +28,7 @@ class _TasksScreenState extends State<TasksScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<TaskProvider>(context, listen: false).fetchEmployerTasks();
+      Provider.of<TaskProvider>(context, listen: false).fetchEmployerTasks(context);
     });
   }
 
@@ -185,7 +185,7 @@ class _TasksScreenState extends State<TasksScreen> {
               child: const Icon(Icons.refresh, color: Colors.white, size: 22),
             ),
             onPressed: () {
-              Provider.of<TaskProvider>(context, listen: false).fetchEmployerTasks();
+              Provider.of<TaskProvider>(context, listen: false).fetchEmployerTasks(context);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: const Text('Refreshing tasks...'),
@@ -242,7 +242,7 @@ class _TasksScreenState extends State<TasksScreen> {
             color: _primaryColor,
             backgroundColor: _backgroundColor,
             onRefresh: () async {
-              await taskProvider.fetchEmployerTasks();
+              await taskProvider.fetchEmployerTasks(context);
             },
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
@@ -326,7 +326,7 @@ class _TasksScreenState extends State<TasksScreen> {
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
-              onPressed: taskProvider.fetchEmployerTasks,
+              onPressed:()=> taskProvider.fetchEmployerTasks(context),
               icon: const Icon(Icons.refresh),
               label: const Text('Try Again',
                   style: TextStyle(fontWeight: FontWeight.w600)),
