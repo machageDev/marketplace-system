@@ -12,9 +12,9 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
 class ApiService{
-  static const String baseUrl = 'https://marketplace-system-1.onrender.com';
+  //static const String baseUrl = 'https://marketplace-system-1.onrender.com';
   
-  //static const String baseUrl = 'http://192.168.100.188:8000';
+  static const String baseUrl = 'http://192.168.100.188:8000';
  
   static const String registerUrl = '$baseUrl/apiregister';
   static const String  loginUrl ='$baseUrl/apilogin';
@@ -1280,7 +1280,6 @@ Future<Map<String, dynamic>> createTask({
   DateTime? deadline,
   String? skills,
   bool isUrgent = false,
-  // New Location Fields
   String? locationAddress,
   double? latitude,
   double? longitude,
@@ -1288,28 +1287,44 @@ Future<Map<String, dynamic>> createTask({
   try {
     final String? token = await _getUserToken();
     
+    // Build the request body - handle nulls properly
+    final Map<String, dynamic> requestBody = {
+      'title': title,
+      'description': description,
+      'category': category,
+      'service_type': serviceType,
+      'payment_type': paymentType,
+      'budget': budget,
+      'deadline': deadline?.toIso8601String().split('T')[0],
+      'required_skills': skills ?? '',  // Empty string instead of null
+      'is_urgent': isUrgent,
+      'location_address': locationAddress ?? '',  // Empty string instead of null
+      'latitude': latitude,
+      'longitude': longitude,
+    };
+    
+    // Remove null values (except those we want as null)
+    requestBody.removeWhere((key, value) => value == null && 
+        !['latitude', 'longitude'].contains(key));
+    
+    print('=== FLUTTER: SENDING TO DJANGO ===');
+    print('Full request body:');
+    for (var entry in requestBody.entries) {
+      print('  ${entry.key}: ${entry.value}');
+    }
+    
     final response = await http.post(
       Uri.parse(createTaskUrl),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
       },
-      body: json.encode({
-        'title': title,
-        'description': description,
-        'category': category,
-        'service_type': serviceType,
-        'payment_type': paymentType,
-        'budget': budget,
-        'deadline': deadline?.toIso8601String().split('T')[0],
-        'required_skills': skills,
-        'is_urgent': isUrgent,
-        'location_address': locationAddress,
-        'latitude': latitude,
-        'longitude': longitude,
-      }),
+      body: json.encode(requestBody),
     );
 
+    print('Response status: ${response.statusCode}');
+    print('Response body: ${response.body}');
+    
     if (response.statusCode == 201) {
       return {
         'success': true,
@@ -1324,6 +1339,7 @@ Future<Map<String, dynamic>> createTask({
       };
     }
   } catch (e) {
+    print('Create task network error: $e');
     return {'success': false, 'error': 'Network error: $e'};
   }
 }
@@ -1359,6 +1375,61 @@ Future<Map<String, dynamic>> createTask({
   } catch (e) {
     return {'success': false, 'error': 'Connection error: $e'};
   }
+}
+Future<Map<String, dynamic>> deleteTask(int taskId) async {
+  try {
+    // 1. Get the token (Make sure this helper exists in your ApiService)
+    final token = await _getUserToken(); 
+    
+    // 2. Fix the syntax error: remove "url =" and use the correct URI
+    final response = await http.delete(
+      Uri.parse('$baseUrl/tasks/$taskId/'), // Ensure trailing slash for Django
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    // 3. Handle success
+    if (response.statusCode == 200 || response.statusCode == 204) {
+      return {
+        'success': true,
+        'message': 'Task deleted successfully',
+      };
+    } else {
+      // 4. Handle errors from the server
+      Map<String, dynamic> responseBody = {};
+      try {
+        if (response.body.isNotEmpty) {
+          responseBody = json.decode(response.body);
+        }
+      } catch (_) {
+        // Fallback if body isn't valid JSON
+      }
+
+      return {
+        'success': false,
+        'message': responseBody['error'] ?? responseBody['message'] ?? 'Failed to delete task',
+      };
+    }
+  } catch (e) {
+    return {
+      'success': false,
+      'message': 'Network error: $e',
+    };
+  }
+}
+// Helper method to get auth headers
+Future<Map<String, String>> getAuthHeaders(BuildContext context) async {
+  // Implement based on your authentication system
+  // Example:
+  // final authProvider = Provider.of<AuthProvider>(context, listen: false);
+  // final token = authProvider.token;
+  
+  return {
+    'Authorization': 'Bearer your-token-here', // Replace with actual token
+    'Content-Type': 'application/json',
+  };
 }
 // Get task statistics
 Future<Map<String, dynamic>> fetchTaskStats() async {

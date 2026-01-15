@@ -341,7 +341,8 @@ Future<Map<String, dynamic>> _callGetOrderApi({
   try {
     // Call your Django backend API
     // Update the URL to match your Django server
-    final url = Uri.parse('https://marketplace-system-1.onrender.com/contracts/$contractId/order/');
+    //final url = Uri.parse('https://marketplace-system-1.onrender.com/contracts/$contractId/order/');
+    final url = Uri.parse('http://192.168.100.188:8000/contracts/$contractId/order/');
     
     final response = await http.get(
       url,

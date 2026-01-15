@@ -182,14 +182,56 @@ class TaskSerializer(serializers.ModelSerializer):
             'payment_status', 'is_paid', 'assigned_user', 
             'is_taken', 'created_at'
         ]
-        # Make these read-only so users can't manually set them via the API
         read_only_fields = ['payment_status', 'is_paid', 'status']
+
+    def create(self, validated_data):
+        print(f"\n" + "="*60)
+        print("TASK SERIALIZER CREATE - EXTREME DEBUG")
+        print("="*60)
+        
+        # Create task object
+        task = Task(**validated_data)
+        
+        print(f"1. Task object created (NOT saved yet):")
+        print(f"   task.service_type: '{task.service_type}'")
+        print(f"   task.location_address: '{task.location_address}'")
+        print(f"   id(task): {id(task)}")
+        
+        # Save and see what happens
+        print(f"\n2. Calling task.save()...")
+        task.save()
+        
+        print(f"\n3. After task.save():")
+        print(f"   task.service_type: '{task.service_type}'")
+        print(f"   task.location_address: '{task.location_address}'")
+        
+        # Check database directly
+        from django.db import connection
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT service_type, location_address FROM webapp_task WHERE task_id = %s", 
+                [task.task_id]
+            )
+            row = cursor.fetchone()
+            print(f"\n4. Direct database query:")
+            print(f"   service_type in DB: '{row[0]}'")
+            print(f"   location_address in DB: '{row[1]}'")
+        
+        # If different, FORCE UPDATE
+        if task.service_type != validated_data.get('service_type'):
+            print(f"\n5. WARNING: service_type changed! Forcing update...")
+            Task.objects.filter(pk=task.pk).update(
+                service_type=validated_data.get('service_type'),
+                location_address=validated_data.get('location_address')
+            )
+            task.refresh_from_db()
+            print(f"   After force update:")
+            print(f"   task.service_type: '{task.service_type}'")
+        
+        return task
 
     def get_is_taken(self, obj):
         return obj.status != 'open' or obj.assigned_user is not None
-
-
-
 
         
 class RegisterSerializer(serializers.ModelSerializer):

@@ -22,7 +22,7 @@ from rest_framework.response import Response
 from django.db import  transaction
 from rest_framework import status
 from django.core.mail import send_mail
-from webapp.matcher import rank_jobs_for_freelancer
+from webapp.matcher import SimpleJobMatcher, rank_jobs_for_freelancer
 from webapp.paystack_service import PaystackService
 from webapp.utils import get_bank_name
 from .models import Contract, Employer, EmployerProfile, EmployerToken, Freelancer, Notification, Order, PaymentTransaction, Proposal, Rating, Service, Submission, Task, TaskCompletion, Transaction, UserProfile, Wallet, WithdrawalRequest
@@ -355,7 +355,7 @@ def apisubmit_proposal(request):
             {"error": str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
-from django.db.models import Prefetch
+from django.db.models import Avg, Prefetch, Sum
         
 @api_view(['GET'])
 @authentication_classes([CustomTokenAuthentication])
@@ -597,56 +597,78 @@ def create_task(request):
             
     except Employer.DoesNotExist:
         return Response({'success': False, 'message': 'Employer profile not found'}, status=400)
-    except Exception as e:
-        return Response({'success': False, 'message': str(e)}, status=500)    '''
-# Create Task
+    except Exception as e:'''
+ # Create Task
 @api_view(['POST'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def create_task(request):
     try:
-        employer = Employer.objects.get(username=request.user.username)
+        print("\n=== CREATE TASK - GUARANTEED WORKING VERSION ===")
         
-        skills = request.data.get('skills', '')
+        employer = request.user 
         
-        # ADD THESE LINES to capture the new fields from Flutter
-        task_data = {
-            'employer': employer.employer_id,
-            'title': request.data.get('title'),
-            'description': request.data.get('description'),
-            'category': request.data.get('category'),
-            'budget': request.data.get('budget'),
-            'deadline': request.data.get('deadline'),
-            'required_skills': skills,
-            'is_urgent': request.data.get('isUrgent', False),
+        # Step 1: Create task WITHOUT problematic fields first
+        task = Task.objects.create(
+            employer=employer,
+            title=request.data.get('title'),
+            description=request.data.get('description'),
+            category=request.data.get('category'),
+            budget=request.data.get('budget'),
+            payment_type=request.data.get('payment_type', 'fixed'),
+            deadline=request.data.get('deadline'),
+            required_skills=request.data.get('required_skills', ''),
+            is_urgent=request.data.get('is_urgent', False),
+        )
+        
+        print(f"Step 1 - Basic task created: {task.task_id}")
+        
+        # Step 2: MANUALLY set the problematic fields
+        task.service_type = request.data.get('service_type')
+        
+        # Handle location_address - empty string should be None
+        location = request.data.get('location_address')
+        task.location_address = location if location and location != '' else None
+        
+        task.latitude = request.data.get('latitude')
+        task.longitude = request.data.get('longitude')
+        
+        print(f"Step 2 - Fields set manually:")
+        print(f"  service_type: '{task.service_type}'")
+        print(f"  location_address: '{task.location_address}'")
+        
+        # Step 3: Save with update_fields to bypass any signals
+        task.save(update_fields=[
+            'service_type', 
+            'location_address', 
+            'latitude', 
+            'longitude'
+        ])
+        
+        print(f"Step 3 - Saved with update_fields")
+        
+        # Step 4: Refresh and verify
+        task.refresh_from_db()
+        
+        print(f"\n=== FINAL RESULT ===")
+        print(f"Task ID: {task.task_id}")
+        print(f"service_type: '{task.service_type}'")
+        print(f"location_address: '{task.location_address}'")
+        
+        # Serialize for response
+        from .serializers import TaskSerializer
+        serializer = TaskSerializer(task)
+        
+        return Response({
+            'success': True,
+            'message': 'Task created successfully',
+            'task': serializer.data
+        }, status=status.HTTP_201_CREATED)
             
-            # --- THE MISSING HYBRID FIELDS ---
-            'service_type': request.data.get('serviceType'), # Flutter sends 'serviceType'
-            'location_address': request.data.get('locationAddress'), # Flutter sends 'locationAddress'
-            'latitude': request.data.get('latitude'),
-            'longitude': request.data.get('longitude'),
-        }
-        
-        serializer = TaskSerializer(data=task_data)
-        if serializer.is_valid():
-            task = serializer.save()
-            return Response({
-                'success': True,
-                'message': 'Task created successfully',
-                'task': TaskSerializer(task).data
-            }, status=status.HTTP_201_CREATED)
-        else:
-            # If it's invalid, this will tell you if service_type is wrong
-            print(f"Serializer Errors: {serializer.errors}") 
-            return Response({
-                'success': False,
-                'message': 'Invalid data',
-                'errors': serializer.errors
-            }, status=status.HTTP_400_BAD_REQUEST)
-            
-    except Employer.DoesNotExist:
-        return Response({'success': False, 'message': 'Employer profile not found'}, status=400)
     except Exception as e:
+        print(f"\nError: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return Response({'success': False, 'message': str(e)}, status=500)
     
 @api_view(['GET'])
@@ -773,52 +795,70 @@ def employer_dashboard_api(request):
                 'employer_info': {},
             }
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+
+
+@api_view(['DELETE'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def delete_task(request, task_id):
+    try:
+        # 1. Get task and ensure it belongs to this employer
+        # We filter by both task_id and employer to ensure security
+        task = Task.objects.get(task_id=task_id, employer=request.user)
+        
+        task_title = task.title
+        task.delete()
+        
+        return Response({
+            'success': True,
+            'message': f'Task "{task_title}" deleted'
+        }, status=status.HTTP_200_OK)
+
+    except Task.DoesNotExist:
+        return Response({
+            'success': False, 
+            'message': 'Task not found or you do not have permission'
+        }, status=status.HTTP_404_NOT_FOUND)
+        
+    except Exception as e:
+        return Response({
+            'success': False, 
+            'message': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 @api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def get_employer_tasks(request):
     
-    print("\n===  Employer Tasks API Called ===")
-    print(" Auth Header:", request.headers.get('Authorization'))
-    print(" User:", request.user)
-    print(" Is Authenticated:", request.user.is_authenticated)
+    print("\n=== Employer Tasks API Called ===")
+    print(f"User: {request.user.username}")
 
     try:
-        
         employer = request.user  
-        print(f" Employer found: {employer.username} (ID: {employer.employer_id})")
-
-    except Exception as e:
-        print(f" Unexpected error fetching employer: {e}")
-        return Response(
-            {"success": False, "error": str(e)},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
-
-   
-    try:
         tasks = Task.objects.filter(employer=employer).order_by('-created_at')
-        print(f" Found {tasks.count()} tasks for employer.")
+        
+        print(f"\n=== RAW TASK DATA FROM DATABASE ===")
+        for task in tasks:
+            print(f"Task {task.task_id}: '{task.title}'")
+            print(f"  service_type: '{task.service_type}'")
+            print(f"  location_address: '{task.location_address}'")
+        
         serializer = TaskSerializer(tasks, many=True)
 
         return Response({
             "success": True,
             "tasks": serializer.data,
             "count": len(serializer.data),
-            "employer": {
-                "id": employer.employer_id,
-                "username": employer.username,
-                "email": employer.contact_email
-            }
         }, status=status.HTTP_200_OK)
 
     except Exception as e:
-        print(f" Error loading tasks: {e}")
+        print(f"Error: {str(e)}")
         return Response({
             "success": False,
-            "error": "Error fetching tasks",
-            "details": str(e)
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            "error": str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR) 
 
 
 
@@ -2230,126 +2270,134 @@ def suggest_freelancers(request, job_id):
             "status": False,
             "message": f"Error suggesting freelancers: {str(e)}"
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
+# In your Django view
 @api_view(['GET'])
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def recommended_jobs(request):
-    
-    print(f"=== RECOMMENDED JOBS API CALLED ===")
-    print(f"User: {request.user.name} (ID: {request.user.user_id})")
-    
+    """Get recommended jobs for a freelancer - SIMPLE VERSION"""
     try:
-        # Get freelancer's profile
+        # Get the authenticated freelancer
+        freelancer_user = request.user
+        
+        if not freelancer_user:
+            return Response({"status": False, "message": "User not found"}, status=404)
+        
+        # Get freelancer profile
         try:
-            freelancer_profile = UserProfile.objects.get(user=request.user)
-            print(f"Freelancer profile found: {freelancer_profile}")
-            print(f"Freelancer skills (type: {type(freelancer_profile.skills)}): {freelancer_profile.skills}")
-            
-            # DON'T access category - it doesn't exist
-            # print(f"Freelancer category: {freelancer_profile.category}")  # REMOVE THIS LINE
-            
+            freelancer_profile = UserProfile.objects.get(user=freelancer_user)
         except UserProfile.DoesNotExist:
             return Response({
                 "status": False,
-                "message": "Please complete your profile to get job recommendations"
-            }, status=status.HTTP_404_NOT_FOUND)
+                "message": "Freelancer profile not found. Please complete your profile."
+            }, status=404)
         
-        # Get all active tasks (approved and not assigned)
-        all_tasks = Task.objects.select_related('employer').prefetch_related('employer__profile').filter(
-            is_approved=True,
-            assigned_user__isnull=True  # Only unassigned tasks
-        )[:50]  # Limit to 50 for better performance
+        print(f"\n=== API CALL: Recommended Jobs ===")
+        print(f"Freelancer: {freelancer_user.name}")
+        print(f"Freelancer skills: '{freelancer_profile.skills}'")
         
-        print(f"Found {all_tasks.count()} active tasks")
+        # Get ALL active tasks (no skill filtering initially)
+        active_tasks = Task.objects.filter(
+            Q(status='open') | Q(status='pending'),
+            is_active=True,
+            is_approved=True
+        ).select_related('employer').order_by('-created_at')
         
-        if not all_tasks.exists():
+        print(f"Found {active_tasks.count()} active tasks")
+        
+        # If no active tasks, get any tasks
+        if not active_tasks.exists():
+            active_tasks = Task.objects.filter(
+                is_active=True
+            ).select_related('employer').order_by('-created_at')[:50]
+            print(f"No 'open' tasks. Showing {active_tasks.count()} total tasks")
+        
+        # Convert to list for processing
+        tasks_list = list(active_tasks)
+        
+        if not tasks_list:
             return Response({
                 "status": True,
-                "message": "No available tasks",
+                "message": "No tasks available at the moment",
                 "recommended": []
             })
         
-        # Convert tasks to list for the matcher
-        tasks_list = []
-        for task in all_tasks:
-            employer_profile = getattr(task.employer, 'profile', None)
-            task_data = {
-                'id': task.task_id,
-                'title': task.title,
-                'description': task.description,
-                'required_skills': task.required_skills or '',
-                'category': task.category or '',
-                'budget': str(task.budget) if task.budget else '0',
-                'is_approved': task.is_approved,
-                'assigned_user': task.assigned_user.user_id if task.assigned_user else None,
-                'employer': {
-                    'id': task.employer.employer_id,
-                    'username': task.employer.username,
-                    'contact_email': task.employer.contact_email,
-                    'company_name': employer_profile.company_name if employer_profile else None,
-                    'profile_picture': employer_profile.profile_picture.url if employer_profile and employer_profile.profile_picture else None,
-                    'phone_number': employer_profile.phone_number if employer_profile else None,
-                }
-            }
-            tasks_list.append(task_data)
+        # Show sample tasks for debugging
+        print(f"\n=== SAMPLE TASKS (first 5) ===")
+        for i, task in enumerate(tasks_list[:5]):
+            print(f"Task {i}: '{task.title}'")
+            print(f"  ID: {task.task_id}")
+            print(f"  Skills: '{task.required_skills}'")
+            print(f"  Category: {task.category}")
+            print(f"  Status: {task.status}")
         
-        # Use your existing matcher function with error handling
-        try:
-            # Get ranked jobs
-            ranked_jobs = rank_jobs_for_freelancer(freelancer_profile, all_tasks, top_n=20)
-            
-            # Map ranked results to full task data
-            recommended_jobs = []
-            for rank_result in ranked_jobs:
-                job_id = rank_result["job_id"]
-                # Find the task with this ID
-                task_data = next((t for t in tasks_list if t['id'] == job_id), None)
-                if task_data:
-                    # Add match score to task data
-                    task_with_score = task_data.copy()
-                    task_with_score["match_score"] = rank_result["score"] * 100  # Convert to percentage
-                    task_with_score["skill_overlap"] = rank_result["skill_overlap"]
-                    task_with_score["base_similarity"] = rank_result["base_similarity"]
-                    recommended_jobs.append(task_with_score)
-            
-            print(f"Matcher returned {len(recommended_jobs)} ranked jobs")
-            
-            return Response({
-                "status": True,
-                "message": f"Found {len(recommended_jobs)} recommended jobs",
-                "recommended": recommended_jobs,
-                "freelancer_profile": {
-                    "skills": freelancer_profile.skills,
-                    # REMOVE category and experience_level since they don't exist in model
-                    # "category": freelancer_profile.category,
-                    # "experience_level": freelancer_profile.experience_level,
+        # Use SIMPLE matcher
+        recommendations = SimpleJobMatcher.rank_jobs_for_freelancer(
+            freelancer_profile, 
+            tasks_list, 
+            top_n=50
+        )
+        
+        print(f"\n=== MATCHING RESULTS ===")
+        print(f"Generated {len(recommendations)} recommendations")
+        
+        # Process recommendations
+        recommended_jobs_data = []
+        
+        for rec in recommendations:
+            try:
+                # Find the task
+                task = next(t for t in tasks_list if t.task_id == rec["job_id"])
+                
+                # Prepare job data
+                job_data = {
+                    "task_id": task.task_id,
+                    "title": task.title,
+                    "description": task.description[:200] + "..." if len(task.description) > 200 else task.description,
+                    "budget": float(task.budget) if task.budget else 0,
+                    "category": task.category,
+                    "service_type": task.service_type,
+                    "status": task.status,
+                    "created_at": task.created_at,
+                    "required_skills": task.required_skills,
+                    "match_score": rec["score"],  # Percentage score
+                    "skill_overlap": rec["skill_overlap"],
+                    "common_skills": rec["common_skills"],
+                    "freelancer_skills": rec["all_freelancer_skills"],
+                    "job_skills": rec["all_job_skills"],
+                    "employer": {
+                        "employer_id": task.employer.employer_id,
+                        "username": task.employer.username,
+                        "contact_email": task.employer.contact_email,
+                    } if task.employer else None
                 }
-            })
-            
-        except Exception as e:
-            print(f"Error in matcher: {e}")
-            import traceback
-            traceback.print_exc()
-            # Fallback: return all tasks if matcher fails
-            return Response({
-                "status": True,
-                "message": f"Found {len(tasks_list)} available tasks",
-                "recommended": tasks_list,
-                "note": "Using fallback (matcher failed)"
-            })
+                
+                recommended_jobs_data.append(job_data)
+                
+            except (StopIteration, AttributeError) as e:
+                print(f"Error processing recommendation: {e}")
+                continue
+        
+        # Sort by match score
+        recommended_jobs_data.sort(key=lambda x: x["match_score"], reverse=True)
+        
+        print(f"\n=== FINAL RESULT ===")
+        print(f"Returning {len(recommended_jobs_data)} jobs")
+        
+        return Response({
+            "status": True,
+            "message": f"Found {len(recommended_jobs_data)} recommended jobs",
+            "recommended": recommended_jobs_data
+        })
         
     except Exception as e:
-        print(f"Error in recommended_jobs API: {e}")
+        print(f"ERROR in recommended_jobs: {str(e)}")
         import traceback
-        print(f"Traceback: {traceback.format_exc()}")
+        traceback.print_exc()
         return Response({
             "status": False,
-            "message": f"Error fetching recommended jobs: {str(e)}",
-            "recommended": []
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+            "message": f"Server error: {str(e)}"
+        }, status=500)
 
 @api_view(['POST'])
 @authentication_classes([EmployerTokenAuthentication])
@@ -4769,4 +4817,118 @@ def get_withdrawal_history(request):
         return Response({
             'status': False,
             'message': str(e)
-        }, status=500)         
+        }, status=500)   
+              
+@api_view(['GET'])
+@authentication_classes([CustomTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def getemployer_profile(request, employer_id):
+    """Get employer profile for freelancers to view"""
+    try:
+        # Convert employer_id to integer
+        try:
+            employer_id_int = int(employer_id)
+        except ValueError:
+            return Response({
+                'success': False,
+                'message': 'Invalid employer ID format'
+            }, status=400)
+        
+        # FIX: Get from Employer table, NOT User table
+        try:
+            employer = Employer.objects.get(employer_id=employer_id_int)
+        except Employer.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Employer not found'
+            }, status=404)
+        
+        # Get employer profile
+        try:
+            profile = EmployerProfile.objects.get(employer=employer)
+        except EmployerProfile.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Employer profile not found'
+            }, status=404)
+        
+        # Get employer statistics
+        try:
+            total_tasks = Task.objects.filter(employer=employer).count()
+        except:
+            total_tasks = 0
+        
+        try:
+            total_spent_result = Contract.objects.filter(
+                task__employer=employer,
+                status='completed'
+            ).aggregate(total_spent=Sum('price'))
+            total_spent = total_spent_result['total_spent'] or 0
+        except:
+            total_spent = 0
+        
+        # Get average rating
+        try:
+            # Need to get the User object for this employer to find ratings
+            # Since ratings are linked to User model, not Employer model
+            # First, check if there's a related User for this employer
+            avg_rating = 0
+            # This might need adjustment based on your rating logic
+        except:
+            avg_rating = 0
+        
+        # Build profile picture URL
+        profile_picture_url = None
+        if profile.profile_picture:
+            profile_picture_url = request.build_absolute_uri(profile.profile_picture.url)
+        
+        # Build response data
+        profile_data = {
+            'employer_id': employer.employer_id,
+            'username': employer.username,
+            'contact_email': employer.contact_email,
+            'phone_number': employer.phone_number,
+            'full_name': profile.full_name,
+            'profile_picture': profile_picture_url,
+            'address': profile.address,
+            'city': profile.city,
+            'profession': profile.profession,
+            'skills': profile.skills,
+            'bio': profile.bio,
+            'linkedin_url': profile.linkedin_url,
+            'twitter_url': profile.twitter_url,
+            'created_at': profile.created_at.strftime('%Y-%m-%d') if profile.created_at else None,
+            
+            # Additional profile fields
+            'alternate_phone': profile.alternate_phone,
+            'email_verified': profile.email_verified,
+            'phone_verified': profile.phone_verified,
+            'id_verified': profile.id_verified,
+            'verification_status': profile.verification_status,
+            'id_number': profile.id_number,
+            
+            # Statistics
+            'total_tasks': total_tasks,
+            'total_spent': float(total_spent),
+            'avg_freelancer_rating': float(profile.avg_freelancer_rating),
+            'total_projects_posted': profile.total_projects_posted,
+        }
+        
+        return Response({
+            'success': True,
+            'profile': profile_data
+        })
+        
+    except Employer.DoesNotExist:
+        return Response({
+            'success': False,
+            'message': 'Employer not found'
+        }, status=404)
+    except Exception as e:
+        print(f"Error in get_employer_profile: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return Response({
+            'success': False,
+            'message': f'Server error: {str(e)}'
+        }, status=500)

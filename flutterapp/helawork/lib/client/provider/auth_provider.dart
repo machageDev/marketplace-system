@@ -60,12 +60,12 @@ class AuthProvider with ChangeNotifier {
         final email = userData['email'] ?? response['email'] ?? '';
         if (email.isNotEmpty) {
           await prefs.setString('user_email', email);
-          print('✅ Email saved to SharedPreferences: $email');
+          print(' Email saved to SharedPreferences: $email');
         } else {
           // If email not in response, use username if it looks like an email
           if (username.contains('@')) {
             await prefs.setString('user_email', username);
-            print('✅ Email (from username) saved: $username');
+            print(' Email (from username) saved: $username');
           }
         }
         
@@ -73,17 +73,17 @@ class AuthProvider with ChangeNotifier {
         final userId = userData['id']?.toString() ?? response['id']?.toString() ?? '';
         if (userId.isNotEmpty) {
           await prefs.setString('user_id', userId);
-          print('✅ User ID saved: $userId');
+          print(' User ID saved: $userId');
         }
         
         final userName = userData['name'] ?? response['name'] ?? username;
         if (userName.isNotEmpty) {
           await prefs.setString('user_name', userName);
-          print('✅ User name saved: $userName');
+          print(' User name saved: $userName');
         }
         
         // Print debug info
-        print('🔍 All SharedPreferences after login:');
+        print(' All SharedPreferences after login:');
         prefs.getKeys().forEach((key) {
           if (key != 'user_token') { // Don't print full token
             print('   $key: ${prefs.get(key)}');
@@ -126,7 +126,7 @@ class AuthProvider with ChangeNotifier {
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
-    print('✅ Logged out - All SharedPreferences cleared');
+    print(' Logged out - All SharedPreferences cleared');
     notifyListeners();
   }
 
@@ -196,7 +196,7 @@ class AuthProvider with ChangeNotifier {
         // ✅ Also save email when registering
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('user_email', email);
-        print('✅ Email saved during registration: $email');
+        print(' Email saved during registration: $email');
         
         // Save token if provided
         final token = response['token'] ?? '';

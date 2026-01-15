@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:helawork/client/provider/client_task_provider.dart';
+import 'package:provider/provider.dart';
 
 class TaskDetailScreen extends StatelessWidget {
   final int taskId;
@@ -24,6 +26,230 @@ class TaskDetailScreen extends StatelessWidget {
     }
   }
 
+  Future<void> _showDeleteConfirmation(BuildContext context) async {
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Delete Task?',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Are you sure you want to delete this task?',
+                style: TextStyle(fontSize: 16, height: 1.4),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.red.withOpacity(0.2)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.red, size: 20),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'This action cannot be undone.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.red,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey,
+                ),
+              ),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              icon: const Icon(Icons.delete_outline, size: 18),
+              label: const Text(
+                'Delete',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                elevation: 0,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldDelete == true && context.mounted) {
+      await _deleteTask(context);
+    }
+  }
+
+  Future<void> _deleteTask(BuildContext context) async {
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return Center(
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(color: Colors.blueAccent),
+                const SizedBox(height: 16),
+                const Text(
+                  'Deleting task...',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    try {
+      final taskProvider = Provider.of<TaskProvider>(context, listen: false);
+      final result = await taskProvider.deleteTask(taskId as BuildContext, context as int);
+
+      if (context.mounted) {
+        Navigator.of(context).pop(); // Close loading dialog
+
+        if (result['success'] == true) {
+          // Show success message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.white),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Task deleted successfully',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+
+          // Navigate back to tasks screen
+          Navigator.of(context).pop();
+        } else {
+          // Show error message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      result['message'] ?? 'Failed to delete task',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.of(context).pop(); // Close loading dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Error: ${e.toString()}',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final title = task['title'] ?? 'Untitled Task';
@@ -46,6 +272,20 @@ class TaskDetailScreen extends StatelessWidget {
         elevation: 0,
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          IconButton(
+            icon: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.delete_outline, color: Colors.white, size: 22),
+            ),
+            onPressed: () => _showDeleteConfirmation(context),
+            tooltip: 'Delete Task',
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -91,7 +331,7 @@ class TaskDetailScreen extends StatelessWidget {
                             ),
                             const SizedBox(height: 8),
                             
-                            // Service Type Indicator (NEW)
+                            // Service Type Indicator
                             Row(
                               children: [
                                 Icon(
@@ -196,7 +436,7 @@ class TaskDetailScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
 
-            // Service Type & Location Section (Conditional) - BLUE CARD
+            // Service Type & Location Section
             _buildBlueSectionCard(
               icon: isOnSite ? Icons.location_on : Icons.computer,
               title: isOnSite ? 'Location Details' : 'Work Type',
@@ -214,7 +454,7 @@ class TaskDetailScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
 
-            // Category & Skills Section - BLUE CARD
+            // Category & Skills Section
             _buildBlueSectionCard(
               icon: Icons.category,
               title: 'Category & Skills',
@@ -236,7 +476,7 @@ class TaskDetailScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
 
-            // Task Details Section - BLUE CARD
+            // Task Details Section
             _buildBlueSectionCard(
               icon: Icons.info_outline,
               title: 'Task Details',
@@ -252,26 +492,49 @@ class TaskDetailScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
 
-            // Single Back Button
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.arrow_back, size: 18),
-                label: const Text(
-                  'Back to Tasks',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+            // Action Buttons Row
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.arrow_back, size: 18),
+                    label: const Text(
+                      'Back',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blueAccent,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 2,
+                    ),
                   ),
-                  elevation: 2,
                 ),
-              ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showDeleteConfirmation(context),
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    label: const Text(
+                      'Delete',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 2,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -279,7 +542,6 @@ class TaskDetailScreen extends StatelessWidget {
     );
   }
 
-  // Blue section card
   Widget _buildBlueSectionCard({required IconData icon, required String title, required Widget child}) {
     return Container(
       decoration: BoxDecoration(
@@ -331,7 +593,6 @@ class TaskDetailScreen extends StatelessWidget {
     );
   }
 
-  // Blue feature chip
   Widget _buildBlueFeatureChip(String label, String value, IconData icon) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -377,7 +638,6 @@ class TaskDetailScreen extends StatelessWidget {
     );
   }
 
-  // Blue detail row
   Widget _buildBlueDetailRow(String label, String value, IconData icon) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12),

@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:helawork/api_service.dart';
 import 'package:http/http.dart' as http;
@@ -8,8 +7,11 @@ class TaskProvider with ChangeNotifier {
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
+  // Store raw data here
   List<Map<String, dynamic>> _tasks = [];
-  List<Map<String, dynamic>> get tasks => _tasks;
+  
+  // Expose processed data via this getter
+  List<Map<String, dynamic>> get tasks => availableTasks;
 
   String _errorMessage = '';
   String get errorMessage => _errorMessage;
@@ -40,22 +42,11 @@ class TaskProvider with ChangeNotifier {
         },
       );
       
-      print('Tasks API response status: ${response.statusCode}');
-
       // Use ApiService to decode and map the hybrid fields
       final data = await ApiService.fetchTasks(response, context: context); 
       _tasks = List<Map<String, dynamic>>.from(data);
       
       print('Successfully loaded ${_tasks.length} tasks');
-      
-      // CRITICAL DEBUG: Check if hybrid fields exist in the raw data
-      if (_tasks.isNotEmpty) {
-        print('--- DATA SYNC CHECK ---');
-        print('Title: ${_tasks[0]['title']}');
-        print('Service Type: ${_tasks[0]['service_type']}');
-        print('Location: ${_tasks[0]['location_address']}');
-        print('-----------------------');
-      }
       
     } catch (e) {
       _errorMessage = 'Failed to load tasks: $e';
@@ -98,9 +89,33 @@ class TaskProvider with ChangeNotifier {
     }
   }
 
-  /// 3. THE GETTER (This sends data to your UI)
+  /// 3. THE LOGIC BRAIN (Formatted Getter)
+  /// This fixes the Remote vs On-Site display issue for Freelancers.
   List<Map<String, dynamic>> get availableTasks {
     return _tasks.map((task) {
+      
+      // 1. Get raw values and clean them
+      String rawType = (task['service_type'] ?? '').toString().toLowerCase().trim();
+      String location = (task['location_address'] ?? '').toString().trim();
+      (task['service_type_display'] ?? '').toString();
+
+      // 2. Strong Logic Check
+      // A task is On-Site if: 
+      // - The server explicitly says 'on_site' 
+      // - OR there is a real address that isn't 'None', 'null', etc.
+      bool isOnSite = rawType == 'on_site' || 
+                     (location.isNotEmpty && 
+                      location.toLowerCase() != 'none' && 
+                      location.toLowerCase() != 'null' && 
+                      location != 'No location provided' &&
+                      location != 'Remote' &&
+                      location != 'Remote Task');
+
+      // 3. Determine Clean Strings
+      String cleanDisplayType = isOnSite ? 'On-Site' : 'Remote';
+      String cleanLocation = isOnSite ? location : 'Remote / Online';
+
+      // 4. Return the cleaned object
       return {
         'id': task['task_id'] ?? task['id'],
         'title': task['title'] ?? 'Untitled Task',
@@ -110,12 +125,16 @@ class TaskProvider with ChangeNotifier {
         'has_contract': task['has_contract'] ?? false,
         'assigned_freelancer': task['assigned_freelancer'],
         
-        // HYBRID FIELDS: This ensures your UI always sees these keys
-        'service_type': task['service_type'] ?? 'remote', 
-        'location_address': task['location_address'] ?? 'Remote Task',
+        // HYBRID FIELDS (Fixed)
+        'service_type': isOnSite ? 'on_site' : 'remote',
+        'display_type': cleanDisplayType,        // USE THIS IN UI FOR LABEL
+        'location_address': cleanLocation,       // USE THIS IN UI FOR LOCATION TEXT
+        
         'budget': task['budget'] ?? '0.00',
         'payment_type': task['payment_type'] ?? 'fixed',
         'is_urgent': task['is_urgent'] ?? false,
+        'skills': task['required_skills'] ?? task['skills'] ?? '',
+        'deadline': task['deadline'],
       };
     }).toList();
   }

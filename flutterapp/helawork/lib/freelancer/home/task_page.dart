@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:helawork/freelancer/home/employer_profile_view.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:helawork/freelancer/home/task_detail.dart';
@@ -26,8 +27,7 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
   List<dynamic> _recommendedJobs = [];
   String? _userToken;
   
-  final String baseUrl = 'https://marketplace-system-1.onrender.com';
-  
+  final String baseUrl = 'http://192.168.100.188:8000';
   bool _tasksLoaded = false;
 
   @override
@@ -186,7 +186,7 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
     return Scaffold(
       appBar: AppBar(
         title: const Text('Tasks & Jobs'),
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: const Color(0xFF1976D2), // Using your primary color
         automaticallyImplyLeading: false,
         bottom: TabBar(
           controller: _tabController,
@@ -384,7 +384,7 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Service Type Badge (NEW)
+            // Service Type Badge
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
@@ -453,7 +453,7 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
               ],
             ),
             
-            // Show address only if it's on-site (NEW)
+            // Show address only if it's on-site
             if (isOnSite && locationAddress != null && locationAddress.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
@@ -506,6 +506,7 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
             ),
             const SizedBox(height: 12),
             
+            // UPDATED: Clickable client section
             _buildClientSection(employer),
             
             const SizedBox(height: 12),
@@ -562,7 +563,7 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
                     icon: const Icon(Icons.send, size: 18),
                     label: const Text('Submit'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      backgroundColor: const Color(0xFF1976D2), // Using primary color
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -601,7 +602,7 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
             icon: const Icon(Icons.clear_all),
             label: const Text('Clear Search'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.primary,
+              backgroundColor: const Color(0xFF1976D2),
               foregroundColor: Colors.white,
             ),
           ),
@@ -616,7 +617,7 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
     IconData statusIcon;
 
     if (isAssignedToMe) {
-      statusColor = Colors.blue;
+      statusColor = const Color(0xFF1976D2); // Blue for assigned
       statusText = 'Assigned to you';
       statusIcon = Icons.assignment_ind;
     } else if (isTaken) {
@@ -666,61 +667,107 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
     final companyName = employer['company_name'];
     final username = employer['username'];
     final profilePic = employer['profile_picture'];
+    final employerId = employer['employer_id'] ?? employer['id'];
     String displayName = companyName ?? username ?? 'Client';
     
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          _buildClientAvatar(profilePic, displayName),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Posted by:',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                ),
-                Text(displayName,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                ),
-                if (employer['contact_email'] != null) ...[
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      Icon(Icons.email, size: 12, color: Colors.grey[500]),
-                      const SizedBox(width: 4),
-                      Text(employer['contact_email']!.toString(),
-                        style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-                      ),
-                    ],
-                  ),
-                ],
-                if (employer['phone'] != null) ...[
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      Icon(Icons.phone, size: 12, color: Colors.grey[500]),
-                      const SizedBox(width: 4),
-                      Text(employer['phone']!.toString(),
-                        style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
+    return InkWell(
+      onTap: () {
+        // Navigate to employer profile screen
+        if (employerId != null) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => EmployerProfileScreen(
+                employerId: employerId.toString(),
+                employerName: displayName,
+              ),
             ),
-          ),
-          IconButton(
-            onPressed: () { _showClientProfile(context, employer); },
-            icon: Icon(Icons.person_outline, color: Theme.of(context).colorScheme.primary),
-            tooltip: 'View Client Profile',
-          ),
-        ],
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Cannot view profile: Employer ID not found'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      },
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFD), // Using your background color
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey.withOpacity(0.2)),
+        ),
+        child: Row(
+          children: [
+            _buildClientAvatar(profilePic, displayName),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Posted by:',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                  Text(displayName,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold, 
+                      fontSize: 14,
+                      color: Color(0xFF333333), // Using your text color
+                    ),
+                  ),
+                  if (employer['contact_email'] != null) ...[
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Icon(Icons.email, size: 12, color: Colors.grey[500]),
+                        const SizedBox(width: 4),
+                        Text(employer['contact_email']!.toString(),
+                          style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                  ],
+                  if (employer['phone'] != null) ...[
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Icon(Icons.phone, size: 12, color: Colors.grey[500]),
+                        const SizedBox(width: 4),
+                        Text(employer['phone']!.toString(),
+                          style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1976D2).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.person_outline, size: 16, color: const Color(0xFF1976D2)),
+                  const SizedBox(width: 4),
+                  Text('Profile',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: const Color(0xFF1976D2),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -733,85 +780,13 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
       );
     } else {
       return CircleAvatar(
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: const Color(0xFF1976D2),
         radius: 20,
         child: Text(displayName[0].toUpperCase(),
           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
         ),
       );
     }
-  }
-
-  void _showClientProfile(BuildContext context, Map<String, dynamic> employer) {
-    final companyName = employer['company_name'];
-    final username = employer['username'];
-    final profilePic = employer['profile_picture'];
-    final email = employer['contact_email'];
-    final phone = employer['phone'];
-    final bio = employer['bio'] ?? 'No bio available';
-    String displayName = companyName ?? username ?? 'Client';
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            _buildClientAvatar(profilePic, displayName),
-            const SizedBox(width: 12),
-            Expanded(child: Text(displayName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18))),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (email != null) ...[
-                _buildProfileItem(Icons.email, 'Email', email.toString()),
-                const SizedBox(height: 8),
-              ],
-              if (phone != null) ...[
-                _buildProfileItem(Icons.phone, 'Phone', phone.toString()),
-                const SizedBox(height: 8),
-              ],
-              _buildProfileItem(Icons.info, 'Bio', bio),
-              const SizedBox(height: 8),
-              if (companyName != null && username != null) ...[
-                _buildProfileItem(Icons.person, 'Username', username.toString()),
-              ],
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProfileItem(IconData icon, String label, String value) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 16, color: Colors.grey[600]),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label,
-                style: TextStyle(fontSize: 12, color: Colors.grey[600], fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 2),
-              Text(value, style: const TextStyle(fontSize: 14)),
-            ],
-          ),
-        ),
-      ],
-    );
   }
 
   bool _isTaskTaken(Map<String, dynamic> task) {

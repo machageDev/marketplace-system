@@ -226,11 +226,12 @@ class EmployerProfile(models.Model):
         return self.assigned_user is not None'''
 
 
-class Task(models.Model):
 
+class Task(models.Model):
     # CATEGORIES (Digital + Physical)
     TASK_CATEGORIES = [
         ('web_dev', 'Web Development'),
+        ('mobile', 'Mobile Development'),  
         ('digital_marketing', 'Digital Marketing'),
         ('cleaning', 'Cleaning & Housekeeping'),
         ('handyman', 'Handyman & Repairs'),
@@ -266,17 +267,13 @@ class Task(models.Model):
     title = models.CharField(max_length=255)
     description = models.TextField()
     category = models.CharField(max_length=50, choices=TASK_CATEGORIES, default='other')
-    SERVICE_CHOICES = [
-        ('remote', 'Remote'),
-        ('on_site', 'On-Site'),
-    ]
 
-    # CLASSIFICATION
-    service_type = models.CharField(max_length=20, choices=SERVICE_TYPE, default='remote')
+    # CLASSIFICATION - NO default='remote'!
+    service_type = models.CharField(max_length=20, choices=SERVICE_TYPE)
     payment_type = models.CharField(max_length=20, choices=PAYMENT_TYPE, default='fixed')
 
     # PAYMENT LOGIC
-    budget = models.DecimalField( max_digits=10, decimal_places=2, default=0.00,)
+    budget = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
 
     # PAYMENT TRACKING + ESCROW
     is_paid = models.BooleanField(default=False)
@@ -295,8 +292,8 @@ class Task(models.Model):
 
     paystack_reference = models.CharField(max_length=100, blank=True, null=True)
 
-    # LOCATION (Only required for on-site tasks)
-    location_address = models.CharField(max_length=255, null=True, blank=True)
+    # LOCATION
+    location_address = models.CharField(max_length=255, blank=True, null=True)
     latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
 
@@ -320,7 +317,7 @@ class Task(models.Model):
 
     # DISPLAY / PROPERTIES
     def __str__(self):
-        return f"{self.get_service_type_display()} - {self.title}"
+        return f"{self.title}"
 
     @property
     def is_physical(self):

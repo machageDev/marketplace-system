@@ -118,9 +118,55 @@ class _TasksScreenState extends State<TasksScreen> {
   int _getTaskId(dynamic task) =>
       (task is Map<String, dynamic>) ? (task['task_id'] ?? task['id'] ?? 0) : 0;
 
-  // NEW: Get service type
-  String _getServiceType(dynamic task) =>
-      (task is Map<String, dynamic>) ? (task['service_type'] ?? 'remote') : 'remote';
+  // FIXED: Improved service type detection
+  String _getServiceType(dynamic task) {
+    if (task is! Map<String, dynamic>) return 'remote';
+    
+    // Debug: Print all task data to understand structure
+    print('\n=== TASK SCREEN: Checking task data ===');
+    print('Task title: ${task['title']}');
+    print('All task keys: ${task.keys.toList()}');
+    
+    // Check service_type first (from formattedTasks)
+    final serviceType = task['service_type']?.toString().toLowerCase();
+    print('Found service_type: "$serviceType"');
+    
+    // Check display_type (from formattedTasks)
+    final displayType = task['display_type']?.toString().toLowerCase();
+    print('Found display_type: "$displayType"');
+    
+    // Check location_address
+    final location = task['location_address']?.toString();
+    print('Found location_address: "$location"');
+    
+    // Priority 1: Check if service_type is explicitly 'on_site'
+    if (serviceType == 'on_site') {
+      print('Result: on_site (from service_type)');
+      return 'on_site';
+    }
+    
+    // Priority 2: Check display_type for 'on-site' indicators
+    if (displayType != null && 
+        (displayType.contains('on') || displayType.contains('site'))) {
+      print('Result: on_site (from display_type: $displayType)');
+      return 'on_site';
+    }
+    
+    // Priority 3: Check if location_address suggests on-site
+    if (location != null && 
+        location.isNotEmpty && 
+        location != 'null' && 
+        location != 'No location provided' && 
+        location != 'Remote Task') {
+      print('Result: on_site (from location_address: $location)');
+      return 'on_site';
+    }
+    
+    // Default to remote
+    print('Result: remote (default)');
+    return serviceType ?? 'remote';
+  }
+
 
   void _viewTaskDetails(dynamic task, BuildContext context) {
     final taskId = _getTaskId(task);
@@ -154,6 +200,78 @@ class _TasksScreenState extends State<TasksScreen> {
           ),
         ),
       );
+    }
+  }
+
+  // Delete task function
+  Future<void> _deleteTask(BuildContext context, dynamic task) async {
+    final taskId = _getTaskId(task);
+    final taskTitle = _getTaskTitle(task);
+    
+    // Show confirmation dialog
+    bool? confirmDelete = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            SizedBox(width: 10),
+            Text('Delete Task'),
+          ],
+        ),
+        content: Text('Are you sure you want to delete "$taskTitle"? This action cannot be undone.'),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _dangerColor,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmDelete == true) {
+      try {
+        final taskProvider = Provider.of<TaskProvider>(context, listen: false);
+        await taskProvider.deleteTask(context, taskId);
+        
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('"$taskTitle" has been deleted'),
+            backgroundColor: _successColor,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        
+        // Refresh the task list
+        taskProvider.fetchEmployerTasks(context);
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete task: $e'),
+            backgroundColor: _dangerColor,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      }
     }
   }
 
@@ -239,6 +357,17 @@ class _TasksScreenState extends State<TasksScreen> {
           final openTasks = tasks.where((task) => _getTaskStatus(task) == 'open').length;
           final inProgressTasks = tasks.where((task) => _getTaskStatus(task) == 'in_progress' || _getTaskStatus(task) == 'in progress').length;
           final completedTasks = tasks.where((task) => _getTaskStatus(task) == 'completed').length;
+
+          // Debug: Check what tasks we're getting
+          print('\n=== TASK SCREEN: UI BUILD ===');
+          print('Number of tasks: $totalTasks');
+          for (var i = 0; i < tasks.length; i++) {
+            final task = tasks[i];
+            final serviceType = _getServiceType(task);
+            print('Task [$i]: ${task['title']}');
+            print('  service_type from UI: $serviceType');
+            print('  task object keys: ${task is Map ? task.keys.toList() : "Not a map"}');
+          }
 
           return RefreshIndicator(
             color: _primaryColor,
@@ -573,6 +702,13 @@ class _TasksScreenState extends State<TasksScreen> {
     final statusIcon = _getStatusIcon(status);
     final serviceType = _getServiceType(task);
     final isOnSite = serviceType == 'on_site';
+    final isTaskCompleted = status.toLowerCase() == 'completed';
+
+    // Debug for this specific task
+    print('\n=== BUILDING TASK CARD ===');
+    print('Task: ${_getTaskTitle(task)}');
+    print('Service Type: $serviceType');
+    print('Is On-Site: $isOnSite');
 
     return GestureDetector(
       onTap: () => _viewTaskDetails(task, context),
@@ -639,24 +775,32 @@ class _TasksScreenState extends State<TasksScreen> {
                 ),
                 const SizedBox(height: 8),
                 
-                // Service Type Indicator (NEW)
-                Row(
-                  children: [
-                    Icon(
-                      isOnSite ? Icons.location_on : Icons.laptop,
-                      color: isOnSite ? Colors.orange : Colors.blue,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      isOnSite ? 'On-Site Task' : 'Remote Task',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: isOnSite ? Colors.orange[800] : Colors.blue[800],
-                        fontSize: 12,
+                // Service Type Indicator (FIXED)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isOnSite ? Colors.orange.withOpacity(0.1) : Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isOnSite ? Icons.location_on : Icons.laptop,
+                        color: isOnSite ? Colors.orange[700] : Colors.blue[700],
+                        size: 14,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 6),
+                      Text(
+                        isOnSite ? 'On-Site Task' : 'Remote Task',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: isOnSite ? Colors.orange[800] : Colors.blue[800],
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 8),
                 
@@ -694,32 +838,84 @@ class _TasksScreenState extends State<TasksScreen> {
                           _warningColor),
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
                 
-                // View details button
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: _primaryColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
+                // Action buttons row (View Details + Delete)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // View Details button
+                    GestureDetector(
+                      onTap: () => _viewTaskDetails(task, context),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: _primaryColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('View Details',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: _primaryColor,
+                                    fontWeight: FontWeight.w600)),
+                            const SizedBox(width: 4),
+                            Icon(Icons.arrow_forward_ios,
+                                size: 10, color: _primaryColor),
+                          ],
+                        ),
+                      ),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text('View Details',
-                            style: TextStyle(
-                                fontSize: 12,
-                                color: _primaryColor,
-                                fontWeight: FontWeight.w600)),
-                        const SizedBox(width: 4),
-                        Icon(Icons.arrow_forward_ios,
-                            size: 10, color: _primaryColor),
-                      ],
-                    ),
-                  ),
+                    
+                    // Delete button (only show for non-completed tasks)
+                    if (!isTaskCompleted)
+                      GestureDetector(
+                        onTap: () => _deleteTask(context, task),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: _dangerColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.delete_outline,
+                                  size: 14, color: _dangerColor),
+                              const SizedBox(width: 6),
+                              Text('Delete',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: _dangerColor,
+                                      fontWeight: FontWeight.w600)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    
+                    // Show message for completed tasks
+                    if (isTaskCompleted)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          'Completed',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ],
             ),

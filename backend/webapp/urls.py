@@ -18,11 +18,13 @@ urlpatterns = [
     path('employer/tasks/', views.get_employer_tasks, name='get_employer_tasks'),
     path('api/tasks/assigned/', views.get_assigned_tasks, name='freelancer-assigned-tasks'),
     path('api/tasks/employer/rateable/', views.employer_rateable_tasks, name='employer-rateable-tasks'),
+    path('tasks/<int:task_id>/', views.delete_task, name='delete-task'),
     
     # ============ PROPOSALS ============
     path('apiproposal', views.apisubmit_proposal, name='submit_proposal'),
     path('client/proposals/', views.get_freelancer_proposals, name='freeproposal'),
     path('proposals/accept/', views.accept_proposal, name='accept_proposal'),
+    path('freelancer/employer-profile/<int:employer_id>/',views.getemployer_profile,name='employer-profile'),
     
     # ============ CONTRACTS ============
     path('api/freelancer/contracts/', views.freelancer_contracts, name='freelancer_contracts'),
