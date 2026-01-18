@@ -20,17 +20,23 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
 
   // New Hybrid Fields
   String _serviceType = 'remote'; // Default (Upwork style)
-  String _paymentType = 'fixed';  // Default
+  String _paymentType = 'fixed'; // Default
   String? _selectedCategory;
   DateTime? _selectedDeadline;
   bool _isUrgent = false;
 
+  // IMPORTANT: these values MUST match the Django Task.TASK_CATEGORIES keys.
+  // The server expects keys like 'web_dev', 'mobile', 'desing' (note typo),
+  // 'digital_marketing', etc. Use these keys as 'value' and keep 'label' user-friendly.
   final List<Map<String, String>> _categories = [
-    {'value': 'web', 'label': 'Web Development'},
+    {'value': 'web_dev', 'label': 'Web Development'},
     {'value': 'mobile', 'label': 'Mobile Development'},
-    {'value': 'design', 'label': 'Design'},
+    {'value': 'desing', 'label': 'Design'}, // server currently has this typo key; keep it
+    {'value': 'digital_marketing', 'label': 'Digital Marketing'},
     {'value': 'cleaning', 'label': 'Cleaning & Housekeeping'},
     {'value': 'handyman', 'label': 'Handyman & Repairs'},
+    {'value': 'delivery', 'label': 'Delivery Services'},
+    {'value': 'moving', 'label': 'Moving & Packing'},
     {'value': 'other', 'label': 'Other'},
   ];
 
@@ -47,49 +53,76 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
   Future<void> _selectDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
+      initialDate: _selectedDeadline ?? DateTime.now(),
       firstDate: DateTime.now(),
       lastDate: DateTime(DateTime.now().year + 1),
     );
     if (picked != null) setState(() => _selectedDeadline = picked);
   }
 
+  // Map UI category to server key (defensive for older clients)
+  String _mapCategoryToServerKey(String? selected) {
+    if (selected == null || selected.isEmpty) return 'other';
+    final s = selected.toString().toLowerCase().trim();
+    final map = {
+      'web': 'web_dev',
+      'web_dev': 'web_dev',
+      'web development': 'web_dev',
+      'mobile': 'mobile',
+      'mobile development': 'mobile',
+      'design': 'desing', // server uses this typo key
+      'desing': 'desing',
+      'digital_marketing': 'digital_marketing',
+      'digital marketing': 'digital_marketing',
+      'cleaning': 'cleaning',
+      'handyman': 'handyman',
+      'delivery': 'delivery',
+      'moving': 'moving',
+      'other': 'other',
+    };
+    return map[s] ?? selected;
+  }
+
   void _createTask() async {
     if (!_formKey.currentState!.validate()) return;
-    
-    if (_selectedCategory == null) {
+
+    if (_selectedCategory == null || _selectedCategory!.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a category'), backgroundColor: Colors.red),
       );
       return;
     }
 
+    final serverCategory = _mapCategoryToServerKey(_selectedCategory);
+    debugPrint('DEBUG: uiCategory=$_selectedCategory -> serverCategory=$serverCategory');
+
     final taskProvider = Provider.of<TaskProvider>(context, listen: false);
-    
+
     final result = await taskProvider.createTask(
       title: _titleController.text.trim(),
       description: _descriptionController.text.trim(),
-      category: _selectedCategory!,
+      // pass the mapped server key
+      category: serverCategory,
       serviceType: _serviceType,
       paymentType: _paymentType,
       budget: double.tryParse(_budgetController.text.trim()),
-      deadline: _selectedDeadline,
+      deadline: _selectedDeadline, // provider / ApiService will convert to ISO
       skills: _skillsController.text.trim(),
       isUrgent: _isUrgent,
       locationAddress: _serviceType == 'on_site' ? _addressController.text.trim() : null,
-      // Note: For TaskRabbit functionality, you'd pass actual lat/lng here
-      latitude: null, 
+      latitude: null,
       longitude: null,
     );
 
-    if (mounted) {
-      if (result['success'] == true) {
-        _showSuccessDialog(result['message']);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result['message']), backgroundColor: Colors.red),
-        );
-      }
+    if (!mounted) return;
+
+    if (result['success'] == true) {
+      _showSuccessDialog(result['message'] ?? 'Task posted');
+    } else {
+      final msg = result['message'] ?? result['error'] ?? result['details']?.toString() ?? 'Failed to create task';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), backgroundColor: Colors.red),
+      );
     }
   }
 
@@ -114,7 +147,14 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
   }
 
   // UI Components
-  Widget _buildTextField({required TextEditingController controller, required String label, String? hint, int maxLines = 1, TextInputType? keyboardType, String? Function(String?)? validator}) {
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    String? hint,
+    int maxLines = 1,
+    TextInputType? keyboardType,
+    String? Function(String?)? validator,
+  }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -189,6 +229,11 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
         ),
       ),
     );
+  }
+
+  String _deadlineDisplay() {
+    if (_selectedDeadline == null) return 'Select deadline (optional)';
+    return "${_selectedDeadline!.toLocal()}".split(' ')[0];
   }
 
   @override
@@ -284,7 +329,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                         ),
                       ),
                       const SizedBox(height: 15),
-                      
+
                       // Service Type Cards
                       Row(
                         children: [
@@ -316,7 +361,9 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                           controller: _addressController,
                           label: "Exact Location Address *",
                           hint: "Street, City, House No.",
-                          validator: (v) => (_serviceType == 'on_site' && v!.isEmpty) ? "Location is required for on-site tasks" : null,
+                          validator: (v) => (_serviceType == 'on_site' && (v == null || v.isEmpty))
+                              ? "Location is required for on-site tasks"
+                              : null,
                         ),
 
                       _buildTextField(
@@ -342,17 +389,13 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                             contentPadding: EdgeInsets.symmetric(horizontal: 4),
                           ),
                           items: [
-                            const DropdownMenuItem(
-                              value: null,
-                              child: Text('Select a category', style: TextStyle(color: Colors.grey)),
-                            ),
                             ..._categories.map((c) => DropdownMenuItem(
                                   value: c['value'],
                                   child: Text(c['label']!),
                                 )),
                           ],
                           onChanged: (v) => setState(() => _selectedCategory = v),
-                          validator: (v) => v == null ? "Please select a category" : null,
+                          validator: (v) => (v == null || v.isEmpty) ? "Please select a category" : null,
                         ),
                       ),
 
@@ -415,9 +458,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
-                                  _selectedDeadline == null
-                                      ? 'Select deadline (optional)'
-                                      : "${_selectedDeadline!.toLocal()}".split(' ')[0],
+                                  _deadlineDisplay(),
                                   style: TextStyle(
                                     color: _selectedDeadline == null ? Colors.grey : Colors.black,
                                   ),

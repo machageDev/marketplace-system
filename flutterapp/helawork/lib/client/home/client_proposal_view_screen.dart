@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart'; 
 
 class ProposalViewScreen extends StatefulWidget {
-  final ClientProposal proposal; // Changed to ClientProposal
+  final ClientProposal proposal;
 
   const ProposalViewScreen({super.key, required this.proposal});
 
@@ -73,19 +73,23 @@ class _ProposalViewScreenState extends State<ProposalViewScreen> {
   void _copyToClipboard() async {
     try {
       await Clipboard.setData(ClipboardData(text: widget.proposal.coverLetter));
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Cover letter copied to clipboard!'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cover letter copied to clipboard!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to copy: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to copy: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -99,7 +103,7 @@ Task: ${widget.proposal.taskTitle}
 Freelancer: ${widget.proposal.freelancerName}
 Proposed Amount: Ksh ${widget.proposal.bidAmount.toStringAsFixed(2)}
 Estimated Days: ${widget.proposal.estimatedDays} days
-Submitted: ${_formatDate(widget.proposal.submittedAt)}
+Submitted: ${_formatDate(widget.proposal.createdAt)}
 
 COVER LETTER:
 ${widget.proposal.coverLetter}
@@ -110,19 +114,23 @@ Generated from HelaWork App
 
       await Clipboard.setData(ClipboardData(text: fileContent));
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Cover letter prepared for download! Copied to clipboard.'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cover letter prepared for download! Copied to clipboard.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to prepare download: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to prepare download: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -153,20 +161,366 @@ ${widget.proposal.coverLetter.length > 200 ?
         await launchUrl(emailUri);
       } else {
         await Clipboard.setData(ClipboardData(text: shareText));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Share content copied to clipboard!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Share content copied to clipboard!'),
-            backgroundColor: Colors.green,
+          SnackBar(
+            content: Text('Failed to share: $e'),
+            backgroundColor: Colors.red,
           ),
         );
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to share: $e'),
-          backgroundColor: Colors.red,
+    }
+  }
+
+  // NEW: Show accept confirmation with payment info
+  void _showAcceptConfirmation(BuildContext context) {
+    final isOnSite = widget.proposal.taskServiceType == 'on_site';
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.green),
+            SizedBox(width: 10),
+            Text('Accept Proposal'),
+          ],
         ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Accept proposal from ${widget.proposal.freelancerName}?',
+              style: const TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 12),
+            
+            // Payment Information
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade100),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.attach_money, size: 20, color: Colors.blue),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Ksh ${widget.proposal.bidAmount.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  
+                  // Secure Payment Note
+                  const Row(
+                    children: [
+                      Icon(Icons.security, size: 16, color: Colors.green),
+                      SizedBox(width: 8),
+                      Text(
+                        'Secure Escrow Payment',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: Colors.green,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  
+                  const Text(
+                    '• Funds go to secure escrow',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  const Text(
+                    '• Freelancer starts after payment',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  const Text(
+                    '• Release payment when satisfied',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  
+                  // On-site specific instructions
+                  if (isOnSite) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.location_on, size: 14, color: Colors.orange),
+                              SizedBox(width: 6),
+                              Text(
+                                'On-Site Task',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.orange,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'You will receive an OTP to give to freelancer when work is completed',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.grey,
+            ),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              Navigator.pop(context); // Close dialog
+              await _handleAcceptProposal(context);
+            },
+            icon: const Icon(Icons.lock, size: 18),
+            label: const Text('Accept & Pay Securely'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // UPDATED: Handle accept proposal with payment flow
+  Future<void> _handleAcceptProposal(BuildContext context) async {
+    setState(() {
+      _isProcessing = true;
+    });
+
+    try {
+      final proposalProvider = Provider.of<ClientProposalProvider>(
+        context,
+        listen: false,
       );
+
+      final success = await proposalProvider.acceptProposal(widget.proposal.id);
+
+      if (success) {
+        // Check if payment is required
+        final response = proposalProvider.lastResponse;
+        
+        if (response != null && 
+            response.containsKey('requires_payment') &&
+            response['requires_payment'] == true &&
+            response['checkout_url'] != null) {
+          
+          // Get payment details
+          final checkoutUrl = response['checkout_url'] as String;
+          final orderId = response['order_id'] ?? 'N/A';
+          
+          // Show payment redirect message
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Row(
+                  children: [
+                    const Icon(Icons.arrow_forward, color: Colors.white, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'Redirecting to secure payment...',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          Text(
+                            'Order: $orderId',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                backgroundColor: Colors.blue,
+                duration: const Duration(seconds: 4),
+              ),
+            );
+          }
+          
+          // Launch Paystack payment page
+          final Uri url = Uri.parse(checkoutUrl);
+          if (await canLaunchUrl(url)) {
+            await launchUrl(
+              url,
+              mode: LaunchMode.externalApplication,
+              webViewConfiguration: const WebViewConfiguration(
+                enableJavaScript: true,
+                enableDomStorage: true,
+              ),
+            );
+            
+            // Pop back to proposals screen after launching payment
+            if (mounted) {
+              Navigator.pop(context, true);
+            }
+          } else {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Cannot open payment page'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          }
+        } else {
+          // Old flow (payment not required)
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Proposal accepted successfully'),
+                backgroundColor: Colors.green,
+              ),
+            );
+            Navigator.pop(context, true);
+          }
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to accept proposal: ${proposalProvider.errorMessage}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _handleRejectProposal(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reject Proposal'),
+        content: const Text('Are you sure you want to reject this proposal?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Reject'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() {
+      _isProcessing = true;
+    });
+
+    try {
+      final proposalProvider = Provider.of<ClientProposalProvider>(
+        context,
+        listen: false,
+      );
+
+      final success = await proposalProvider.rejectProposal(widget.proposal.id);
+
+      if (success) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Proposal rejected.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          Navigator.pop(context, true);
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to reject proposal: ${proposalProvider.errorMessage}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+      }
     }
   }
 
@@ -191,7 +545,7 @@ ${widget.proposal.coverLetter.length > 200 ?
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Task title - FIXED: using taskTitle not task.title
+            // Task title
             Text(
               widget.proposal.taskTitle,
               style: const TextStyle(
@@ -202,7 +556,52 @@ ${widget.proposal.coverLetter.length > 200 ?
             ),
             const SizedBox(height: 10),
 
-            // Freelancer info - FIXED: using freelancerName
+            // Service Type Badge
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: widget.proposal.taskServiceType == 'on_site' 
+                    ? Colors.orange.withOpacity(0.1) 
+                    : Colors.blue.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: widget.proposal.taskServiceType == 'on_site' 
+                      ? Colors.orange 
+                      : Colors.blue,
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    widget.proposal.taskServiceType == 'on_site' 
+                        ? Icons.location_on 
+                        : Icons.laptop,
+                    size: 14,
+                    color: widget.proposal.taskServiceType == 'on_site' 
+                        ? Colors.orange 
+                        : Colors.blue,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    widget.proposal.taskServiceType == 'on_site' 
+                        ? 'On-Site Work' 
+                        : 'Remote Work',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: widget.proposal.taskServiceType == 'on_site' 
+                          ? Colors.orange 
+                          : Colors.blue,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            // Freelancer info
             Row(
               children: [
                 CircleAvatar(
@@ -250,14 +649,10 @@ ${widget.proposal.coverLetter.length > 200 ?
             _buildStatusBadge(widget.proposal.status),
             const SizedBox(height: 20),
 
-            // Proposal details box - FIXED FIELDS
+            // Proposal details box
             _buildDetailsBox(
               label: 'Proposed Amount',
               value: 'Ksh ${widget.proposal.bidAmount.toStringAsFixed(2)}',
-            ),
-            _buildDetailsBox(
-              label: 'Task Budget',
-              value: 'Ksh ${widget.proposal.budget.toStringAsFixed(2)}',
             ),
             _buildDetailsBox(
               label: 'Estimated Days',
@@ -265,7 +660,13 @@ ${widget.proposal.coverLetter.length > 200 ?
             ),
             _buildDetailsBox(
               label: 'Submitted On',
-              value: _formatDate(widget.proposal.submittedAt),
+              value: _formatDate(widget.proposal.createdAt),
+            ),
+            _buildDetailsBox(
+              label: 'Work Type',
+              value: widget.proposal.taskServiceType == 'on_site' 
+                  ? 'On-Site (Physical)' 
+                  : 'Remote (Digital)',
             ),
             const SizedBox(height: 20),
 
@@ -353,7 +754,7 @@ ${widget.proposal.coverLetter.length > 200 ?
                         _buildButton(
                           label: 'Accept',
                           color: Colors.green,
-                          onTap: () => _handleAcceptProposal(context),
+                          onTap: () => _showAcceptConfirmation(context),
                         ),
                         _buildButton(
                           label: 'Reject',
@@ -387,115 +788,6 @@ ${widget.proposal.coverLetter.length > 200 ?
         ),
       ),
     );
-  }
-
-  Future<void> _handleAcceptProposal(BuildContext context) async {
-    setState(() {
-      _isProcessing = true;
-    });
-
-    try {
-      final proposalProvider = Provider.of<ClientProposalProvider>(
-        context,
-        listen: false,
-      );
-
-      final success = await proposalProvider.acceptProposal(widget.proposal.id);
-
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Proposal accepted successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        
-        Navigator.pop(context, true);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to accept proposal: ${proposalProvider.errorMessage}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      setState(() {
-        _isProcessing = false;
-      });
-    }
-  }
-
-  Future<void> _handleRejectProposal(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Reject Proposal'),
-        content: const Text('Are you sure you want to reject this proposal?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Reject'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-
-    setState(() {
-      _isProcessing = true;
-    });
-
-    try {
-      final proposalProvider = Provider.of<ClientProposalProvider>(
-        context,
-        listen: false,
-      );
-
-      final success = await proposalProvider.rejectProposal(widget.proposal.id);
-
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Proposal rejected.'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-        
-        Navigator.pop(context, true);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to reject proposal: ${proposalProvider.errorMessage}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      setState(() {
-        _isProcessing = false;
-      });
-    }
   }
 
   Widget _buildStatusBadge(String status) {

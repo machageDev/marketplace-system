@@ -920,7 +920,7 @@ class _FreelancerProfileScreenState extends State<FreelancerProfileScreen> {
                     const SizedBox(height: 16),
 
                     // Ratings List
-                    ..._ratings.map((rating) => _buildEnhancedRatingCard(rating)).toList(),
+                    ..._ratings.map((rating) => _buildEnhancedRatingCard(rating)),
                   ],
                 ),
             ],
@@ -1047,7 +1047,7 @@ Widget _buildEnhancedRatingCard(Map<String, dynamic> rating) {
   if (extendedData['calculated_composite'] != null) {
     calculatedComposite = extendedData['calculated_composite'].toString();
   } else if (categoryScores.isNotEmpty && categoryScores is Map) {
-    final scores = categoryScores.values.where((s) => s is num).map((s) => (s as num).toDouble());
+    final scores = categoryScores.values.whereType<num>().map((s) => (s).toDouble());
     if (scores.isNotEmpty) {
       final avg = scores.reduce((a, b) => a + b) / scores.length;
       calculatedComposite = avg.toStringAsFixed(1);
@@ -1221,7 +1221,7 @@ Widget _buildEnhancedRatingCard(Map<String, dynamic> rating) {
                     _formatCategoryName(entry.key),
                     score,
                   );
-                }).toList(),
+                }),
                 const SizedBox(height: 12),
               ],
             ),

@@ -33,7 +33,7 @@ class _EmployerProfileScreenState extends State<EmployerProfileScreen> {
   final Color _subtitleColor = const Color(0xFF94A3B8); // Light gray
   final Color _successColor = const Color(0xFF10B981); // Green
   final Color _warningColor = const Color(0xFFF59E0B); // Amber
-  final Color _dangerColor = const Color(0xFFEF4444); // Red
+  final Color _dangerColor = const Color(0xFFEF4444); 
 // Blue
 
   @override

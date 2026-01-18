@@ -1,120 +1,132 @@
-// client_contract_provider.dart
-import 'package:flutter/material.dart';
-import 'package:helawork/api_service.dart';
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:helawork/api_config.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
-class ClientContractProvider with ChangeNotifier {
-  // State
-  List<dynamic> _contracts = [];
-  bool _isLoading = false;
-  String _errorMessage = '';
+class ClientContractProvider extends ChangeNotifier {
+  bool isLoading = false;
+  List<Map<String, dynamic>> contracts = [];
 
-  // Getters
-  List<dynamic> get contracts => _contracts;
-  bool get isLoading => _isLoading;
-  String get errorMessage => _errorMessage;
+  String get baseUrl => AppConfig.getBaseUrl();
 
-  // ============ FETCH EMPLOYER CONTRACTS ============
-  
+  // ======================================================
+  // Fetch Employer Contracts
+  // ======================================================
   Future<void> fetchEmployerContracts() async {
-    _isLoading = true;
-    _errorMessage = '';
-    notifyListeners();
-    
     try {
-      debugPrint("🔍 Fetching employer contracts...");
-      
-      // Get contracts that need completion (paid but not completed)
-      final response = await ApiService.getEmployerPendingCompletions();
-      
-      _contracts = response;
-      debugPrint("✅ Loaded ${_contracts.length} employer contracts");
-      
-      if (_contracts.isEmpty) {
-        _errorMessage = "No contracts found. Contracts will appear here after freelancers complete work and payment is made.";
-      }
-      
-    } catch (e) {
-      _errorMessage = "Failed to load contracts: ${e.toString()}";
-      _contracts = [];
-      debugPrint("❌ Error fetching employer contracts: $e");
-    }
-    
-    _isLoading = false;
-    notifyListeners();
-  }
+      isLoading = true;
+      notifyListeners();
 
-  // ============ MARK CONTRACT AS COMPLETED ============
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString("user_token") ?? "";
 
-  Future<void> markContractCompleted(int contractId) async {
-    try {
-      debugPrint("📝 Marking contract $contractId as completed...");
-      
-      await ApiService.markContractCompleted(contractId);
-      
-      // Refresh the list after completion
-      await fetchEmployerContracts();
-      
-      debugPrint("✅ Contract $contractId marked as completed");
-      
-    } catch (e) {
-      _errorMessage = "Failed to mark contract as completed: ${e.toString()}";
-      debugPrint("❌ Error marking contract completed: $e");
-      rethrow;
-    }
-  }
-
-  // ============ UTILITY METHODS ============
-
-  // Get contracts ready for completion (paid but not completed)
-  List<dynamic> get readyForCompletion {
-    return _contracts.where((contract) => 
-      contract['can_complete'] == true
-    ).toList();
-  }
-
-  // Get pending contracts (not paid yet)
-  List<dynamic> get pendingContracts {
-    return _contracts.where((contract) => 
-      contract['can_complete'] == false
-    ).toList();
-  }
-
-  // Get contract by ID
-  Map<String, dynamic>? getContractById(int contractId) {
-    try {
-      return _contracts.firstWhere(
-        (contract) => contract['contract_id'] == contractId,
-        orElse: () => null,
+      final response = await http.get(
+        Uri.parse("$baseUrl/api/employer/contracts/"),
+        headers: {"Authorization": "Bearer $token"},
       );
+
+      final data = jsonDecode(response.body);
+
+      if (data["status"] == true && data["contracts"] is List) {
+        contracts = List<Map<String, dynamic>>.from(data["contracts"]);
+      } else {
+        contracts = [];
+      }
     } catch (e) {
-      debugPrint("Error getting contract by ID: $e");
-      return null;
+      if (kDebugMode) print("Error fetching contracts: $e");
+      contracts = [];
     }
-  }
 
-  // Get contract statistics
-  Map<String, int> getContractStats() {
-    final readyCount = readyForCompletion.length;
-    final pendingCount = pendingContracts.length;
-    final totalCount = _contracts.length;
-    
-    return {
-      'total': totalCount,
-      'ready': readyCount,
-      'pending': pendingCount,
-    };
-  }
-
-  // Clear error
-  void clearError() {
-    _errorMessage = '';
+    isLoading = false;
     notifyListeners();
   }
 
-  // Clear all data
-  void clear() {
-    _contracts = [];
-    _errorMessage = '';
+  // ======================================================
+  // Release Escrow Payment
+  // ======================================================
+  Future<bool> releasePayment(int contractId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString("user_token") ?? "";
+
+      final response = await http.post(
+        Uri.parse("$baseUrl/release-payment/"),
+        headers: {"Authorization": "Bearer $token"},
+        body: {"contract_id": contractId.toString()},
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (data["status"] == true) {
+        await fetchEmployerContracts();
+        return true;
+      } else {
+        throw Exception(data["message"]);
+      }
+    } catch (e) {
+      if (kDebugMode) print("Error releasing payment: $e");
+      return false;
+    }
+  }
+
+  // ======================================================
+  // Mark On-Site Contract Completed
+  // ======================================================
+  Future<bool> markContractCompleted(int contractId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString("user_token") ?? "";
+
+      final response = await http.post(
+        Uri.parse("$baseUrl/contracts/<int:contract_id>/mark-completed/"),
+        headers: {"Authorization": "Bearer $token"},
+        body: {"contract_id": contractId.toString()},
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (data["status"] == true) {
+        await fetchEmployerContracts();
+        return true;
+      }
+    } catch (e) {
+      if (kDebugMode) print("Error completing contract: $e");
+    }
+    return false;
+  }
+
+  // ======================================================
+  // Confirm Escrow Funding
+  // ======================================================
+  Future<bool> confirmEscrowFunding(String orderId, double amount) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString("user_token") ?? "";
+
+      final response = await http.post(
+        Uri.parse("$baseUrl/confirm-escrow/"),
+        headers: {"Authorization": "Bearer $token"},
+        body: {"order_id": orderId, "amount": amount.toString()},
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (data["status"] == true) {
+        await fetchEmployerContracts();
+        return true;
+      }
+    } catch (e) {
+      if (kDebugMode) print("Error confirming escrow: $e");
+    }
+    return false;
+  }
+
+  // ======================================================
+  // Clear Contract Data
+  // ======================================================
+  void clearContracts() {
+    contracts = [];
     notifyListeners();
   }
 }

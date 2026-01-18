@@ -1,4 +1,6 @@
 from decimal import Decimal
+import hashlib
+import hmac
 import secrets
 from django.conf import settings
 from django.http import Http404, JsonResponse
@@ -399,22 +401,36 @@ def apitask_list(request):
                 'id': task.task_id,
                 'title': task.title,
                 'description': task.description,
+                'category': task.category,
                 'is_approved': task.is_approved,
                 'status': task.status,
                 'overall_status': 'taken' if has_active_contract else task.status,
                 'has_contract': has_active_contract,
                 'is_taken': has_active_contract,
-                'assigned_user': task.assigned_user.user_id if task.assigned_user else None,  # Use user_id
+                'assigned_user': task.assigned_user.user_id if task.assigned_user else None,
                 'assigned_freelancer': assigned_freelancer,
                 'contract_count': 1 if has_active_contract else 0,
                 'created_at': task.created_at.isoformat() if task.created_at else None,
                 'completed': False,
+                
+                # HYBRID / MISSING FIELDS FIXED
+                'service_type': task.service_type,
+                'location_address': task.location_address,
+                'latitude': task.latitude,
+                'longitude': task.longitude,
+                'payment_type': task.payment_type,
+                'budget': str(task.budget) if task.budget else '0.00',
+                'is_urgent': task.is_urgent,
+                'deadline': task.deadline.isoformat() if task.deadline else None,
+                'required_skills': task.required_skills,
+
                 'employer': {
                     'id': task.employer.employer_id,
                     'username': task.employer.username,
                     'contact_email': task.employer.contact_email,
                     'profile_picture': employer_profile.profile_picture.url if employer_profile and employer_profile.profile_picture else None,
                     'phone_number': employer_profile.phone_number if employer_profile else None,
+                    'company_name': getattr(employer_profile, 'company_name', task.employer.username) if employer_profile else task.employer.username,
                 }
             }
             data.append(task_data)
@@ -548,129 +564,45 @@ def employer_profile(request, employer_id):
             serializer.save(employer=employer)
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-'''@api_view(['POST'])
+
+
+
+@api_view(['POST'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def create_task(request):
     try:
-        # Get employer profile
-        employer = Employer.objects.get(username=request.user.username)
-        
-        # Extract skills safely
-        skills = request.data.get('skills', '')
-        
-        # Prepare data for the new hybrid model
-        task_data = {
-            'employer': employer.employer_id,
-            'title': request.data.get('title'),
-            'description': request.data.get('description'),
-            'category': request.data.get('category', 'other'),
-            'service_type': request.data.get('service_type', 'remote'), # 'remote' or 'on_site'
-            'payment_type': request.data.get('payment_type', 'fixed'),   # 'fixed' or 'hourly'
-            'budget': request.data.get('budget'),
-            'deadline': request.data.get('deadline'),
-            'required_skills': skills,
-            'is_urgent': request.data.get('isUrgent', False),
-            
-            # Location fields (New for TaskRabbit features)
-            'location_address': request.data.get('location_address'),
-            'latitude': request.data.get('latitude'),
-            'longitude': request.data.get('longitude'),
-        }
-        
-        # Validate and Save
-        serializer = TaskSerializer(data=task_data)
+        employer = request.user  # Employer instance from EmployerTokenAuthentication
+
+        task_data = request.data.copy()
+
+        # Accept 'skills' as an alias for required_skills
+        if 'skills' in task_data and 'required_skills' not in task_data:
+            task_data['required_skills'] = task_data.pop('skills')
+
+        serializer = TaskCreateSerializer(data=task_data)
         if serializer.is_valid():
-            task = serializer.save()
+            task = serializer.save(employer=employer)
             return Response({
                 'success': True,
                 'message': 'Task created successfully',
                 'task': TaskSerializer(task).data
             }, status=status.HTTP_201_CREATED)
         else:
+            # Helpful debug logging for why validation failed
+            print("Task Create Validation Errors:", serializer.errors)
             return Response({
                 'success': False,
                 'message': 'Validation Error',
                 'errors': serializer.errors
             }, status=status.HTTP_400_BAD_REQUEST)
-            
+
     except Employer.DoesNotExist:
         return Response({'success': False, 'message': 'Employer profile not found'}, status=400)
-    except Exception as e:'''
- # Create Task
-@api_view(['POST'])
-@authentication_classes([EmployerTokenAuthentication])
-@permission_classes([IsAuthenticated])
-def create_task(request):
-    try:
-        print("\n=== CREATE TASK - GUARANTEED WORKING VERSION ===")
-        
-        employer = request.user 
-        
-        # Step 1: Create task WITHOUT problematic fields first
-        task = Task.objects.create(
-            employer=employer,
-            title=request.data.get('title'),
-            description=request.data.get('description'),
-            category=request.data.get('category'),
-            budget=request.data.get('budget'),
-            payment_type=request.data.get('payment_type', 'fixed'),
-            deadline=request.data.get('deadline'),
-            required_skills=request.data.get('required_skills', ''),
-            is_urgent=request.data.get('is_urgent', False),
-        )
-        
-        print(f"Step 1 - Basic task created: {task.task_id}")
-        
-        # Step 2: MANUALLY set the problematic fields
-        task.service_type = request.data.get('service_type')
-        
-        # Handle location_address - empty string should be None
-        location = request.data.get('location_address')
-        task.location_address = location if location and location != '' else None
-        
-        task.latitude = request.data.get('latitude')
-        task.longitude = request.data.get('longitude')
-        
-        print(f"Step 2 - Fields set manually:")
-        print(f"  service_type: '{task.service_type}'")
-        print(f"  location_address: '{task.location_address}'")
-        
-        # Step 3: Save with update_fields to bypass any signals
-        task.save(update_fields=[
-            'service_type', 
-            'location_address', 
-            'latitude', 
-            'longitude'
-        ])
-        
-        print(f"Step 3 - Saved with update_fields")
-        
-        # Step 4: Refresh and verify
-        task.refresh_from_db()
-        
-        print(f"\n=== FINAL RESULT ===")
-        print(f"Task ID: {task.task_id}")
-        print(f"service_type: '{task.service_type}'")
-        print(f"location_address: '{task.location_address}'")
-        
-        # Serialize for response
-        from .serializers import TaskSerializer
-        serializer = TaskSerializer(task)
-        
-        return Response({
-            'success': True,
-            'message': 'Task created successfully',
-            'task': serializer.data
-        }, status=status.HTTP_201_CREATED)
-            
     except Exception as e:
-        print(f"\nError: {str(e)}")
         import traceback
         traceback.print_exc()
         return Response({'success': False, 'message': str(e)}, status=500)
-    
 @api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication,CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -696,7 +628,69 @@ def get_freelancer_proposals(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
+@api_view(['POST'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def approve_and_release_payout(request, task_id):
+    """
+    Called by Employer for REMOTE tasks to release escrowed funds.
+    """
+    try:
+        # 1. Fetch task and verify ownership
+        task = get_object_or_404(Task, task_id=task_id, employer=request.user)
+        
+        if task.service_type != 'remote':
+            return Response({"error": "Use OTP verification for on-site tasks."}, status=400)
+            
+        if task.status == 'completed':
+            return Response({"error": "Payment already released."}, status=400)
 
+        # 2. Check if payment was actually escrowed
+        if not task.is_paid: # Based on our webhook update
+            return Response({"error": "No funds found in escrow for this task."}, status=400)
+
+        # 3. Trigger Paystack Payout
+        paystack = PaystackService()
+        
+        # Calculate Payout (e.g., Budget minus 10% platform fee)
+        total_cents = int(task.budget * 100)
+        freelancer_share = int(total_cents * 0.90) 
+        
+        # Get Freelancer's Recipient Code
+        # Assuming you've stored this on the UserProfile after bank verification
+        freelancer_profile = UserProfile.objects.get(user=task.assigned_user)
+        recipient_code = freelancer_profile.paystack_recipient_code
+
+        if not recipient_code:
+            return Response({"error": "Freelancer has not set up bank details."}, status=400)
+
+        # 4. Execute Transfer
+        payout = paystack.transfer_to_subaccount(
+            amount_cents=freelancer_share,
+            recipient=recipient_code,
+            reason=f"Payout for Remote Task: {task.title}"
+        )
+
+        if payout.get('status'):
+            # 5. Finalize the Task and Contract
+            task.status = 'completed'
+            task.save()
+            
+            Contract.objects.filter(task=task).update(is_active=False)
+            
+            # Notify Freelancer
+            Notification.objects.create(
+                user=task.assigned_user,
+                title="Payment Received!",
+                message=f"Employer approved your work for '{task.title}'. Funds sent to your bank."
+            )
+
+            return Response({"success": True, "message": "Funds released to freelancer."}, status=200)
+        
+        return Response({"error": "Payout failed", "detail": payout}, status=500)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
 @api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -827,40 +821,60 @@ def delete_task(request, task_id):
             'message': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
 @api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def get_employer_tasks(request):
-    
     print("\n=== Employer Tasks API Called ===")
     print(f"User: {request.user.username}")
+    print(f"Request path: {request.get_full_path()}")
 
     try:
-        employer = request.user  
+        employer = request.user
         tasks = Task.objects.filter(employer=employer).order_by('-created_at')
-        
+
+        # Print raw DB values per Task
         print(f"\n=== RAW TASK DATA FROM DATABASE ===")
         for task in tasks:
             print(f"Task {task.task_id}: '{task.title}'")
-            print(f"  service_type: '{task.service_type}'")
-            print(f"  location_address: '{task.location_address}'")
-        
+            print(f"  service_type (model): '{task.service_type}'")
+            print(f"  location_address (model): '{task.location_address}'")
+
+        # Serialize and print serializer output for debugging
         serializer = TaskSerializer(tasks, many=True)
+        serialized = serializer.data
+
+        # Print the full serialized payload (pretty)
+        try:
+            pretty = json.dumps(serialized, indent=2, ensure_ascii=False)
+        except Exception:
+            pretty = str(serialized)
+        print(f"\n=== SERIALIZED TASKS (what the API will return) ===\n{pretty}")
+
+        # Print each serialized task's important fields explicitly for quick comparison
+        print(f"\n=== SERIALIZED TASKS SUMMARY ===")
+        for i, t in enumerate(serialized):
+            st = t.get('service_type')
+            la = t.get('location_address')
+            tid = t.get('task_id') or t.get('id') or f'index_{i}'
+            title = t.get('title', '')
+            print(f"Serialized Task {tid}: '{title}'")
+            print(f"  service_type (serialized): '{st}'")
+            print(f"  location_address (serialized): '{la}'")
 
         return Response({
             "success": True,
-            "tasks": serializer.data,
-            "count": len(serializer.data),
+            "tasks": serialized,
+            "count": len(serialized),
         }, status=status.HTTP_200_OK)
 
     except Exception as e:
-        print(f"Error: {str(e)}")
+        print(f"Error in get_employer_tasks: {str(e)}")
         return Response({
             "success": False,
             "error": str(e)
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR) 
-
-
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 # ============ HELPER FUNCTIONS ============
@@ -1951,12 +1965,10 @@ def verify_payment_api(request, reference):
             'status': False,
             'message': f'Error: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 @api_view(['POST'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def payment_webhook_api(request):
-    
     if request.method == 'POST':
         try:
             payload = request.data
@@ -1966,7 +1978,6 @@ def payment_webhook_api(request):
                 data = payload.get('data')
                 reference = data.get('reference')
                 
-                # Verify the transaction
                 paystack = PaystackService()
                 verification = paystack.verify_transaction(reference)
                 
@@ -1974,30 +1985,268 @@ def payment_webhook_api(request):
                     transaction_data = verification['data']
                     
                     if transaction_data['status'] == 'success':
-                        # Update transaction and order
+                        # 1. Update the Transaction record
                         transaction = Transaction.objects.get(paystack_reference=reference)
-                        transaction.status = 'success'
+                        transaction.status = 'completed'
                         transaction.save()
                         
-                        order = transaction.order
-                        order.status = 'paid'
-                        order.save()
+                        # 2. Update the Task (Assuming Transaction has a FK to Task)
+                        task = transaction.task
+                        task.is_paid = True
+                        task.amount_held_in_escrow = transaction.amount
+                        task.payment_status = 'escrowed'
                         
-                       
+                        # 3. BRANCH LOGIC: On-site vs Remote
+                        if task.service_type == 'on_site':
+                            # ONSITE: Generate OTP. Do NOT pay worker yet.
+                            task.generate_otp() 
+                            # Logic to notify Employer of their code
+                            print(f"On-site Task Verified. OTP: {task.verification_code}")
+                        else:
+                            # REMOTE: Normal flow. Mark as in_progress/escrowed.
+                            # Payment waits for a 'Submission' approval.
+                            print(f"Remote Task Verified. Awaiting Submission.")
                         
+                        task.save()
+
             return Response({'status': 'success'})
             
         except Exception as e:
-            return Response(
-                {'status': 'error', 'message': str(e)}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-    
-    return Response(
-        {'status': 'error', 'message': 'Method not allowed'}, 
-        status=status.HTTP_405_METHOD_NOT_ALLOWED
-    )
+            return Response({'status': 'error', 'message': str(e)}, status=400)
+        
 
+
+@api_view(['POST'])
+@csrf_exempt
+def paystack_webhook(request):
+    """
+    Handle Paystack webhook notifications for payment events.
+    This is called by Paystack when payment status changes.
+    """
+    try:
+        # 1️⃣ Verify webhook signature for security
+        payload = request.body
+        signature = request.headers.get('x-paystack-signature')
+        
+        if not signature:
+            return Response({"status": "error", "message": "No signature provided"}, status=400)
+        
+        # Compute HMAC SHA512 signature
+        computed_signature = hmac.new(
+            settings.PAYSTACK_SECRET_KEY.encode('utf-8'),
+            payload,
+            hashlib.sha512
+        ).hexdigest()
+        
+        # Verify signature matches
+        if not hmac.compare_digest(computed_signature, signature):
+            return Response({"status": "error", "message": "Invalid signature"}, status=400)
+
+        # 2️⃣ Parse payload
+        data = json.loads(payload)
+        event = data.get('event')
+        
+        if event != 'charge.success':
+            # We only care about successful charges
+            return Response({"status": "ignored", "message": f"Event {event} not handled"})
+
+        # 3️⃣ Extract transaction details
+        transaction_data = data.get('data', {})
+        reference = transaction_data.get('reference')
+        
+        if not reference:
+            return Response({"status": "error", "message": "No reference provided"}, status=400)
+
+        # 4️⃣ Verify with Paystack API for double confirmation
+        paystack = PaystackService()
+        verification = paystack.verify_transaction(reference)
+        
+        if not verification or not verification.get('status'):
+            return Response({"status": "error", "message": "Paystack verification failed"}, status=400)
+        
+        verified_data = verification.get('data', {})
+        
+        if verified_data.get('status') != 'success':
+            return Response({"status": "error", "message": "Transaction not successful"}, status=400)
+
+        # 5️⃣ Find and update transaction record
+        try:
+            transaction = Transaction.objects.get(paystack_reference=reference, status='pending')
+        except Transaction.DoesNotExist:
+            return Response({"status": "error", "message": "Transaction not found"}, status=404)
+
+        # Update transaction
+        transaction.status = 'completed'
+        transaction.completed_at = timezone.now()
+        transaction.metadata = {
+            'paystack_webhook': data,
+            'verification_response': verification,
+            'amount_paid': verified_data.get('amount', 0) / 100  # Convert from cents
+        }
+        transaction.save()
+
+        # 6️⃣ Get related objects
+        task = transaction.task
+        order = transaction.order
+        contract = transaction.contract
+        employer = transaction.employer
+        freelancer = transaction.freelancer
+
+        if not all([task, order, contract, employer, freelancer]):
+            return Response({"status": "error", "message": "Missing related objects"}, status=400)
+
+        # 7️⃣ Update order
+        order.status = 'paid'
+        order.payment_reference = reference
+        order.paid_at = timezone.now()
+        order.save()
+
+        # 8️⃣ Update task - funds now in escrow
+        task.is_paid = True
+        task.amount_held_in_escrow = transaction.amount
+        task.payment_status = 'escrowed'
+        task.paystack_reference = reference
+        
+        # 9️⃣ Activate contract
+        contract.activate_after_payment()
+        contract.mark_as_paid()
+
+        # 🔟 BRANCH LOGIC: On-site vs Remote
+        if task.service_type == 'on_site':
+            # ON-SITE TASK: Generate OTP for employer
+            otp_code = task.generate_otp()
+            task.status = 'in_progress'
+            
+            # Notify employer with OTP
+            Notification.objects.create(
+                user=employer.user,
+                title='OTP Generated for On-site Task',
+                message=f'Task "{task.title}" is now active. Use OTP: {otp_code} to verify completion on site.',
+                notification_type='onsite_otp',
+                related_id=task.task_id
+            )
+            
+            # Notify freelancer
+            Notification.objects.create(
+                user=freelancer.user,
+                title='Task Funds Secured',
+                message=f'Payment for task "{task.title}" is secured in escrow. Complete the work and ask employer for OP to receive payment.',
+                notification_type='funds_secured'
+            )
+            
+        else:
+            # REMOTE TASK: Mark as in progress
+            task.status = 'in_progress'
+            
+            # Notify freelancer to start work
+            Notification.objects.create(
+                user=freelancer.user,
+                title='Start Your Work',
+                message=f'Payment for task "{task.title}" is secured in escrow. You can now start working and submit your deliverables.',
+                notification_type='start_work'
+            )
+        
+        task.save()
+
+        # 11️⃣ Notify employer payment successful
+        Notification.objects.create(
+            user=employer.user,
+            title='Payment Successful',
+            message=f'Payment of KSh {transaction.amount:.2f} for task "{task.title}" is secured in escrow.',
+            notification_type='payment_successful'
+        )
+
+        print(f"✅ Webhook processed: Reference {reference}, Task: {task.title}, Type: {task.service_type}")
+        
+        return Response({"status": "success", "message": "Payment processed successfully"})
+
+    except json.JSONDecodeError:
+        return Response({"status": "error", "message": "Invalid JSON payload"}, status=400)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return Response({"status": "error", "message": str(e)}, status=500)
+
+@api_view(['POST'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def verify_onsite_completion(request):
+    """
+    Employer verifies onsite task completion with OTP.
+    Expects: {'task_id': int, 'otp_code': str}
+    """
+    try:
+        task_id = request.data.get('task_id')
+        otp_code = request.data.get('otp_code')
+        
+        if not task_id or not otp_code:
+            return Response({
+                "success": False, 
+                "error": "task_id and otp_code are required"
+            }, status=400)
+        
+        # Get task
+        task = get_object_or_404(Task, task_id=task_id)
+        
+        # Verify employer owns the task
+        employer = Employer.objects.get(pk=request.user.employer_id)
+        if task.employer != employer:
+            return Response({
+                "success": False, 
+                "error": "Unauthorized - only task employer can verify completion"
+            }, status=403)
+        
+        # Check if task requires onsite verification
+        if not task.requires_onsite_verification:
+            return Response({
+                "success": False, 
+                "error": "This task does not require onsite verification"
+            }, status=400)
+        
+        # Verify OTP
+        is_valid, message = task.check_otp(otp_code)
+        
+        if is_valid:
+            # Release payment to freelancer
+            contract = Contract.objects.get(task=task)
+            freelancer = task.assigned_user
+            
+            # In real implementation, you would call Paystack transfer here
+            # For now, we'll just mark as released
+            task.payment_status = 'released'
+            task.save()
+            
+            contract.mark_as_completed()
+            contract.mark_as_paid()
+            
+            # Notify freelancer
+            Notification.objects.create(
+                user=freelancer,
+                title='Payment Released!',
+                message=f'Payment for task "{task.title}" has been released to your account.',
+                notification_type='payment_released'
+            )
+            
+            return Response({
+                "success": True,
+                "message": "Task completed and payment released successfully",
+                "task_id": task.task_id,
+                "task_title": task.title,
+                "task_status": task.status,
+                "payment_status": task.payment_status
+            })
+        else:
+            return Response({
+                "success": False,
+                "error": message,
+                "attempts_remaining": 5 - task.verification_attempts
+            }, status=400)
+            
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return Response({"success": False, "error": str(e)}, status=500)
+        
 @api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -2404,7 +2653,7 @@ def recommended_jobs(request):
 @permission_classes([IsAuthenticated])
 def accept_proposal(request):
     """
-    Accept a proposal, lock the task, create contract, and auto-create order.
+    Accept a proposal, lock the task, create contract, and initiate payment.
     Expects: {'proposal_id': int}
     """
     try:
@@ -2437,29 +2686,31 @@ def accept_proposal(request):
         # 6️⃣ Reject all other proposals
         Proposal.objects.filter(task=task).exclude(pk=proposal.pk).update(status='rejected')
 
-        # 7️⃣ Lock task
+        # 7️⃣ Mark task as awaiting payment (NOT in_progress yet)
         task.assigned_user = proposal.freelancer  # User instance
-        task.status = 'in_progress'
+        task.status = 'awaiting_payment'
         task.is_active = False
         task.save()
 
         # 8️⃣ Ensure freelancer exists
         freelancer_obj, _ = Freelancer.objects.get_or_create(user=proposal.freelancer)
 
-        # 9️⃣ Create contract
+        # 9️⃣ Create contract (but mark as pending until payment)
         contract = Contract.objects.create(
             task=task,
             freelancer=proposal.freelancer,
             employer=employer,
             employer_accepted=True,
             freelancer_accepted=True,
-            is_active=True,
+            is_active=False,  # Will be activated after payment
+            status='pending',
             start_date=timezone.now()
         )
 
         # 🔟 Auto-create order
         amount = proposal.bid_amount if proposal.bid_amount else task.budget or Decimal('0.00')
 
+        # Check for existing pending order
         existing_order = Order.objects.filter(
             task=task,
             employer=employer,
@@ -2480,26 +2731,68 @@ def accept_proposal(request):
                 status='pending'
             )
 
-            # Notify freelancer
-            Notification.objects.create(
-                user=proposal.freelancer,
-                title='Payment Order Created',
-                message=f'{employer.username} has created a payment order for task: {task.title}',
-                notification_type='payment_received',
-                related_id=order.id
-            )
+        # 11️⃣ Initialize Paystack payment
+        paystack = PaystackService()
+        reference = f"ORD-{order.order_id.hex[:8]}-{uuid.uuid4().hex[:4]}"
+        amount_cents = int(order.amount * 100)  # Convert to cents
+        
+        # Create transaction record
+        transaction = Transaction.objects.create(
+            task=task,
+            order=order,
+            contract=contract,
+            employer=employer,
+            freelancer=freelancer_obj,
+            amount=order.amount,
+            paystack_reference=reference,
+            status='pending',
+            transaction_type='payment',
+            metadata={'task_title': task.title}
+        )
 
-        # Notify freelancer about acceptance
+        # Initialize payment
+        callback_url = f"{settings.FRONTEND_URL}/payment/verify/?order_id={order.order_id}"
+        paystack_response = paystack.initialize_transaction(
+            email=employer.contact_email,
+            amount=amount_cents,
+            reference=reference,
+            callback_url=callback_url
+        )
+        
+        if not paystack_response.get('status'):
+            # Rollback: Reset task status if payment fails
+            task.status = 'open'
+            task.assigned_user = None
+            task.is_active = True
+            task.save()
+            
+            return Response({
+                "success": False,
+                "error": "Payment initialization failed",
+                "detail": paystack_response.get('message')
+            }, status=400)
+
+        # 12️⃣ Notify freelancer about acceptance
         Notification.objects.create(
             user=proposal.freelancer,
             title='Proposal Accepted!',
-            message=f'Your proposal for "{task.title}" has been accepted. Contract is ready.',
-            notification_type='contract_accepted'
+            message=f'Your proposal for "{task.title}" has been accepted. Awaiting payment confirmation to start.',
+            notification_type='proposal_accepted'
+        )
+
+        # 13️⃣ Notify employer to complete payment
+        Notification.objects.create(
+            user=employer.user,
+            title='Payment Required',
+            message=f'Please complete payment for task "{task.title}" to activate the contract.',
+            notification_type='payment_required',
+            related_id=order.order_id
         )
 
         return Response({
             "success": True,
-            "message": "Proposal accepted, contract created, and payment order ready",
+            "message": "Proposal accepted. Please complete payment to activate the contract.",
+            "checkout_url": paystack_response.get('data', {}).get('authorization_url'),
             "proposal_id": proposal.proposal_id,
             "task_id": task.task_id,
             "task_title": task.title,
@@ -2507,16 +2800,18 @@ def accept_proposal(request):
             "assigned_freelancer_id": proposal.freelancer.user_id,
             "assigned_freelancer_name": proposal.freelancer.name,
             "contract_id": contract.contract_id,
-            "contract_active": contract.is_active,
+            "contract_status": contract.status,
             "order_id": str(order.order_id),
             "order_amount": float(order.amount),
             "order_status": order.status,
+            "payment_reference": reference,
+            "callback_url": callback_url
         })
 
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return Response({"success": False, "error": "Internal server error", "detail": str(e)}, status=500)
+        return Response({"success": False, "error": "Internal server error", "detail": str(e)}, status=500)        
 
 @api_view(['POST'])
 @authentication_classes([CustomTokenAuthentication])
@@ -2534,6 +2829,8 @@ def reject_contract(request, contract_id):
     return Response({
         "message": "Contract rejected and removed"
     })
+    
+    
         
 @api_view(['POST'])
 @authentication_classes([CustomTokenAuthentication])
@@ -2752,7 +3049,8 @@ def employer_contracts(request):
         print(f"ERROR in employer_contracts: {str(e)}")
         return Response({
             'error': f'Failed to fetch contracts: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        }, status=500)
+                        
 @api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -4931,4 +5229,121 @@ def getemployer_profile(request, employer_id):
         return Response({
             'success': False,
             'message': f'Server error: {str(e)}'
+        }, status=500)
+
+@api_view(['POST'])
+@authentication_classes([CustomTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def generate_task_otp(request, task_id):
+    """Generate OTP for onsite task verification"""
+    try:
+        task = Task.objects.get(task_id=task_id)
+        
+        # Check if user is authorized (employer or assigned freelancer)
+        user = request.user
+        
+        is_employer = hasattr(user, 'employer') and user.employer == task.employer
+        is_assigned_freelancer = task.assigned_user == user
+        
+        if not (is_employer or is_assigned_freelancer):
+            return Response({
+                "success": False,
+                "message": "Not authorized to generate OTP for this task"
+            }, status=403)
+        
+        # Check if task is onsite
+        if task.service_type != 'on_site':
+            return Response({
+                "success": False,
+                "message": "OTP only available for onsite tasks"
+            }, status=400)
+        
+        # Generate OTP
+        otp_code = task.generate_otp()
+        
+        # In production, send via SMS/Email
+        print(f"DEBUG: OTP for task {task_id}: {otp_code}")
+        
+        return Response({
+            "success": True,
+            "message": "OTP generated successfully",
+            "task_id": task.task_id,
+            "task_title": task.title,
+            "location": task.location_address,
+            "note": "Share this OTP with the worker to verify task completion"
+        })
+        
+    except Task.DoesNotExist:
+        return Response({
+            "success": False,
+            "message": "Task not found"
+        }, status=404)
+    except Exception as e:
+        return Response({
+            "success": False,
+            "message": f"Error: {str(e)}"
+        }, status=500)
+@api_view(['POST'])
+@authentication_classes([CustomTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def verify_task_otp(request, task_id):
+    """Verify OTP for onsite task completion"""
+    try:
+        task = Task.objects.get(task_id=task_id)
+        
+        # Get OTP from request
+        otp_code = request.data.get('otp_code', '').strip()
+        
+        if not otp_code:
+            return Response({
+                "success": False,
+                "message": "OTP code is required"
+            }, status=400)
+        
+        # Verify OTP
+        is_valid, message = task.check_otp(otp_code)
+        
+        if is_valid:
+            # ======= ADD THIS LOGIC FROM THE FIRST VIEW =======
+            # 1. TRIGGER PAYSTACK SPLIT HERE
+            # Since task.payment_status is now 'released', 
+            # call your existing Paystack function to move money 
+            # from escrow to the worker's wallet/bank.
+            
+            # 2. Create a TaskCompletion record for the history
+            TaskCompletion.objects.create(
+                user=task.assigned_user,
+                task=task,
+                amount=task.budget,
+                status='approved',
+                paid=True,
+                payment_date=timezone.now()
+            )
+            # ==================================================
+            
+            return Response({
+                "success": True,
+                "message": "Task verified successfully! Payment released.",
+                "task_id": task.task_id,
+                "task_title": task.title,
+                "verified_at": task.onsite_verified_at,
+                "status": task.status,
+                "payment_status": task.payment_status
+            })
+        else:
+            return Response({
+                "success": False,
+                "message": message,
+                "attempts_remaining": 5 - task.verification_attempts
+            }, status=400)
+        
+    except Task.DoesNotExist:
+        return Response({
+            "success": False,
+            "message": "Task not found"
+        }, status=404)
+    except Exception as e:
+        return Response({
+            "success": False,
+            "message": f"Error: {str(e)}"
         }, status=500)

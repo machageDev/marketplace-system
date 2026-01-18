@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:helawork/client/home/client_paymentsuccess_screen.dart';
 import 'package:helawork/client/home/client_proposal_view_screen.dart';
 import 'package:helawork/client/home/freelancer_profile_screen.dart';
 import 'package:helawork/client/models/client_proposal.dart';
 import 'package:helawork/client/provider/client_proposal_provider.dart';
 import 'package:provider/provider.dart';
-
+import 'package:url_launcher/url_launcher.dart'; // ADD THIS IMPORT
 
 class ClientProposalsScreen extends StatefulWidget {
   const ClientProposalsScreen({super.key});
@@ -35,10 +36,7 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
         foregroundColor: whiteColor,
         centerTitle: true,
         elevation: 1,
-        // Remove the back arrow
         automaticallyImplyLeading: false,
-        // Alternative: explicitly set leading to null
-        // leading: Container(),
       ),
       body: Consumer<ClientProposalProvider>(
         builder: (context, provider, child) {
@@ -186,6 +184,42 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
             ),
             const SizedBox(height: 12),
 
+            // Service Type Indicator
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: proposal.taskServiceType == 'on_site' 
+                    ? Colors.orange.withOpacity(0.1) 
+                    : Colors.blue.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: proposal.taskServiceType == 'on_site' 
+                      ? Colors.orange.withOpacity(0.3) 
+                      : Colors.blue.withOpacity(0.3),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    proposal.taskServiceType == 'on_site' ? Icons.location_on : Icons.laptop,
+                    size: 14,
+                    color: proposal.taskServiceType == 'on_site' ? Colors.orange : Colors.blue,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    proposal.taskServiceType == 'on_site' ? 'On-Site Work' : 'Remote Work',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: proposal.taskServiceType == 'on_site' ? Colors.orange : Colors.blue,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+
             // Cover Letter Preview
             if (proposal.coverLetter.isNotEmpty)
               Container(
@@ -317,52 +351,283 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
     );
   }
 
+  // UPDATED: Complete _showAcceptConfirmation function
   void _showAcceptConfirmation(BuildContext context, ClientProposal proposal) {
+    final isOnSite = proposal.taskServiceType == 'on_site';
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Accept Proposal'),
+        title: const Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.green),
+            SizedBox(width: 10),
+            Text('Accept Proposal'),
+          ],
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Accept proposal from ${proposal.freelancerName}?'),
-            const SizedBox(height: 8),
             Text(
-              'Bid: Ksh ${proposal.bidAmount.toStringAsFixed(2)}',
-              style: const TextStyle(fontWeight: FontWeight.bold),
+              'Accept proposal from ${proposal.freelancerName}?',
+              style: const TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 12),
+            
+            // Payment Information
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade100),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.attach_money, size: 20, color: Colors.blue),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Ksh ${proposal.bidAmount.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  
+                  // Secure Payment Note
+                  Row(
+                    children: [
+                      const Icon(Icons.security, size: 16, color: Colors.green),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Secure Escrow Payment',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: Colors.green,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  
+                  const Text(
+                    '• Funds go to secure escrow',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  const Text(
+                    '• Freelancer starts after payment',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  const Text(
+                    '• Release payment when satisfied',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  
+                  // On-site specific instructions
+                  if (isOnSite) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.location_on, size: 14, color: Colors.orange),
+                              SizedBox(width: 6),
+                              Text(
+                                'On-Site Task',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.orange,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'You will receive an OTP to give to freelancer when work is completed',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.grey,
+            ),
             child: const Text('Cancel'),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+            ),
             onPressed: () async {
-              Navigator.pop(context);
-              final success = await context.read<ClientProposalProvider>().acceptProposal(proposal.id);
-              if (success && context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Proposal accepted successfully'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-                // Refresh the list
-                context.read<ClientProposalProvider>().loadProposals();
-              } else if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(context.read<ClientProposalProvider>().errorMessage),
-                    backgroundColor: Colors.red,
-                  ),
-                );
+              Navigator.pop(context); // Close dialog
+              
+              // Show loading overlay
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (context) => const Center(
+                  child: CircularProgressIndicator(),
+                ),
+              );
+              
+              try {
+                final provider = context.read<ClientProposalProvider>();
+                final success = await provider.acceptProposal(proposal.id);
+                
+                if (context.mounted) {
+                  Navigator.pop(context); // Close loading dialog
+                }
+                
+                if (success && context.mounted) {
+                  // Check if payment URL is returned
+                  final response = provider.lastResponse;
+                  
+                  if (response != null && 
+                      response.containsKey('requires_payment') &&
+                      response['requires_payment'] == true &&
+                      response['checkout_url'] != null) {
+                    
+                    // Get payment details
+                    final checkoutUrl = response['checkout_url'] as String;
+                    final orderId = response['order_id'] ?? 'N/A';
+                    final taskTitle = proposal.taskTitle;
+                    
+                    // Show payment redirect message
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Row(
+                            children: [
+                              const Icon(Icons.arrow_forward, color: Colors.white, size: 20),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Text(
+                                      'Redirecting to secure payment...',
+                                      style: TextStyle(fontWeight: FontWeight.bold),
+                                    ),
+                                    Text(
+                                      'Order: $orderId',
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          backgroundColor: Colors.blue,
+                          duration: const Duration(seconds: 4),
+                        ),
+                      );
+                    }
+                    
+                    // Launch Paystack payment page
+                    final Uri url = Uri.parse(checkoutUrl);
+                    if (await canLaunchUrl(url)) {
+                      await launchUrl(
+                        url,
+                        mode: LaunchMode.externalApplication,
+                        webViewConfiguration: const WebViewConfiguration(
+                          enableJavaScript: true,
+                          enableDomStorage: true,
+                        ),
+                      );
+                      
+                      // Note: After payment, user will be redirected back to your app
+                      // You should handle this in your main.dart or navigation handler
+                      // For now, show a success screen
+                      if (context.mounted) {
+                        // Navigate to payment success screen
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => PaymentSuccessScreen(
+                              paymentData: {
+                                'order_id': orderId,
+                                'amount': proposal.bidAmount.toStringAsFixed(2),
+                                'task_title': taskTitle,
+                                'service_type': proposal.taskServiceType,
+                                'freelancer_name': proposal.freelancerName,
+                                'is_on_site': isOnSite,
+                              }, orderId: '',
+                            ),
+                          ),
+                        );
+                      }
+                    } else {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Cannot open payment page'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    }
+                  } else {
+                    // Old flow (payment not required)
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Proposal accepted successfully'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                      provider.loadProposals();
+                    }
+                  }
+                } else if (context.mounted) {
+                  // Show error
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(provider.errorMessage),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  Navigator.pop(context); // Close loading dialog
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
               }
             },
-            child: const Text('Accept'),
+            icon: const Icon(Icons.lock, size: 18),
+            label: const Text('Accept & Pay Securely'),
           ),
         ],
       ),

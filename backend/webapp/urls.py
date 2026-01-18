@@ -19,7 +19,7 @@ urlpatterns = [
     path('api/tasks/assigned/', views.get_assigned_tasks, name='freelancer-assigned-tasks'),
     path('api/tasks/employer/rateable/', views.employer_rateable_tasks, name='employer-rateable-tasks'),
     path('tasks/<int:task_id>/', views.delete_task, name='delete-task'),
-    
+    path('tasks/<uuid:task_id>/approve-release/', views.approve_and_release_payout, name='approve-remote-payout'),
     # ============ PROPOSALS ============
     path('apiproposal', views.apisubmit_proposal, name='submit_proposal'),
     path('client/proposals/', views.get_freelancer_proposals, name='freeproposal'),
@@ -59,7 +59,9 @@ urlpatterns = [
     path('api/payment/transactions/', views.employer_transactions, name='employer_transactions'),
     path('api/orders/<uuid:order_id>/verify-payment/', views.verify_order_payment, name='verify-order-payment'),
     path('contracts/<int:contract_id>/order/', views.get_order_for_contract, name='contract-order'),
+    path('tasks/<uuid:task_id>/verify-otp/',views.verify_onsite_completion,name='verify-onsite-otp'),
     path('api/banks/', views.register_bank,name='register-bank'),
+    path('api/webhooks/paystack/', views.paystack_webhook, name='paystack_webhook'),
     # OPTION B: Use new payment endpoints (if you implemented them) - REMOVE ABOVE IF USING THESE
     # path('api/payment/order/<str:order_id>/', views.order_detail, name='order_detail'),
     # path('api/orders/pending-payment/', views.pending_payment_orders, name='pending_payment_orders'),
@@ -96,6 +98,8 @@ urlpatterns = [
     path('freelancer/recommended-jobs/', views.recommended_jobs, name='recommended_jobs'),
     path('completetask', views.task_completion_list, name='task-completion-list'),
     path('task-completions/<int:pk>/', views.task_completion_detail, name='task-completion-detail'),
+    path('tasks/<int:task_id>/generate-otp/', views.generate_task_otp, name='generate_task_otp'),
+    path('tasks/<int:task_id>/verify-otp/', views.verify_task_otp, name='verify_task_otp'),
     
     # Wallet endpoints
     path('api/wallet/', views.get_wallet_data, name='wallet-data'),

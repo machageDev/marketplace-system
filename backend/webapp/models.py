@@ -3,7 +3,8 @@ from django.contrib.auth.hashers import make_password, check_password
 from django.utils import timezone
 import uuid
 from django.db import models
-
+import random
+import string
 #freelancer (for workers)
 class User(models.Model):
     user_id = models.AutoField(primary_key=True)
@@ -225,13 +226,12 @@ class EmployerProfile(models.Model):
     def has_assigned_freelancer(self):
         return self.assigned_user is not None'''
 
-
-
 class Task(models.Model):
     # CATEGORIES (Digital + Physical)
     TASK_CATEGORIES = [
         ('web_dev', 'Web Development'),
         ('mobile', 'Mobile Development'),  
+        ('desing','Design'),
         ('digital_marketing', 'Digital Marketing'),
         ('cleaning', 'Cleaning & Housekeeping'),
         ('handyman', 'Handyman & Repairs'),
@@ -252,10 +252,11 @@ class Task(models.Model):
         ('hourly', 'Hourly Rate'),
     ]
 
-    # STATUS FLOW
+    # STATUS FLOW (UPDATED - Added awaiting_payment)
     TASK_STATUS = [
         ('open', 'Open'),
         ('assigned', 'Assigned'),
+        ('awaiting_payment', 'Awaiting Payment'),  # NEW STATUS
         ('in_progress', 'In Progress'),
         ('awaiting_confirmation', 'Awaiting Employer Confirmation'),
         ('completed', 'Completed'),
@@ -268,7 +269,7 @@ class Task(models.Model):
     description = models.TextField()
     category = models.CharField(max_length=50, choices=TASK_CATEGORIES, default='other')
 
-    # CLASSIFICATION - NO default='remote'!
+    # CLASSIFICATION
     service_type = models.CharField(max_length=20, choices=SERVICE_TYPE)
     payment_type = models.CharField(max_length=20, choices=PAYMENT_TYPE, default='fixed')
 
@@ -283,7 +284,7 @@ class Task(models.Model):
         max_length=20,
         choices=[
             ('pending', 'Pending Payment'),
-            ('escrowed', 'Held in Escrow by Helawork'),
+            ('escrowed', 'Held in Escrow by Platform'),
             ('released', 'Paid to Worker'),
             ('refunded', 'Refunded to Employer'),
         ],
@@ -315,7 +316,12 @@ class Task(models.Model):
     employer = models.ForeignKey('Employer', on_delete=models.CASCADE, related_name="tasks")
     assigned_user = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, blank=True)
 
-    # DISPLAY / PROPERTIES
+    # --- ONSITE VERIFICATION FIELDS ---
+    verification_code = models.CharField(max_length=6, blank=True, null=True, help_text="OTP for onsite tasks")
+    verification_attempts = models.PositiveIntegerField(default=0)
+    verification_generated_at = models.DateTimeField(null=True, blank=True)  # NEW: Track when OTP was generated
+    onsite_verified_at = models.DateTimeField(null=True, blank=True)
+
     def __str__(self):
         return f"{self.title}"
 
@@ -334,6 +340,67 @@ class Task(models.Model):
     @property
     def is_completed_and_paid(self):
         return self.status == "completed" and self.payment_status == "released"
+
+    # --- HELPER METHODS ---
+    def generate_otp(self):
+        """Generate a 6-digit numeric OTP"""
+        code = ''.join(random.choices(string.digits, k=6))
+        self.verification_code = code
+        self.verification_attempts = 0
+        self.verification_generated_at = timezone.now()  # Track generation time
+        self.save()
+        return code
+
+    def check_otp(self, input_code):
+        """Check if the provided code is correct and within attempt limits"""
+        if self.verification_attempts >= 5:
+            return False, "Too many failed attempts. Please contact support."
+        
+        # Check if OTP is expired (24 hours)
+        if self.verification_generated_at:
+            time_diff = timezone.now() - self.verification_generated_at
+            if time_diff.total_seconds() > 86400:  # 24 hours
+                return False, "OTP has expired. Please request a new one."
+        
+        if self.verification_code == input_code:
+            self.onsite_verified_at = timezone.now()
+            self.status = 'completed'
+            self.payment_status = 'released'
+            self.save()
+            return True, "Success"
+        else:
+            self.verification_attempts += 1
+            self.save()
+            return False, "Invalid code"
+    
+    def reset_verification(self):
+        """Reset verification for retry"""
+        self.verification_code = None
+        self.verification_attempts = 0
+        self.verification_generated_at = None
+        self.onsite_verified_at = None
+        self.save()
+    
+    @property
+    def requires_onsite_verification(self):
+        """Check if this task needs OTP verification"""
+        return (self.service_type == 'on_site' and 
+                self.status in ['in_progress', 'awaiting_confirmation'] and
+                self.payment_status == 'escrowed')
+    
+    @property
+    def is_verification_expired(self):
+        """Check if OTP is expired (24 hours)"""
+        if not self.verification_code or not self.verification_generated_at:
+            return True
+        time_diff = timezone.now() - self.verification_generated_at
+        return time_diff.total_seconds() > 86400  # 24 hours
+    
+    def mark_as_paid_to_escrow(self):
+        """Mark task as paid and funds in escrow"""
+        self.is_paid = True
+        self.payment_status = 'escrowed'
+        self.save()
 
 class TaskCompletion(models.Model):
     completion_id = models.AutoField(primary_key=True)
@@ -502,7 +569,6 @@ class Proposal(models.Model):
 
     def __str__(self):
         return f"{self.freelancer.name} -> {self.task.title}"
-
 class Contract(models.Model):
     contract_id = models.AutoField(primary_key=True)
     task = models.OneToOneField(Task, related_name="contract", on_delete=models.CASCADE)
@@ -546,6 +612,21 @@ class Contract(models.Model):
             self.is_active = True
             self.status = 'active'
             self.save()
+            return True
+        return False
+
+    def activate_after_payment(self):
+        """Activate contract after successful payment."""
+        self.is_active = True
+        self.status = 'active'
+        self.save()
+        
+        # Also update the associated task to in_progress
+        if self.task:
+            self.task.status = 'in_progress'
+            self.task.save()
+        
+        return True
 
     def mark_as_completed(self):
         """Mark contract as completed."""
@@ -559,7 +640,6 @@ class Contract(models.Model):
         self.is_paid = True
         self.payment_date = timezone.now()
         self.save()
-
 
 class Transaction(models.Model):
     TRANSACTION_TYPES = [

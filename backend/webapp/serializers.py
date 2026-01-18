@@ -168,66 +168,75 @@ class EmployerSerializer(serializers.ModelSerializer):
         model = Employer
         fields = '__all__'
 
-class TaskSerializer(serializers.ModelSerializer):
-    is_taken = serializers.SerializerMethodField()
-    service_type_display = serializers.CharField(source='get_service_type_display', read_only=True)
+from rest_framework import serializers
+from .models import Task
+from django.utils import timezone
+
+class TaskCreateSerializer(serializers.ModelSerializer):
+    # Allow 'YYYY-MM-DD' as well as full ISO datetime strings
+    deadline = serializers.DateTimeField(
+        required=False,
+        allow_null=True,
+        input_formats=[
+            '%Y-%m-%d',                 # date-only
+            '%Y-%m-%dT%H:%M:%S.%fZ',    # ISO with Z
+            '%Y-%m-%dT%H:%M:%S.%f',     # ISO without Z
+            '%Y-%m-%dT%H:%M:%S',        # ISO without fractional
+        ]
+    )
 
     class Meta:
         model = Task
         fields = [
-            'task_id', 'employer', 'title', 'description', 'category',
+            'employer', 'title', 'description', 'category', 'service_type', 'payment_type',
+            'budget', 'deadline', 'required_skills', 'is_urgent', 'location_address',
+            'latitude', 'longitude'
+        ]
+        read_only_fields = ['employer']
+
+    def validate(self, data):
+        # Ensure service_type values match the model choices
+        st = data.get('service_type')
+        loc = (data.get('location_address') or '').strip()
+
+        # enforce allowed values to avoid typos like 'on-site' or 'onsite'
+        if st not in ('remote', 'on_site'):
+            raise serializers.ValidationError({'service_type': 'Invalid service_type. Use "remote" or "on_site".'})
+
+        # if on_site, require a real location
+        if st == 'on_site':
+            if not loc:
+                raise serializers.ValidationError({'location_address': 'location_address is required for on_site tasks.'})
+            # optionally further checks: reject 'none', 'null', 'remote' etc.
+            lower_loc = loc.lower()
+            if lower_loc in ('none', 'null', 'no location provided', 'remote'):
+                raise serializers.ValidationError({'location_address': 'Provide a valid physical location for on_site tasks.'})
+
+        return data 
+
+class TaskSerializer(serializers.ModelSerializer):
+    is_taken = serializers.SerializerMethodField()
+    service_type_display = serializers.CharField(source='get_service_type_display', read_only=True)
+    employer_name = serializers.CharField(source='employer.username', read_only=True) # Changed to username to match model
+    employer_id = serializers.IntegerField(source='employer.employer_id', read_only=True)
+
+    class Meta:
+        model = Task
+        fields = [
+            'task_id', 'employer', 'employer_id', 'employer_name', 'title', 'description', 'category',
             'service_type', 'service_type_display', 'payment_type', 
             'budget', 'location_address', 'latitude', 'longitude',
             'deadline', 'required_skills', 'is_urgent', 'status', 
             'payment_status', 'is_paid', 'assigned_user', 
-            'is_taken', 'created_at'
+            'is_taken', 'created_at', 'is_approved', 'is_active',
+            'attachments' # Added attachments as it was in model
         ]
-        read_only_fields = ['payment_status', 'is_paid', 'status']
+        read_only_fields = ['payment_status', 'is_paid', 'status', 'is_approved', 'is_active', 'created_at', 'task_id']
 
     def create(self, validated_data):
-        print(f"\n" + "="*60)
-        print("TASK SERIALIZER CREATE - EXTREME DEBUG")
-        print("="*60)
-        
         # Create task object
         task = Task(**validated_data)
-        
-        print(f"1. Task object created (NOT saved yet):")
-        print(f"   task.service_type: '{task.service_type}'")
-        print(f"   task.location_address: '{task.location_address}'")
-        print(f"   id(task): {id(task)}")
-        
-        # Save and see what happens
-        print(f"\n2. Calling task.save()...")
         task.save()
-        
-        print(f"\n3. After task.save():")
-        print(f"   task.service_type: '{task.service_type}'")
-        print(f"   task.location_address: '{task.location_address}'")
-        
-        # Check database directly
-        from django.db import connection
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT service_type, location_address FROM webapp_task WHERE task_id = %s", 
-                [task.task_id]
-            )
-            row = cursor.fetchone()
-            print(f"\n4. Direct database query:")
-            print(f"   service_type in DB: '{row[0]}'")
-            print(f"   location_address in DB: '{row[1]}'")
-        
-        # If different, FORCE UPDATE
-        if task.service_type != validated_data.get('service_type'):
-            print(f"\n5. WARNING: service_type changed! Forcing update...")
-            Task.objects.filter(pk=task.pk).update(
-                service_type=validated_data.get('service_type'),
-                location_address=validated_data.get('location_address')
-            )
-            task.refresh_from_db()
-            print(f"   After force update:")
-            print(f"   task.service_type: '{task.service_type}'")
-        
         return task
 
     def get_is_taken(self, obj):
@@ -573,12 +582,7 @@ class EmployerProfileSerializer(serializers.ModelSerializer):
 from rest_framework import serializers
 from .models import Employer, EmployerProfile
 
-class EmployerProfileSerializer(serializers.ModelSerializer):
-    """Serializer for reading employer profile details"""
-    class Meta:
-        model = EmployerProfile
-        fields = '__all__'
-        read_only_fields = ['employer', 'created_at', 'updated_at']
+# Removed duplicate EmployerProfileSerializer
 class EmployerProfileCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating employer profile"""
     id_number = serializers.CharField(
@@ -946,28 +950,7 @@ class EmployerRegisterSerializer(serializers.Serializer):
 
    
 # In your serializers.py
-class TaskCreateSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Task
-        fields = [
-            'employer', 'title', 'description', 'category', 
-            'budget', 'deadline', 'required_skills', 'is_urgent'
-        ]
-        read_only_fields = ['employer']  
-
-class TaskSerializer(serializers.ModelSerializer):
-    employer_name = serializers.CharField(source='employer.company_name', read_only=True)
-    employer_id = serializers.IntegerField(source='employer.employer_id', read_only=True)
-    
-    class Meta:
-        model = Task
-        fields = [
-            'task_id', 'employer', 'employer_id', 'employer_name', 'title', 'description', 
-            'category', 'budget', 'deadline', 'required_skills', 
-            'is_urgent', 'status', 'is_approved', 'is_active',
-            'assigned_user', 'created_at'
-        ]
-        read_only_fields = ['task_id', 'status', 'is_approved', 'is_active', 'assigned_user', 'created_at']       
+# Removed duplicate TaskCreateSerializer and TaskSerializer       
 
    
 

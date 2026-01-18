@@ -1274,8 +1274,8 @@ Future<Map<String, dynamic>> createTask({
   required String title,
   required String description,
   required String category,
-  required String serviceType, // 'remote' or 'on_site'
-  required String paymentType, // 'fixed' or 'hourly'
+  required String serviceType,
+  required String paymentType,
   double? budget,
   DateTime? deadline,
   String? skills,
@@ -1286,8 +1286,7 @@ Future<Map<String, dynamic>> createTask({
 }) async {
   try {
     final String? token = await _getUserToken();
-    
-    // Build the request body - handle nulls properly
+
     final Map<String, dynamic> requestBody = {
       'title': title,
       'description': description,
@@ -1295,123 +1294,44 @@ Future<Map<String, dynamic>> createTask({
       'service_type': serviceType,
       'payment_type': paymentType,
       'budget': budget,
-      'deadline': deadline?.toIso8601String().split('T')[0],
-      'required_skills': skills ?? '',  // Empty string instead of null
+      'deadline': deadline?.toIso8601String(),
+      'required_skills': skills ?? '',
       'is_urgent': isUrgent,
-      'location_address': locationAddress ?? '',  // Empty string instead of null
+      'location_address': locationAddress ?? '',
       'latitude': latitude,
       'longitude': longitude,
     };
-    
-    // Remove null values (except those we want as null)
-    requestBody.removeWhere((key, value) => value == null && 
-        !['latitude', 'longitude'].contains(key));
-    
-    print('=== FLUTTER: SENDING TO DJANGO ===');
-    print('Full request body:');
-    for (var entry in requestBody.entries) {
-      print('  ${entry.key}: ${entry.value}');
-    }
-    
+
+    // Remove nulls except coords
+    requestBody.removeWhere(
+      (key, value) => value == null && !['latitude', 'longitude'].contains(key),
+    );
+
     final response = await http.post(
       Uri.parse(createTaskUrl),
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
+        if (token != null) 'Authorization': 'Bearer $token',
       },
       body: json.encode(requestBody),
     );
 
-    print('Response status: ${response.statusCode}');
-    print('Response body: ${response.body}');
-    
     if (response.statusCode == 201) {
-      return {
-        'success': true,
-        'message': 'Task created successfully!',
-        'data': json.decode(response.body),
-      };
-    } else {
-      final errorData = json.decode(response.body);
-      return {
-        'success': false,
-        'error': errorData['message'] ?? 'Failed to create task.',
-      };
-    }
-  } catch (e) {
-    print('Create task network error: $e');
-    return {'success': false, 'error': 'Network error: $e'};
-  }
-}
-// Inside api_service.dart
- Future<Map<String, dynamic>> fetchEmployerTasks(BuildContext context) async {
-  try {
-    // Note: I am assuming _getUserToken is a static method or logic within this class
-    final String? token = await _getUserToken(); 
-    
-    final response = await http.get(
-      Uri.parse(employerTasksUrl),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
-
-    if (response.statusCode == 200) {
       final data = json.decode(response.body);
-      
-      // Ensure fetchTasks is also called statically if defined as such
-      final List<Map<String, dynamic>> mappedTasks = await ApiService.fetchTasks(response, context: context);
-
       return {
         'success': true,
-        'tasks': mappedTasks,
-        'count': data['count'] ?? 0,
-        'employer': data['employer'] ?? {},
-      };
-    } else {
-      return {'success': false, 'error': 'Server returned ${response.statusCode}'};
-    }
-  } catch (e) {
-    return {'success': false, 'error': 'Connection error: $e'};
-  }
-}
-Future<Map<String, dynamic>> deleteTask(int taskId) async {
-  try {
-    // 1. Get the token (Make sure this helper exists in your ApiService)
-    final token = await _getUserToken(); 
-    
-    // 2. Fix the syntax error: remove "url =" and use the correct URI
-    final response = await http.delete(
-      Uri.parse('$baseUrl/tasks/$taskId/'), // Ensure trailing slash for Django
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-    );
-
-    // 3. Handle success
-    if (response.statusCode == 200 || response.statusCode == 204) {
-      return {
-        'success': true,
-        'message': 'Task deleted successfully',
-      };
-    } else {
-      // 4. Handle errors from the server
-      Map<String, dynamic> responseBody = {};
-      try {
-        if (response.body.isNotEmpty) {
-          responseBody = json.decode(response.body);
-        }
-      } catch (_) {
-        // Fallback if body isn't valid JSON
-      }
-
-      return {
-        'success': false,
-        'message': responseBody['error'] ?? responseBody['message'] ?? 'Failed to delete task',
+        'message': data['message'] ?? 'Task created successfully!',
+        'data': data,
       };
     }
+
+    final error = response.body.isNotEmpty ? json.decode(response.body) : {};
+    return {
+      'success': false,
+      'message': error['message'] ?? 'Failed to create task',
+      'details': error,
+    };
+
   } catch (e) {
     return {
       'success': false,
@@ -1419,6 +1339,81 @@ Future<Map<String, dynamic>> deleteTask(int taskId) async {
     };
   }
 }
+Future<Map<String, dynamic>> fetchEmployerTasks() async {
+  try {
+    final String? token = await _getUserToken();
+
+    final response = await http.get(
+      Uri.parse(employerTasksUrl),
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      return {
+        'success': true,
+        'tasks': data['tasks'] ?? data,
+      };
+    }
+
+    return {
+      'success': false,
+      'error': 'Server returned ${response.statusCode}',
+    };
+
+  } catch (e) {
+    return {
+      'success': false,
+      'error': 'Connection error: $e',
+    };
+  }
+}
+Future<Map<String, dynamic>> deleteTask(int taskId) async {
+  try {
+    final String? token = await _getUserToken();
+
+    final response = await http.delete(
+      Uri.parse("$baseUrl/tasks/$taskId/"),
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
+    );
+
+    // 204 = No Content (Django default)
+    if (response.statusCode == 200 || response.statusCode == 204) {
+      return {
+        'success': true,
+        'message': 'Task deleted successfully',
+      };
+    }
+
+    // Error response with body
+    Map<String, dynamic> errorData = {};
+    if (response.body.isNotEmpty) {
+      try {
+        errorData = json.decode(response.body);
+      } catch (_) {}
+    }
+
+    return {
+      'success': false,
+      'message': errorData['message'] ??
+          errorData['error'] ??
+          'Failed to delete task',
+    };
+
+  } catch (e) {
+    return {
+      'success': false,
+      'message': 'Network error: $e',
+    };
+  }
+}
+
 // Helper method to get auth headers
 Future<Map<String, String>> getAuthHeaders(BuildContext context) async {
   // Implement based on your authentication system
@@ -1726,10 +1721,27 @@ Future<Map<String, dynamic>> acceptProposal(String proposalId) async {
     );
 
     print('📡 Accept proposal response: ${response.statusCode}');
+    print('📡 Response body: ${response.body}');
     
     if (response.statusCode == 200) {
       final result = json.decode(response.body);
       print('✅ Proposal accepted successfully: $result');
+      
+      // IMPORTANT: Check if we need to redirect to payment
+      if (result['success'] == true && result['checkout_url'] != null) {
+        // NEW: This means payment is required before work starts
+        print('🔄 Redirecting to payment: ${result['checkout_url']}');
+        return {
+          'success': true,
+          'requires_payment': true,  // NEW FLAG
+          'checkout_url': result['checkout_url'],
+          'order_id': result['order_id'],
+          'payment_reference': result['payment_reference'],
+          'message': result['message'] ?? 'Please complete payment',
+          'data': result,
+        };
+      }
+      
       return result;
     } else if (response.statusCode == 401) {
       print('🔐 Unauthorized - token might be invalid');
@@ -1753,7 +1765,6 @@ Future<Map<String, dynamic>> acceptProposal(String proposalId) async {
     };
   }
 }
-
 
 Future<Map<String, dynamic>> rejectProposal(String proposalId) async {
   try {
