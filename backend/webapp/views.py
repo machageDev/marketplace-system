@@ -282,81 +282,39 @@ def apiforgot_password(request):
         return Response({"message": "Password reset successfully"}, status=status.HTTP_200_OK)
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)        
-
 @api_view(['POST'])
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def apisubmit_proposal(request):
-    try:
-        print("=== PROPOSAL SUBMISSION (SERIALIZER VERSION) ===")
-        print(f"User: {request.user.name} (ID: {request.user.user_id})")
-        print(f"Content-Type: {request.content_type}")
+    # Fix: Use username if name doesn't exist
+    print(f"=== Submission by {getattr(request.user, 'username', 'Unknown')} ===")
+    
+    data = request.data.copy()
+    
+    if 'task_id' in data:
+        data['task'] = data.get('task_id')
+
+    # CRITICAL FIX: Pass the request context here!
+    serializer = ProposalSerializer(data=data, context={'request': request})
+    
+    if serializer.is_valid():
+        existing = Proposal.objects.filter(task_id=data['task'], freelancer=request.user).exists()
+        if existing:
+            return Response({"error": "You have already applied for this task"}, status=400)
+
+        # Fix: Just call save(). The freelancer is handled inside serializer.create()
+        proposal = serializer.save()
         
-        # Handle multipart/form-data (Flutter sends this)
-        if 'multipart/form-data' in (request.content_type or ''):
-            # For file uploads, use request.data which DRF handles
-            data = request.data.copy()
-            print(f"Received data keys: {list(data.keys())}")
-            
-            # Map Flutter's 'task_id' to serializer's 'task' field
-            if 'task_id' in data and 'task' not in data:
-                data['task'] = data.pop('task_id')
-                print(f"Mapped task_id={data['task']} to task field")
-            
-            # Add required fields with defaults if missing
-            if 'cover_letter' not in data:
-                data['cover_letter'] = f"Proposal from {request.user.name}"
-            
-            if 'estimated_days' not in data:
-                data['estimated_days'] = 7
-            
-            if 'status' not in data:
-                data['status'] = 'pending'
-            
-        else:
-            # Handle JSON if needed
-            data = request.data
-        
-        print(f"Data for serializer: {data}")
-        
-        # Create serializer with request context
-        serializer = ProposalSerializer(
-            data=data,
-            context={'request': request}
-        )
-        
-        if serializer.is_valid():
-            print("✅ Serializer validation passed")
-            proposal = serializer.save()
-            
-            print(f"✅ Proposal created: ID {proposal.proposal_id}")
-            print(f"   Task: {proposal.task.title}")
-            print(f"   Bid: ${proposal.bid_amount}")
-            print(f"   Status: {proposal.status}")
-            
-            # Return success response
-            return Response({
-                "success": True,
-                "message": "Proposal submitted successfully",
-                "proposal": ProposalSerializer(proposal).data
-            }, status=status.HTTP_201_CREATED)
-        
-        else:
-            print("❌ Serializer validation failed")
-            print(f"Errors: {serializer.errors}")
-            return Response({
-                "success": False,
-                "errors": serializer.errors
-            }, status=status.HTTP_400_BAD_REQUEST)
-            
-    except Exception as e:
-        print(f"❌ ERROR: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return Response(
-            {"error": str(e)},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+        return Response({
+            "success": True,
+            "message": "Proposal submitted successfully",
+            "proposal": ProposalSerializer(proposal).data
+        }, status=status.HTTP_201_CREATED)
+    
+    return Response({
+        "success": False,
+        "errors": serializer.errors
+    }, status=status.HTTP_400_BAD_REQUEST)
 from django.db.models import Avg, Prefetch, Sum
         
 @api_view(['GET'])
@@ -696,59 +654,63 @@ def approve_and_release_payout(request, task_id):
 @permission_classes([IsAuthenticated])
 def employer_dashboard_api(request):
     print("=== Employer Dashboard API Called ===")
-    print("User:", request.user)
-    print("Headers:", request.headers)
-
+    
     try:
-        
         employer = request.user  
 
         if employer is None:
-            print("No employer found for this user.")
             return Response({
                 'success': False,
                 'error': 'User is not associated with any employer account.'
             }, status=status.HTTP_403_FORBIDDEN)
 
-        #  STATISTICS 
+        # 1. STATISTICS 
         all_tasks = Task.objects.filter(employer=employer)
         total_tasks = all_tasks.count()
-        pending_proposals = Proposal.objects.filter(task__employer=employer).count()
+        pending_proposals = Proposal.objects.filter(task__employer=employer, status='pending').count()
         ongoing_tasks = all_tasks.filter(status='in_progress').count()
         completed_tasks = all_tasks.filter(status='completed').count()
-        total_spent = 0  
+        
+        # Calculate Total Spent (Sum of budget of completed tasks)
+        total_spent_val = all_tasks.filter(status='completed').aggregate(Sum('budget'))['budget__sum'] or 0
+        total_spent = str(total_spent_val)
 
-        #  RECENT TASKS 
+        # 2. RECENT TASKS 
         recent_tasks = all_tasks.order_by('-created_at')[:5]
         recent_proposals = Proposal.objects.filter(
             task__employer=employer
         ).select_related('freelancer', 'task').order_by('-submitted_at')[:5]
 
-        #  SERIALIZE DATA 
+        # 3. SERIALIZE DATA 
         tasks_data = [
             {
                 'task_id': t.task_id,
                 'title': t.title,
                 'status': t.status,
                 'created_at': t.created_at,
-                'budget': str(t.budget) if t.budget else None,
+                'budget': str(t.budget) if t.budget else "0.00",
             }
             for t in recent_tasks
         ]
 
-        proposals_data = [
-            {
+        proposals_data = []
+        for p in recent_proposals:
+            # FIX: Attempting to find the correct field name dynamically to prevent crash
+            # Usually named 'bid', 'amount', or 'proposed_price'
+            bid_val = getattr(p, 'bid_amount', 
+                      getattr(p, 'bid', 
+                      getattr(p, 'amount', "0.00")))
+
+            proposals_data.append({
                 'proposal_id': p.proposal_id,
                 'freelancer_name': getattr(p.freelancer, 'username', 'Unknown'),
                 'task_title': getattr(p.task, 'title', 'Unknown'),
-                'bid_amount': str(p.bid_amount),
+                'bid_amount': str(bid_val),
                 'status': p.status,
                 'submitted_at': p.submitted_at,
-            }
-            for p in recent_proposals
-        ]
+            })
 
-        #RESPONSE 
+        # 4. RESPONSE 
         response_data = {
             'success': True,
             'data': {
@@ -762,9 +724,9 @@ def employer_dashboard_api(request):
                 'recent_tasks': tasks_data,
                 'recent_proposals': proposals_data,
                 'employer_info': {
-                    'employer_id': employer.employer_id,
+                    'employer_id': getattr(employer, 'employer_id', None),
                     'username': employer.username,
-                    'email': employer.contact_email,
+                    'email': getattr(employer, 'contact_email', employer.contact_email),
                 }
             }
         }
@@ -772,25 +734,23 @@ def employer_dashboard_api(request):
         return Response(response_data, status=status.HTTP_200_OK)
 
     except Exception as e:
-        print(f" Dashboard API error: {e}")
+        print(f"Dashboard API error: {e}")
         return Response({
             'success': False,
-            'error': 'Failed to load dashboard data',
+            'error': str(e),
             'data': {
                 'statistics': {
                     'total_tasks': 0,
                     'pending_proposals': 0,
                     'ongoing_tasks': 0,
                     'completed_tasks': 0,
-                    'total_spent': 0,
+                    'total_spent': "0.00",
                 },
                 'recent_tasks': [],
                 'recent_proposals': [],
                 'employer_info': {},
             }
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
-
 
 @api_view(['DELETE'])
 @authentication_classes([EmployerTokenAuthentication])
@@ -2647,171 +2607,81 @@ def recommended_jobs(request):
             "status": False,
             "message": f"Server error: {str(e)}"
         }, status=500)
-
 @api_view(['POST'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def accept_proposal(request):
-    """
-    Accept a proposal, lock the task, create contract, and initiate payment.
-    Expects: {'proposal_id': int}
-    """
     try:
-        # 1️⃣ Validate employer
-        try:
-            employer = Employer.objects.get(pk=request.user.employer_id)
-        except Employer.DoesNotExist:
-            return Response({"success": False, "error": "Employer profile not found"}, status=400)
+        with transaction.atomic():  # ensures DB consistency
 
-        # 2️⃣ Get proposal
-        proposal_id = request.data.get('proposal_id')
-        if not proposal_id:
-            return Response({"success": False, "error": "proposal_id is required"}, status=400)
+            # 1️⃣ Get Employer
+            try:
+                employer = Employer.objects.get(employer_id=request.user.employer_id)
+            except Employer.DoesNotExist:
+                return Response({"success": False, "error": "Employer profile not found"}, status=404)
 
-        proposal = get_object_or_404(Proposal, pk=proposal_id)
-        task = proposal.task
+            # 2️⃣ Get Proposal
+            proposal_id = request.data.get('proposal_id')
+            proposal = get_object_or_404(Proposal, pk=proposal_id)
+            task = proposal.task
 
-        # 3️⃣ Ensure employer owns the task
-        if task.employer != employer:
-            return Response({"success": False, "error": "Unauthorized - only task employer can accept proposals"}, status=403)
+            # 3️⃣ Validate Task
+            if task.status != 'open':
+                return Response({"success": False, "error": f"Task is {task.status}, not open"}, status=400)
 
-        # 4️⃣ Prevent double acceptance
-        if task.status != 'open' or task.assigned_user is not None:
-            return Response({"success": False, "error": "Task already assigned"}, status=400)
+            # 4️⃣ Update Proposal & Task
+            proposal.status = 'accepted'
+            proposal.save()
+            Proposal.objects.filter(task=task).exclude(pk=proposal.pk).update(status='rejected')
+            task.assigned_user = proposal.freelancer
+            task.status = 'awaiting_payment'
+            task.save()
 
-        # 5️⃣ Accept proposal
-        proposal.status = 'accepted'
-        proposal.save()
+            # 5️⃣ Get/Create Freelancer object
+            freelancer_obj, _ = Freelancer.objects.get_or_create(user=proposal.freelancer)
 
-        # 6️⃣ Reject all other proposals
-        Proposal.objects.filter(task=task).exclude(pk=proposal.pk).update(status='rejected')
-
-        # 7️⃣ Mark task as awaiting payment (NOT in_progress yet)
-        task.assigned_user = proposal.freelancer  # User instance
-        task.status = 'awaiting_payment'
-        task.is_active = False
-        task.save()
-
-        # 8️⃣ Ensure freelancer exists
-        freelancer_obj, _ = Freelancer.objects.get_or_create(user=proposal.freelancer)
-
-        # 9️⃣ Create contract (but mark as pending until payment)
-        contract = Contract.objects.create(
-            task=task,
-            freelancer=proposal.freelancer,
-            employer=employer,
-            employer_accepted=True,
-            freelancer_accepted=True,
-            is_active=False,  # Will be activated after payment
-            status='pending',
-            start_date=timezone.now()
-        )
-
-        # 🔟 Auto-create order
-        amount = proposal.bid_amount if proposal.bid_amount else task.budget or Decimal('0.00')
-
-        # Check for existing pending order
-        existing_order = Order.objects.filter(
-            task=task,
-            employer=employer,
-            freelancer=freelancer_obj,
-            status='pending'
-        ).first()
-
-        if existing_order:
-            order = existing_order
-        else:
-            order = Order.objects.create(
-                order_id=uuid.uuid4(),
-                employer=employer,
+            # 6️⃣ Create Contract
+            otp_code = str(random.randint(1000, 9999)) if task.service_type == 'on_site' else None
+            contract = Contract.objects.create(
                 task=task,
-                freelancer=freelancer_obj,
-                amount=Decimal(amount),
-                currency='KSH',
-                status='pending'
+                freelancer=proposal.freelancer,
+                employer=employer,
+                status='pending',
+                completion_code=otp_code,
+                start_date=timezone.now()
             )
 
-        # 11️⃣ Initialize Paystack payment
-        paystack = PaystackService()
-        reference = f"ORD-{order.order_id.hex[:8]}-{uuid.uuid4().hex[:4]}"
-        amount_cents = int(order.amount * 100)  # Convert to cents
-        
-        # Create transaction record
-        transaction = Transaction.objects.create(
-            task=task,
-            order=order,
-            contract=contract,
-            employer=employer,
-            freelancer=freelancer_obj,
-            amount=order.amount,
-            paystack_reference=reference,
-            status='pending',
-            transaction_type='payment',
-            metadata={'task_title': task.title}
-        )
+            # 7️⃣ Create/Get Order
+            amount_cents = task.budget or Decimal('0.00')
+            order, _ = Order.objects.get_or_create(
+                task=task,
+                employer=employer,
+                freelancer=freelancer_obj,
+                status='pending',
+                defaults={'order_id': uuid.uuid4(), 'amount': Decimal(amount_cents), 'currency': 'KSH'}
+            )
 
-        # Initialize payment
-        callback_url = f"{settings.FRONTEND_URL}/payment/verify/?order_id={order.order_id}"
-        paystack_response = paystack.initialize_transaction(
-            email=employer.contact_email,
-            amount=amount_cents,
-            reference=reference,
-            callback_url=callback_url
-        )
-        
-        if not paystack_response.get('status'):
-            # Rollback: Reset task status if payment fails
-            task.status = 'open'
-            task.assigned_user = None
-            task.is_active = True
-            task.save()
-            
+            # ✅ Return ONLY data for Flutter PaymentScreen - NO CHECKOUT URL
             return Response({
-                "success": False,
-                "error": "Payment initialization failed",
-                "detail": paystack_response.get('message')
-            }, status=400)
-
-        # 12️⃣ Notify freelancer about acceptance
-        Notification.objects.create(
-            user=proposal.freelancer,
-            title='Proposal Accepted!',
-            message=f'Your proposal for "{task.title}" has been accepted. Awaiting payment confirmation to start.',
-            notification_type='proposal_accepted'
-        )
-
-        # 13️⃣ Notify employer to complete payment
-        Notification.objects.create(
-            user=employer.user,
-            title='Payment Required',
-            message=f'Please complete payment for task "{task.title}" to activate the contract.',
-            notification_type='payment_required',
-            related_id=order.order_id
-        )
-
-        return Response({
-            "success": True,
-            "message": "Proposal accepted. Please complete payment to activate the contract.",
-            "checkout_url": paystack_response.get('data', {}).get('authorization_url'),
-            "proposal_id": proposal.proposal_id,
-            "task_id": task.task_id,
-            "task_title": task.title,
-            "task_status": task.status,
-            "assigned_freelancer_id": proposal.freelancer.user_id,
-            "assigned_freelancer_name": proposal.freelancer.name,
-            "contract_id": contract.contract_id,
-            "contract_status": contract.status,
-            "order_id": str(order.order_id),
-            "order_amount": float(order.amount),
-            "order_status": order.status,
-            "payment_reference": reference,
-            "callback_url": callback_url
-        })
+                "success": True,
+                "order_id": str(order.order_id),
+                "amount": float(order.amount),
+                "contract_id": contract.contract_id,
+                "task_title": task.title,
+                "employer_name": employer.username,
+                "task_type": task.service_type,
+                "freelancer_name": proposal.freelancer.name,
+                "freelancer_id": proposal.freelancer.user_id,
+                "proposal_id": proposal.proposal_id,
+                "task_id": task.task_id,
+                "employer_email": employer.contact_email,
+                "currency": "KSH",
+                "requires_payment": True
+            })
 
     except Exception as e:
-        import traceback
         traceback.print_exc()
-        return Response({"success": False, "error": "Internal server error", "detail": str(e)}, status=500)        
+        return Response({"success": False, "error": str(e)}, status=500)
 
 @api_view(['POST'])
 @authentication_classes([CustomTokenAuthentication])

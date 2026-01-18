@@ -193,7 +193,7 @@ class _ClientContractsScreenState extends State<ClientContractsScreen> {
           freelancerName: c['freelancer_name'] ?? "",
           serviceDescription: c['task_title'] ?? "",
           freelancerPhotoUrl: c['freelancer_photo'] ?? "",
-          currency: "KES", freelancerId: '', contractId: '', taskTitle: '', isValidOrderId: false,
+          currency: "KES", freelancerId: '', contractId: '', taskTitle: '', isValidOrderId: false, employerName: '', taskId: '',
         ),
       ),
     );

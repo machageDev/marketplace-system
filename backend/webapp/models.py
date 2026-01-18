@@ -551,10 +551,9 @@ class Proposal(models.Model):
     task = models.ForeignKey(Task, related_name="proposals", on_delete=models.CASCADE)
     freelancer = models.ForeignKey(User, related_name="proposals", on_delete=models.CASCADE)
     cover_letter_file = models.FileField(upload_to='cover_letters/', blank=True, null=True)
-    bid_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    cover_letter = models.TextField(blank=True, null=True)
     submitted_at = models.DateTimeField(default=timezone.now)
-    
-    
+    estimated_days = models.PositiveIntegerField(default=7)
     status = models.CharField(
         max_length=20, 
         choices=[
@@ -564,8 +563,6 @@ class Proposal(models.Model):
         ], 
         default='pending'
     )
-    estimated_days = models.PositiveIntegerField(default=7)  
-    cover_letter = models.TextField(blank=True, null=True)  
 
     def __str__(self):
         return f"{self.freelancer.name} -> {self.task.title}"
@@ -583,12 +580,16 @@ class Contract(models.Model):
 
     is_active = models.BooleanField(default=False)
     
-    # ADD THESE FIELDS
+    # ADDED FOR VERIFICATION LOGIC
     is_completed = models.BooleanField(default=False)
     is_paid = models.BooleanField(default=False)
     completed_date = models.DateTimeField(null=True, blank=True)
     payment_date = models.DateTimeField(null=True, blank=True)
     
+    # --- NEW FIELD FOR ON-SITE OTP ---
+    completion_code = models.CharField(max_length=10, null=True, blank=True)
+    # ---------------------------------
+
     # Status choices
     STATUS_CHOICES = [
         ('pending', 'Pending'),
@@ -640,6 +641,17 @@ class Contract(models.Model):
         self.is_paid = True
         self.payment_date = timezone.now()
         self.save()
+
+    # --- NEW METHOD TO VERIFY OTP ---
+    def verify_completion(self, provided_code):
+        """
+        Verify the OTP for On-Site tasks.
+        If code matches, mark as completed.
+        """
+        if self.completion_code and str(provided_code) == str(self.completion_code):
+            self.mark_as_completed()
+            return True
+        return False
 
 class Transaction(models.Model):
     TRANSACTION_TYPES = [

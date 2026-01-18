@@ -7,7 +7,7 @@ class TaskDetailScreen extends StatefulWidget {
   final int taskId;
   final Map<String, dynamic> task;
   final Map<String, dynamic> employer;
-  final bool isTaken; 
+  final bool isTaken;
   final bool isFromContract;
   final Map<String, dynamic>? assignedFreelancer;
 
@@ -36,8 +36,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     final employerId = widget.employer['id'];
     if (employerId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        Provider.of<ClientProfileProvider>(context, listen: false)
-            .fetchProfile();
+        Provider.of<ClientProfileProvider>(context, listen: false).fetchProfile();
       });
     }
   }
@@ -57,9 +56,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final serviceType = widget.task['service_type'] ?? 'remote';
+    final serviceType = widget.task['service_type']?.toString() ?? 'remote';
     final isOnSite = serviceType == 'on_site';
-    final locationAddress = widget.task['location_address'];
+    final locationAddress = widget.task['location_address']?.toString();
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F111A),
@@ -81,23 +80,16 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                // Main Task Card
                 _buildMainTaskCard(isOnSite, locationAddress),
                 const SizedBox(height: 16),
-
-                // Description Section
                 _buildDescriptionCard(),
                 const SizedBox(height: 16),
-
-                // Task Details Section
                 _buildTaskDetailsCard(),
                 const SizedBox(height: 16),
-
-                // Client Information
                 _buildClientSection(context, clientProvider),
-                
-                // Action Buttons
+                const SizedBox(height: 24),
                 _buildActionButtons(context),
+                const SizedBox(height: 40),
               ],
             ),
           );
@@ -110,21 +102,17 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     return Card(
       elevation: 2,
       color: const Color(0xFF1E1E2C),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Service Type Badge (NEW)
+            // Service Type Badge
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: isOnSite 
-                    ? Colors.orange.withOpacity(0.1) 
-                    : Colors.blue.withOpacity(0.1),
+                color: isOnSite ? Colors.orange.withOpacity(0.1) : Colors.blue.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(5),
               ),
               child: Row(
@@ -148,13 +136,14 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            
-            // Title and Status
+
+            // Title and Status - FIXED OVERFLOW
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
                   child: Text(
-                    widget.task['title'] ?? 'Untitled Task',
+                    widget.task['title']?.toString() ?? 'Untitled Task',
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
@@ -162,24 +151,19 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                     ),
                   ),
                 ),
+                const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: widget.isTaken 
-                      ? Colors.red.withOpacity(0.2)
-                      : Colors.green.withOpacity(0.2),
+                    color: widget.isTaken ? Colors.red.withOpacity(0.2) : Colors.green.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(4),
-                    border: Border.all(
-                      color: widget.isTaken ? Colors.red : Colors.green,
-                    ),
+                    border: Border.all(color: widget.isTaken ? Colors.red : Colors.green),
                   ),
                   child: Text(
                     widget.isTaken ? 'Taken' : 'Available',
                     style: TextStyle(
                       fontSize: 12,
-                      color: widget.isTaken 
-                        ? Colors.red[300]
-                        : Colors.green[300],
+                      color: widget.isTaken ? Colors.red[300] : Colors.green[300],
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -188,7 +172,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
             ),
             const SizedBox(height: 8),
 
-            // Show address only if it's on-site (NEW)
             if (isOnSite && locationAddress != null && locationAddress.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
@@ -199,29 +182,22 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                     Expanded(
                       child: Text(
                         "Location: $locationAddress",
-                        style: TextStyle(
-                          color: Colors.grey[300],
-                          fontSize: 13,
-                        ),
+                        style: TextStyle(color: Colors.grey[300], fontSize: 13),
                       ),
                     ),
                   ],
                 ),
               ),
 
-            // Description preview
             Text(
-              widget.task['description'] ?? 'No description provided',
+              widget.task['description']?.toString() ?? 'No description provided',
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: Colors.grey[400],
-                fontSize: 14,
-              ),
+              style: TextStyle(color: Colors.grey[400], fontSize: 14),
             ),
             const SizedBox(height: 12),
 
-            // Budget and Deadline
+            // Budget and Deadline - FIXED OVERFLOW & KSH
             if (widget.task['budget'] != null || widget.task['deadline'] != null)
               Container(
                 padding: const EdgeInsets.all(12),
@@ -229,30 +205,34 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                   color: const Color(0xFF0F111A).withOpacity(0.5),
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: Row(
+                child: Wrap( // Changed Row to Wrap to handle small screens
+                  spacing: 16,
+                  runSpacing: 8,
                   children: [
-                    if (widget.task['budget'] != null) ...[
-                      Icon(Icons.attach_money, size: 16, color: Colors.green[400]),
-                      const SizedBox(width: 4),
-                      Text(
-                        '\$${widget.task['budget']}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                        ),
+                    if (widget.task['budget'] != null)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.account_balance_wallet, size: 16, color: Colors.green[400]),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Ksh ${widget.task['budget'].toString()}',
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 16),
-                    ],
-                    if (widget.task['deadline'] != null) ...[
-                      Icon(Icons.calendar_today, size: 16, color: Colors.orange[400]),
-                      const SizedBox(width: 4),
-                      Text(
-                        widget.task['deadline'],
-                        style: TextStyle(
-                          color: Colors.grey[300],
-                        ),
+                    if (widget.task['deadline'] != null)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.calendar_today, size: 16, color: Colors.orange[400]),
+                          const SizedBox(width: 4),
+                          Text(
+                            widget.task['deadline'].toString(),
+                            style: TextStyle(color: Colors.grey[300]),
+                          ),
+                        ],
                       ),
-                    ],
                   ],
                 ),
               ),
@@ -266,9 +246,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     return Card(
       elevation: 2,
       color: const Color(0xFF1E1E2C),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -276,20 +254,12 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           children: [
             const Text(
               'Description',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
             ),
             const SizedBox(height: 8),
             Text(
-              widget.task['description'] ?? 'No description provided',
-              style: TextStyle(
-                fontSize: 14,
-                height: 1.5,
-                color: Colors.grey[300],
-              ),
+              widget.task['description']?.toString() ?? 'No description provided',
+              style: TextStyle(fontSize: 14, height: 1.5, color: Colors.grey[300]),
             ),
           ],
         ),
@@ -298,17 +268,13 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   }
 
   Widget _buildTaskDetailsCard() {
-    final serviceType = widget.task['service_type'] ?? 'remote';
-    final isOnSite = serviceType == 'on_site';
-    final locationAddress = widget.task['location_address'];
-    final paymentType = widget.task['payment_type'];
+    final serviceType = widget.task['service_type']?.toString();
+    final paymentType = widget.task['payment_type']?.toString();
 
     return Card(
       elevation: 2,
       color: const Color(0xFF1E1E2C),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -316,29 +282,14 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           children: [
             const Text(
               'Task Details',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
             ),
             const SizedBox(height: 12),
-            Column(
-              children: [
-                if (widget.task['category'] != null)
-                  _buildDetailItem('Category', widget.task['category']),
-                if (widget.task['skills'] != null || widget.task['required_skills'] != null)
-                  _buildDetailItem('Required Skills', widget.task['skills'] ?? widget.task['required_skills'] ?? 'Not specified'),
-                if (serviceType != null)
-                  _buildDetailItem('Service Type', isOnSite ? 'On-Site (Physical)' : 'Remote (Digital)'),
-                if (paymentType != null)
-                  _buildDetailItem('Payment Type', paymentType == 'fixed' ? 'Fixed Price' : 'Hourly Rate'),
-                if (widget.task['created_at'] != null)
-                  _buildDetailItem('Posted On', widget.task['created_at']),
-                if (isOnSite && locationAddress != null && locationAddress.isNotEmpty)
-                  _buildDetailItem('Location', locationAddress),
-              ],
-            ),
+            _buildDetailItem('Category', widget.task['category']?.toString() ?? 'N/A'),
+            _buildDetailItem('Skills', widget.task['skills']?.toString() ?? widget.task['required_skills']?.toString() ?? 'Not specified'),
+            _buildDetailItem('Service', serviceType == 'on_site' ? 'On-Site' : 'Remote'),
+            _buildDetailItem('Payment', paymentType == 'fixed' ? 'Fixed Price' : 'Hourly'),
+            _buildDetailItem('Posted', widget.task['created_at']?.toString() ?? 'Recently'),
           ],
         ),
       ),
@@ -352,21 +303,16 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 120,
+            width: 100,
             child: Text(
               '$label:',
-              style: TextStyle(
-                fontWeight: FontWeight.w500,
-                color: Colors.grey[400],
-              ),
+              style: TextStyle(fontWeight: FontWeight.w500, color: Colors.grey[400]),
             ),
           ),
-          Expanded(
+          Expanded( // FIXED OVERFLOW
             child: Text(
               value,
-              style: const TextStyle(
-                color: Colors.white,
-              ),
+              style: const TextStyle(color: Colors.white),
             ),
           ),
         ],
@@ -376,13 +322,10 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
   Widget _buildClientSection(BuildContext context, ClientProfileProvider clientProvider) {
     final profileData = clientProvider.profile ?? widget.employer;
-    
     return Card(
       elevation: 2,
       color: const Color(0xFF1E1E2C),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -390,22 +333,14 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           children: [
             const Text(
               'Client Information',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
             ),
             const SizedBox(height: 12),
-            
             if (clientProvider.isLoading)
-              const Center(child: CircularProgressIndicator(color: Colors.orange)),
-            
-            if (clientProvider.errorMessage != null)
-              Text('Error loading client profile', 
-                   style: TextStyle(color: Colors.red[300])),
-
-            if (!clientProvider.isLoading)
+              const Center(child: CircularProgressIndicator(color: Colors.orange))
+            else if (clientProvider.errorMessage != null)
+              Text('Error loading profile', style: TextStyle(color: Colors.red[300]))
+            else
               _buildClientProfile(profileData),
           ],
         ),
@@ -414,12 +349,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   }
 
   Widget _buildClientProfile(Map<String, dynamic> profile) {
-    final companyName = profile['company_name'];
-    final username = profile['username'];
-    final email = profile['email'] ?? profile['contact_email'];
-    final phone = profile['phone'];
-    
-    String displayName = companyName ?? username ?? 'Client';
+    final displayName = profile['company_name']?.toString() ?? profile['username']?.toString() ?? 'Client';
+    final email = (profile['email'] ?? profile['contact_email'])?.toString();
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -429,100 +360,30 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       ),
       child: Column(
         children: [
-          // Client header
           Row(
             children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.person,
-                  color: Colors.orange,
-                  size: 20,
-                ),
+              CircleAvatar(
+                backgroundColor: Colors.orange.withOpacity(0.2),
+                radius: 20,
+                child: const Icon(Icons.person, color: Colors.orange, size: 20),
               ),
               const SizedBox(width: 12),
-              Expanded(
+              Expanded( // FIXED OVERFLOW
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Posted by:',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[400],
-                      ),
-                    ),
+                    Text('Posted by:', style: TextStyle(fontSize: 11, color: Colors.grey[400])),
                     Text(
                       displayName,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                        color: Colors.white,
-                      ),
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    if (email != null) ...[
-                      const SizedBox(height: 2),
-                      Row(
-                        children: [
-                          Icon(Icons.email, size: 12, color: Colors.grey[400]),
-                          const SizedBox(width: 4),
-                          Text(
-                            email,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey[400],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                    if (email != null)
+                      Text(email, style: TextStyle(fontSize: 11, color: Colors.grey[400]), overflow: TextOverflow.ellipsis),
                   ],
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 8),
-
-          // Additional client info
-          if (phone != null)
-            _buildClientDetailRow('Phone', phone),
-          if (profile['bio'] != null)
-            _buildClientDetailRow('Bio', profile['bio']!),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildClientDetailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 60,
-            child: Text(
-              '$label:',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[400],
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[300],
-              ),
-            ),
           ),
         ],
       ),
@@ -532,7 +393,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   Widget _buildActionButtons(BuildContext context) {
     return Column(
       children: [
-        // Warning message for taken tasks
         if (widget.isTaken) ...[
           Container(
             padding: const EdgeInsets.all(12),
@@ -545,70 +405,41 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               children: [
                 Icon(Icons.info_outline, color: Colors.red[300], size: 16),
                 const SizedBox(width: 8),
-                Expanded(
+                const Expanded(
                   child: Text(
                     'This task has been assigned to another freelancer.',
-                    style: TextStyle(
-                      color: Colors.red[200],
-                      fontSize: 12,
-                    ),
+                    style: TextStyle(color: Colors.red, fontSize: 12),
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
         ],
-        
-        // Main Apply Button
         SizedBox(
           width: double.infinity,
+          height: 48,
           child: ElevatedButton(
-            onPressed: widget.isTaken 
-              ? null // Disable button if task is taken
-              : _navigateToProposalScreen, // Enable if open
+            onPressed: widget.isTaken ? null : _navigateToProposalScreen,
             style: ElevatedButton.styleFrom(
-              backgroundColor: widget.isTaken 
-                ? Colors.grey[700] // Grey when disabled
-                : Colors.orange, // Orange when enabled
+              backgroundColor: widget.isTaken ? Colors.grey[800] : Colors.orange,
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(6),
-              ),
-              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
-            child: Text(
-              widget.isTaken 
-                ? 'Task Taken' // Show when taken
-                : 'Apply for Task', // Show when open
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+            child: Text(widget.isTaken ? 'Task Taken' : 'Apply for Task'),
           ),
         ),
-        
-        const SizedBox(height: 8),
-        
-        // Back Button
+        const SizedBox(height: 12),
         SizedBox(
           width: double.infinity,
+          height: 48,
           child: OutlinedButton(
             onPressed: () => Navigator.pop(context),
             style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(6),
-              ),
-              side: BorderSide(color: Colors.grey[600]!),
+              side: BorderSide(color: Colors.grey[700]!),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
-            child: Text(
-              'Back to Tasks',
-              style: TextStyle(
-                color: Colors.grey[300],
-              ),
-            ),
+            child: const Text('Back to Tasks', style: TextStyle(color: Colors.white)),
           ),
         ),
       ],

@@ -33,7 +33,7 @@ class PaymentScreen extends StatefulWidget {
     this.authToken = '',
     required this.contractId,
     required this.taskTitle,
-    required this.isValidOrderId,
+    required this.isValidOrderId, required String employerName, required String taskId,
   }) {
     // Runtime validation
     if (orderId.isEmpty) {

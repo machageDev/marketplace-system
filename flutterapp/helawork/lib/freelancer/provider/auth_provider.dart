@@ -12,11 +12,14 @@ class AuthProvider with ChangeNotifier {
   bool _isLoggedIn = false;
   Map<String, dynamic>? _userData;
   String? _token;
+  String? _userId; // Add this private variable
 
+  // Getters
   bool get isLoading => _isLoading;
   bool get isLoggedIn => _isLoggedIn;
   Map<String, dynamic>? get userData => _userData;
   String? get token => _token;
+  String? get userId => _userId; // ADD THIS GETTER - you were missing this!
 
   Future<Map<String, dynamic>> login(
     BuildContext context,
@@ -33,19 +36,21 @@ class AuthProvider with ChangeNotifier {
         _isLoggedIn = true;
         _userData = response["data"];
         _token = response["data"]["token"];
-
-      
-        await _secureStorage.write(key: "auth_token", value: _token);
-        await _secureStorage.write(
-          key: "user_id", 
-          value: _userData?['id']?.toString() ?? _userData?['user_id']?.toString()
-        );
-
+        
+        // Set the userId from response
+        _userId = _userData?['id']?.toString() ?? _userData?['user_id']?.toString();
+        
         // Debug print to verify
         debugPrint('Saved token: $_token');
-        debugPrint('Saved user ID: ${_userData?['id'] ?? _userData?['user_id']}');
+        debugPrint('Saved user ID: $_userId');
 
-        
+        // Store in secure storage
+        await _secureStorage.write(key: "auth_token", value: _token);
+        if (_userId != null) {
+          await _secureStorage.write(key: "user_id", value: _userId!);
+        }
+
+        // Update dashboard if needed
         if (context.mounted) {
           final dashboardProvider =
               Provider.of<DashboardProvider>(context, listen: false);
@@ -59,8 +64,9 @@ class AuthProvider with ChangeNotifier {
         _isLoggedIn = false;
         _userData = null;
         _token = null;
+        _userId = null;
         await _secureStorage.delete(key: "auth_token");
-        await _secureStorage.delete(key: "user_id"); 
+        await _secureStorage.delete(key: "user_id");
       }
 
       return response;
@@ -69,6 +75,7 @@ class AuthProvider with ChangeNotifier {
       _isLoggedIn = false;
       _userData = null;
       _token = null;
+      _userId = null;
       await _secureStorage.delete(key: "auth_token");
       await _secureStorage.delete(key: "user_id");
       return {"success": false, "message": "Something went wrong"};
@@ -110,13 +117,13 @@ class AuthProvider with ChangeNotifier {
     _isLoggedIn = false;
     _userData = null;
     _token = null;
+    _userId = null;
     
     await _secureStorage.delete(key: "auth_token");
     await _secureStorage.delete(key: "user_id");
     notifyListeners();
   }
 
-  
   Future<void> checkLoginStatus() async {
     final token = await _secureStorage.read(key: "auth_token");
     final userId = await _secureStorage.read(key: "user_id");
@@ -124,12 +131,24 @@ class AuthProvider with ChangeNotifier {
     if (token != null && userId != null) {
       _isLoggedIn = true;
       _token = token;
-      
+      _userId = userId; // Set the userId when checking login status
     } else {
       _isLoggedIn = false;
       _token = null;
       _userData = null;
+      _userId = null;
     }
     notifyListeners();
+  }
+
+  // Helper method to get userId as integer
+  int? get userIdAsInt {
+    if (_userId == null) return null;
+    return int.tryParse(_userId!);
+  }
+
+  // Helper method with fallback
+  int getUserIdOrZero() {
+    return userIdAsInt ?? 0;
   }
 }

@@ -27,70 +27,52 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // Login method - UPDATED TO SAVE EMAIL
+  // ✅ FULLY CORRECTED LOGIN METHOD
   Future<bool> apilogin(String username, String password) async {
     _isLoading = true;
     _errorMessage = '';
     notifyListeners();
 
     try {
+      // 1. Call the API
       final response = await apiService.apilogin(username, password);
 
       if (response['success'] == true) {
-        // ✅ Get the token and user data
-        final token = response['token'] ?? '';
-        final userData = response['user'] ?? {};
+        // 2. Extract data safely (handles both nested and flat responses)
+        final apiData = response['data'] ?? response; 
+        final token = apiData['token']?.toString() ?? '';
+        final userData = apiData['user'] ?? apiData;
         
-        // Store user data, tokens, etc.
-        if (_rememberMe) {
-          // Store credentials securely
-          // await _storeCredentials(username, password);
-        }
-        
-        // ✅ CRITICAL: Save data to SharedPreferences
+        // 3. Get Preferences instance
         final prefs = await SharedPreferences.getInstance();
         
-        // Save token
+        // 4. CRITICAL: Clear old session data first
+        await prefs.clear(); 
+        print('✅ Auth: Storage cleared for new session');
+
+        // 5. Save the NEW token and sync
         if (token.isNotEmpty) {
           await prefs.setString('user_token', token);
-          print('✅ Token saved to SharedPreferences: ${token.substring(0, 20)}...');
+          // Force disk sync so the Dashboard sees it immediately
+          await prefs.reload(); 
+          print('✅ Auth: Token saved: ${token.substring(0, 10)}...');
+        } else {
+          print('⚠️ Auth: No token found in response data');
         }
         
-        // ✅ Save email (THIS WAS MISSING!)
-        final email = userData['email'] ?? response['email'] ?? '';
+        // 6. Save User Details
+        final email = userData['email'] ?? '';
         if (email.isNotEmpty) {
           await prefs.setString('user_email', email);
-          print(' Email saved to SharedPreferences: $email');
-        } else {
-          // If email not in response, use username if it looks like an email
-          if (username.contains('@')) {
-            await prefs.setString('user_email', username);
-            print(' Email (from username) saved: $username');
-          }
+        } else if (username.contains('@')) {
+          await prefs.setString('user_email', username);
         }
         
-        // Save other user info
-        final userId = userData['id']?.toString() ?? response['id']?.toString() ?? '';
-        if (userId.isNotEmpty) {
-          await prefs.setString('user_id', userId);
-          print(' User ID saved: $userId');
-        }
+        final userId = userData['id']?.toString() ?? '';
+        if (userId.isNotEmpty) await prefs.setString('user_id', userId);
         
-        final userName = userData['name'] ?? response['name'] ?? username;
-        if (userName.isNotEmpty) {
-          await prefs.setString('user_name', userName);
-          print(' User name saved: $userName');
-        }
-        
-        // Print debug info
-        print(' All SharedPreferences after login:');
-        prefs.getKeys().forEach((key) {
-          if (key != 'user_token') { // Don't print full token
-            print('   $key: ${prefs.get(key)}');
-          } else {
-            print('   $key: ${prefs.get(key)?.toString().substring(0, 20)}...');
-          }
-        });
+        final userName = userData['name'] ?? userData['username'] ?? username;
+        if (userName.isNotEmpty) await prefs.setString('user_name', userName);
         
         _isLoading = false;
         notifyListeners();
@@ -102,6 +84,7 @@ class AuthProvider with ChangeNotifier {
         return false;
       }
     } catch (e) {
+      print('❌ Auth Error: $e');
       _errorMessage = 'An unexpected error occurred. Please try again.';
       _isLoading = false;
       notifyListeners();
@@ -109,69 +92,23 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  // Method to check if user is logged in
+  // ✅ AUTH STATUS CHECK
   Future<bool> isLoggedIn() async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.reload(); // Always reload before checking status
     final token = prefs.getString('user_token');
     return token != null && token.isNotEmpty;
   }
 
-  // Method to get saved email
-  Future<String?> getSavedEmail() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('user_email');
-  }
-
-  // Method to logout and clear all data
+  // ✅ LOGOUT
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
-    print(' Logged out - All SharedPreferences cleared');
+    print('🚪 Auth: Logged out and storage wiped');
     notifyListeners();
   }
 
-  // Forgot password method
-  Future<Map<String, dynamic>> apiforgotpassword({
-    required String email,
-  }) async {
-    _isLoading = true;
-    _errorMessage = '';
-    notifyListeners();
-    
-
-    try {
-      final response = await apiService.apiforgotpassword(
-        email: email,
-      );
-
-      _isLoading = false;
-      
-      if (response['success'] == true) {
-        notifyListeners();
-        return {
-          'success': true,
-          'message': response['message'] ?? 'Password reset instructions sent to your email.',
-        };
-      } else {
-        _errorMessage = response['error'] ?? 'Failed to process request.';
-        notifyListeners();
-        return {
-          'success': false,
-          'error': _errorMessage,
-        };
-      }
-    } catch (e) {
-      _errorMessage = 'An unexpected error occurred. Please try again.';
-      _isLoading = false;
-      notifyListeners();
-      return {
-        'success': false,
-        'error': _errorMessage,
-      };
-    }
-  }
-
-  // Register method - UPDATED TO SAVE EMAIL
+  // ✅ REGISTER
   Future<Map<String, dynamic>> apiregister({
     required String username,
     required String email,
@@ -193,57 +130,41 @@ class AuthProvider with ChangeNotifier {
       _isLoading = false;
       
       if (response['success'] == true) {
-        // ✅ Also save email when registering
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('user_email', email);
-        print(' Email saved during registration: $email');
         
-        // Save token if provided
-        final token = response['token'] ?? '';
-        if (token.isNotEmpty) {
+        final token = response['token'] ?? (response['data'] != null ? response['data']['token'] : null);
+        if (token != null) {
           await prefs.setString('user_token', token);
-          print('✅ Token saved during registration');
+          await prefs.reload();
         }
         
         notifyListeners();
-        return {
-          'success': true,
-          'message': response['message'] ?? 'Registration successful!',
-        };
+        return {'success': true, 'message': response['message'] ?? 'Success'};
       } else {
         _errorMessage = response['error'] ?? 'Registration failed.';
         notifyListeners();
-        return {
-          'success': false,
-          'error': _errorMessage,
-        };
+        return {'success': false, 'error': _errorMessage};
       }
     } catch (e) {
-      _errorMessage = 'An unexpected error occurred. Please try again.';
       _isLoading = false;
-      notifyListeners();
-      return {
-        'success': false,
-        'error': _errorMessage,
-      };
+      return {'success': false, 'error': e.toString()};
     }
   }
 
-  // Debug method to print all stored data
-  Future<void> printStoredData() async {
-    final prefs = await SharedPreferences.getInstance();
-    print(' DEBUG: All stored authentication data:');
-    prefs.getKeys().forEach((key) {
-      final value = prefs.get(key);
-      print('   $key: $value');
-    });
-  }
-
-  // Method to manually set email (if needed)
-  Future<void> setUserEmail(String email) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('user_email', email);
-    print('✅ Email manually set: $email');
+  // ✅ FORGOT PASSWORD
+  Future<Map<String, dynamic>> apiforgotpassword({required String email}) async {
+    _isLoading = true;
     notifyListeners();
+    try {
+      final response = await apiService.apiforgotpassword(email: email);
+      _isLoading = false;
+      notifyListeners();
+      return response;
+    } catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      return {'success': false, 'error': e.toString()};
+    }
   }
 }

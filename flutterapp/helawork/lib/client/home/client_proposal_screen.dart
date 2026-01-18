@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:helawork/client/home/client_paymentsuccess_screen.dart';
+import 'package:helawork/client/home/client_payment_screen.dart';
 import 'package:helawork/client/home/client_proposal_view_screen.dart';
 import 'package:helawork/client/home/freelancer_profile_screen.dart';
 import 'package:helawork/client/models/client_proposal.dart';
 import 'package:helawork/client/provider/client_proposal_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart'; // ADD THIS IMPORT
 
 class ClientProposalsScreen extends StatefulWidget {
   const ClientProposalsScreen({super.key});
@@ -114,7 +114,6 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Title + Status
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -132,8 +131,6 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
               ],
             ),
             const SizedBox(height: 10),
-
-            // Freelancer info (clickable)
             InkWell(
               onTap: () => _viewFreelancerProfile(context, proposal.freelancerId),
               borderRadius: BorderRadius.circular(8),
@@ -159,8 +156,6 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
               ),
             ),
             const SizedBox(height: 8),
-
-            // Bid and timeline
             Row(
               children: [
                 const Icon(Icons.attach_money, size: 16, color: Colors.grey),
@@ -183,8 +178,6 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
               ],
             ),
             const SizedBox(height: 12),
-
-            // Service Type Indicator
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
@@ -218,46 +211,10 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 12),
-
-            // Cover Letter Preview
-            if (proposal.coverLetter.isNotEmpty)
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue.shade100),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Cover Letter:',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: Colors.blue,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      proposal.coverLetter.length > 150
-                          ? '${proposal.coverLetter.substring(0, 150)}...'
-                          : proposal.coverLetter,
-                      style: const TextStyle(color: Colors.black87, height: 1.5),
-                    ),
-                  ],
-                ),
-              ),
-
             const SizedBox(height: 16),
-
-            // Action Buttons
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                // View Details Button
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue,
@@ -269,8 +226,6 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
                   label: const Text('View Details'),
                 ),
                 const SizedBox(width: 10),
-                
-                // Accept Button (only for pending proposals)
                 if (proposal.status.toLowerCase() == 'pending')
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
@@ -293,7 +248,6 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
   Widget _buildStatusBadge(String status) {
     Color bgColor;
     Color textColor;
-
     switch (status.toLowerCase()) {
       case 'accepted':
         bgColor = Colors.green.shade50;
@@ -307,7 +261,6 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
         bgColor = Colors.blue.shade50;
         textColor = Colors.blue.shade700;
     }
-
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
@@ -317,11 +270,7 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
       ),
       child: Text(
         status.toUpperCase(),
-        style: TextStyle(
-          color: textColor,
-          fontWeight: FontWeight.w600,
-          fontSize: 12,
-        ),
+        style: TextStyle(color: textColor, fontWeight: FontWeight.w600, fontSize: 12),
       ),
     );
   }
@@ -333,31 +282,20 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
         children: [
           Icon(Icons.inbox_outlined, size: 100, color: Colors.blue[100]),
           const SizedBox(height: 20),
-          const Text(
-            'No Proposals Yet',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w600,
-              color: Colors.blue,
-            ),
-          ),
-          const SizedBox(height: 10),
-          const Text(
-            'You have not received any proposals yet.',
-            style: TextStyle(fontSize: 16, color: Colors.grey),
-          ),
+          const Text('No Proposals Yet', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: Colors.blue)),
+          const Text('You have not received any proposals yet.', style: TextStyle(fontSize: 16, color: Colors.grey)),
         ],
       ),
     );
   }
 
-  // UPDATED: Complete _showAcceptConfirmation function
   void _showAcceptConfirmation(BuildContext context, ClientProposal proposal) {
-    final isOnSite = proposal.taskServiceType == 'on_site';
-    
+    final navigator = Navigator.of(context);
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Row(
           children: [
             Icon(Icons.check_circle, color: Colors.green),
@@ -369,13 +307,8 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Accept proposal from ${proposal.freelancerName}?',
-              style: const TextStyle(fontSize: 16),
-            ),
+            Text('Accept proposal from ${proposal.freelancerName}?'),
             const SizedBox(height: 12),
-            
-            // Payment Information
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -392,80 +325,13 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
                       const SizedBox(width: 8),
                       Text(
                         'Ksh ${proposal.bidAmount.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blue,
-                        ),
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  
-                  // Secure Payment Note
-                  Row(
-                    children: [
-                      const Icon(Icons.security, size: 16, color: Colors.green),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'Secure Escrow Payment',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: Colors.green,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  
-                  const Text(
-                    '• Funds go to secure escrow',
-                    style: TextStyle(fontSize: 13),
-                  ),
-                  const Text(
-                    '• Freelancer starts after payment',
-                    style: TextStyle(fontSize: 13),
-                  ),
-                  const Text(
-                    '• Release payment when satisfied',
-                    style: TextStyle(fontSize: 13),
-                  ),
-                  
-                  // On-site specific instructions
-                  if (isOnSite) ...[
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.shade50,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.location_on, size: 14, color: Colors.orange),
-                              SizedBox(width: 6),
-                              Text(
-                                'On-Site Task',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.orange,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ],
-                          ),
-                          SizedBox(height: 4),
-                          Text(
-                            'You will receive an OTP to give to freelancer when work is completed',
-                            style: TextStyle(fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                  const Text('• Funds go to secure escrow', style: TextStyle(fontSize: 13)),
+                  const Text('• Freelancer starts after payment', style: TextStyle(fontSize: 13)),
                 ],
               ),
             ),
@@ -473,157 +339,66 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.grey,
-            ),
-            child: const Text('Cancel'),
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
             onPressed: () async {
-              Navigator.pop(context); // Close dialog
-              
-              // Show loading overlay
+              Navigator.pop(dialogContext);
+
               showDialog(
                 context: context,
                 barrierDismissible: false,
-                builder: (context) => const Center(
-                  child: CircularProgressIndicator(),
-                ),
+                builder: (context) => const Center(child: CircularProgressIndicator()),
               );
-              
+
               try {
                 final provider = context.read<ClientProposalProvider>();
                 final success = await provider.acceptProposal(proposal.id);
                 
-                if (context.mounted) {
-                  Navigator.pop(context); // Close loading dialog
-                }
-                
-                if (success && context.mounted) {
-                  // Check if payment URL is returned
+                if (context.mounted) Navigator.pop(context);
+
+                if (success) {
                   final response = provider.lastResponse;
+                  final prefs = await SharedPreferences.getInstance();
+
+                  // FIX: Prioritize response email to avoid "Glen" email issue
+                  final String userEmail = response?['employer_email']?.toString() ?? 
+                                         prefs.getString("user_email") ?? "";
                   
-                  if (response != null && 
-                      response.containsKey('requires_payment') &&
-                      response['requires_payment'] == true &&
-                      response['checkout_url'] != null) {
-                    
-                    // Get payment details
-                    final checkoutUrl = response['checkout_url'] as String;
-                    final orderId = response['order_id'] ?? 'N/A';
-                    final taskTitle = proposal.taskTitle;
-                    
-                    // Show payment redirect message
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Row(
-                            children: [
-                              const Icon(Icons.arrow_forward, color: Colors.white, size: 20),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Text(
-                                      'Redirecting to secure payment...',
-                                      style: TextStyle(fontWeight: FontWeight.bold),
-                                    ),
-                                    Text(
-                                      'Order: $orderId',
-                                      style: const TextStyle(fontSize: 12),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          backgroundColor: Colors.blue,
-                          duration: const Duration(seconds: 4),
-                        ),
-                      );
-                    }
-                    
-                    // Launch Paystack payment page
-                    final Uri url = Uri.parse(checkoutUrl);
-                    if (await canLaunchUrl(url)) {
-                      await launchUrl(
-                        url,
-                        mode: LaunchMode.externalApplication,
-                        webViewConfiguration: const WebViewConfiguration(
-                          enableJavaScript: true,
-                          enableDomStorage: true,
-                        ),
-                      );
-                      
-                      // Note: After payment, user will be redirected back to your app
-                      // You should handle this in your main.dart or navigation handler
-                      // For now, show a success screen
-                      if (context.mounted) {
-                        // Navigate to payment success screen
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => PaymentSuccessScreen(
-                              paymentData: {
-                                'order_id': orderId,
-                                'amount': proposal.bidAmount.toStringAsFixed(2),
-                                'task_title': taskTitle,
-                                'service_type': proposal.taskServiceType,
-                                'freelancer_name': proposal.freelancerName,
-                                'is_on_site': isOnSite,
-                              }, orderId: '',
-                            ),
-                          ),
-                        );
-                      }
-                    } else {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Cannot open payment page'),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                      }
-                    }
-                  } else {
-                    // Old flow (payment not required)
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Proposal accepted successfully'),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
-                      provider.loadProposals();
-                    }
-                  }
-                } else if (context.mounted) {
-                  // Show error
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(provider.errorMessage),
-                      backgroundColor: Colors.red,
+                  final String userName = response?['employer_name']?.toString() ?? 
+                                        prefs.getString("user_name") ?? "Client";
+                  
+                  final String orderId = response?['order_id']?.toString() ?? proposal.id.toString();
+                  final String taskId = response?['task_id']?.toString() ?? proposal.taskId;
+
+                  navigator.push(
+                    MaterialPageRoute(
+                      builder: (context) => PaymentScreen(
+                        orderId: orderId,
+                        amount: proposal.bidAmount,
+                        freelancerName: proposal.freelancerName,
+                        freelancerId: proposal.freelancerId,
+                        contractId: response?['contract_id']?.toString() ?? orderId,
+                        taskTitle: response?['task_title']?.toString() ?? proposal.taskTitle,
+                        isValidOrderId: true,
+                        employerName: userName,
+                        taskId: taskId,
+                        serviceDescription: proposal.taskTitle,
+                        email: userEmail,
+                        currency: "KSH",
+                      ),
                     ),
+                  );
+                } else {
+                  scaffoldMessenger.showSnackBar(
+                    SnackBar(content: Text(provider.errorMessage), backgroundColor: Colors.red),
                   );
                 }
               } catch (e) {
-                if (context.mounted) {
-                  Navigator.pop(context); // Close loading dialog
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Error: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
+                if (context.mounted) Navigator.pop(context); 
+                scaffoldMessenger.showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
               }
             },
             icon: const Icon(Icons.lock, size: 18),
@@ -635,20 +410,10 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
   }
 
   void _viewProposalDetails(BuildContext context, ClientProposal proposal) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ProposalViewScreen(proposal: proposal),
-      ),
-    );
+    Navigator.push(context, MaterialPageRoute(builder: (context) => ProposalViewScreen(proposal: proposal)));
   }
 
   void _viewFreelancerProfile(BuildContext context, String freelancerId) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => FreelancerProfileScreen(freelancerId: freelancerId),
-      ),
-    );
+    Navigator.push(context, MaterialPageRoute(builder: (context) => FreelancerProfileScreen(freelancerId: freelancerId)));
   }
 }

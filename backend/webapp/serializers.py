@@ -267,27 +267,21 @@ class LoginSerializer(serializers.ModelSerializer):
         model = User
         fields = ['name','password']  
 
-
-
-
-
-
-
 class ProposalSerializer(serializers.ModelSerializer):
-    task = TaskSerializer(read_only=True)  
-    freelancer = UserSerializer(read_only=True) 
+    task_details = TaskSerializer(source='task', read_only=True)
+    freelancer_name = serializers.ReadOnlyField(source='freelancer.username')
+    
+    
+    
 
     class Meta:
         model = Proposal
         fields = [
-            'proposal_id',
-            'task',
-            'freelancer',
-            'cover_letter',
-            'bid_amount',
-            'submitted_at'
+            'proposal_id', 'task', 'task_details', 'freelancer', 
+            'freelancer_name', 'cover_letter', 'cover_letter_file', 
+            'submitted_at', 'status', 'estimated_days',
+             
         ]
-        read_only_fields = ['proposal_id', 'submitted_at']
 class ContractSerializer(serializers.ModelSerializer):
     task_title = serializers.CharField(source="task.title", read_only=True)
     freelancer_name = serializers.CharField(source="freelancer.get_full_name", read_only=True)
@@ -1520,9 +1514,6 @@ class PaymentInitializeSerializer(serializers.Serializer):
 class PaymentVerificationSerializer(serializers.Serializer):
     reference = serializers.CharField(max_length=100)        
     
-
-
-
 class ProposalSerializer(serializers.ModelSerializer):
     # For read operations (GET) - these fields are read-only
     task_id = serializers.IntegerField(source='task.task_id', read_only=True)
@@ -1531,6 +1522,10 @@ class ProposalSerializer(serializers.ModelSerializer):
     freelancer_name = serializers.CharField(source='freelancer.name', read_only=True)
     employer_name = serializers.CharField(source='task.employer.username', read_only=True)
     
+    # MOCK FIELD: Pulls the fixed budget from the Task model 
+    # This satisfies the Flutter frontend without needing a DB column in Proposal
+    bid_amount = serializers.ReadOnlyField(source='task.budget')
+
     # For write operations (POST) - these accept IDs
     task = serializers.PrimaryKeyRelatedField(
         queryset=Task.objects.all(), 
@@ -1554,7 +1549,8 @@ class ProposalSerializer(serializers.ModelSerializer):
             'proposal_id', 'task', 'task_id', 'task_title',
             'freelancer_id', 'freelancer_name', 'employer_name',
             'cover_letter_file', 'cover_letter_file_url',
-            'bid_amount', 'cover_letter', 'status',
+            'bid_amount',  # Included here as a read-only field
+            'cover_letter', 'status',
             'estimated_days', 'submitted_at'
         ]
         read_only_fields = ['proposal_id', 'submitted_at', 'freelancer']
@@ -1564,11 +1560,7 @@ class ProposalSerializer(serializers.ModelSerializer):
             return obj.cover_letter_file.url
         return None
     
-    def validate_bid_amount(self, value):
-        """Ensure bid amount is positive"""
-        if value <= 0:
-            raise serializers.ValidationError("Bid amount must be positive")
-        return value
+    # REMOVED: validate_bid_amount (Logic no longer needed for fixed prices)
     
     def validate(self, data):
         """Custom validation for the entire proposal"""
@@ -1612,14 +1604,14 @@ class ProposalSerializer(serializers.ModelSerializer):
         # Extract file separately
         cover_letter_file = validated_data.pop('cover_letter_file', None)
         
-        # Create proposal
+        # Create proposal (bid_amount is NOT passed here as it's not in the model)
         proposal = Proposal.objects.create(
             **validated_data,
-            freelancer=request.user,  # Set from authenticated user
+            freelancer=request.user,
             submitted_at=timezone.now()
         )
         
-        # Save file if provided
+        
         if cover_letter_file:
             proposal.cover_letter_file.save(
                 cover_letter_file.name,
@@ -1627,4 +1619,4 @@ class ProposalSerializer(serializers.ModelSerializer):
             )
             proposal.save()
         
-        return proposal    
+        return proposal

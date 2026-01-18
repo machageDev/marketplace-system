@@ -533,105 +533,94 @@ static Future<Map<String, dynamic>?> getUserProfile([String? externalToken]) asy
 
     return await ApiService.postData('/ratings/', body);
   }
-static Future<Proposal> submitProposal(Proposal proposal, {PlatformFile? pdfFile}) async {
+// In api_service.dart
+static Future<Proposal> submitProposal(Proposal proposal, {required PlatformFile pdfFile}) async {
   try {
-    // Get authentication token
     final String? token = await _getUserToken();
-    
-    if (token == null) {
-      throw Exception("User not authenticated. Please log in again.");
-    }
+    if (token == null) throw Exception("User not authenticated. Please log in again.");
 
-    if (pdfFile == null) {
-      throw Exception("Cover letter PDF file is required");
-    }
+    // Validate File
+    if (pdfFile.bytes == null) throw Exception("PDF file is corrupted (no bytes).");
 
-    if (pdfFile.bytes == null) {
-      throw Exception("PDF file bytes are null - file may be corrupted");
-    }
+    final request = http.MultipartRequest('POST', Uri.parse(ProposalUrl))
+      ..headers.addAll({
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      })
+      ..fields.addAll({
+        'task': proposal.taskId.toString(),
+        'bid_amount': proposal.bidAmount.toString(),
+        'status': proposal.status,
+        'estimated_days': proposal.estimatedDays.toString(),
+        'cover_letter': proposal.coverLetter.isEmpty 
+            ? 'Proposal for task ${proposal.taskId}' 
+            : proposal.coverLetter,
+      })
+      ..files.add(http.MultipartFile.fromBytes(
+        'cover_letter_file',
+        pdfFile.bytes!,
+        filename: pdfFile.name,
+        contentType: MediaType('application', 'pdf'),
+      ));
 
-    print(' Starting proposal submission with PDF cover letter...');
-    print(' PDF File: ${pdfFile.name} (${pdfFile.size} bytes)');
-    print(' Proposal URL: $ProposalUrl');
-
-    var request = http.MultipartRequest('POST', Uri.parse(ProposalUrl));
-    
-    request.headers['Authorization'] = 'Bearer $token';
-    request.headers['Accept'] = 'application/json';
-   
-    // ✅ CORRECT FIELDS FOR SERIALIZER:
-    request.fields['task'] = proposal.taskId.toString(); // Will be mapped to 'task'
-    request.fields['bid_amount'] = proposal.bidAmount.toString();
-    request.fields['status'] = proposal.status;
-    
-    // ✅ ADD THESE REQUIRED FIELDS:
-    request.fields['estimated_days'] = proposal.estimatedDays?.toString() ?? '7';
-    
-    // ✅ Add cover letter text (optional but good to have)
-    if (proposal.coverLetter != null && proposal.coverLetter!.isNotEmpty) {
-      request.fields['cover_letter'] = proposal.coverLetter!;
-    } else {
-      request.fields['cover_letter'] = 'Proposal for task ${proposal.taskId}';
-    }
-    
-    // ❌ REMOVE THESE (not in serializer):
-    // - freelancer_id (set automatically from token)
-    // - title (not in Proposal model, only in Task)
-    
-    // ✅ Add PDF file
-    request.files.add(http.MultipartFile.fromBytes(
-      'cover_letter_file',
-      pdfFile.bytes!,
-      filename: pdfFile.name,
-      contentType: MediaType('application', 'pdf'),
-    ));
-
-    print(' ✅ Request prepared with fields:');
-    print('   - task_id: ${proposal.taskId}');
-    print('   - bid_amount: ${proposal.bidAmount}');
-    print('   - status: ${proposal.status}');
-    print('   - estimated_days: ${proposal.estimatedDays ?? 7}');
-    print('   - cover_letter: ${proposal.coverLetter?.substring(0, min(50, proposal.coverLetter?.length ?? 0))}...');
-    print('   - file_field: cover_letter_file');
-    print('   - file_name: ${pdfFile.name}');
+    debugPrint('🚀 Sending Proposal to: $ProposalUrl');
 
     final response = await request.send();
     final responseBody = await response.stream.bytesToString();
+    final decodedData = json.decode(responseBody);
+
+    return _handleProposalResponse(response.statusCode, decodedData, responseBody);
     
-    print(' Proposal API Response:');
-    print('   - Status: ${response.statusCode}');
-    print('   - Body: $responseBody');
-
-    if (response.statusCode == 201 || response.statusCode == 200) {
-      print(' ✅ Proposal submitted successfully!');
-      final responseData = json.decode(responseBody);
-      
-      // Handle both response formats
-      if (responseData.containsKey('proposal')) {
-        return Proposal.fromJson(responseData['proposal']);
-      } else {
-        return Proposal.fromJson(responseData);
-      }
-    } else if (response.statusCode == 401) {
-      throw Exception("Authentication failed. Please log in again.");
-    } else if (response.statusCode == 400) {
-      // Parse error message
-      final errorData = json.decode(responseBody);
-      final errorMsg = errorData['errors'] ?? errorData['error'] ?? responseBody;
-      throw Exception("Invalid data: $errorMsg");
-    } else {
-      throw Exception("Failed to submit proposal: ${response.statusCode} - $responseBody");
-    }
-
   } catch (e, stackTrace) {
-    print('===================================');
-    print(' ERROR DETAILS:');
-    print(' Error: $e');
-    print(' Stack trace: $stackTrace');
-    print('===================================');
-    throw Exception("Error submitting proposal: $e");
+    debugPrint('❌ Submission Error: $e\n$stackTrace');
+    throw Exception(e.toString().replaceAll("Exception: ", ""));
   }
-}static Future<List<Map<String, dynamic>>> fetchTasks(http.Response response, {required BuildContext context}) async {
+}
+
+// Add this new method for proposals without PDF
+static Future<Proposal> submitProposalWithoutPdf(Proposal proposal) async {
+  try {
+    final String? token = await _getUserToken();
+    if (token == null) throw Exception("User not authenticated. Please log in again.");
+
+    final response = await http.post(
+      Uri.parse(ProposalUrl),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: json.encode({
+        'task': proposal.taskId,
+        'bid_amount': proposal.bidAmount,
+        'status': proposal.status,
+        'estimated_days': proposal.estimatedDays,
+        'cover_letter': proposal.coverLetter.isEmpty 
+            ? 'Proposal for task ${proposal.taskId}' 
+            : proposal.coverLetter,
+      }),
+    );
+
+    debugPrint('🚀 Sending Proposal without PDF to: $ProposalUrl');
+
+    return _handleProposalResponse(response.statusCode, json.decode(response.body), response.body);
+    
+  } catch (e, stackTrace) {
+    debugPrint('❌ Submission Error (no PDF): $e\n$stackTrace');
+    throw Exception(e.toString().replaceAll("Exception: ", ""));
+  }
+}
+
+// Make sure _handleProposalResponse exists
+static Proposal _handleProposalResponse(int statusCode, Map<String, dynamic> decodedData, String responseBody) {
+  if (statusCode >= 200 && statusCode < 300) {
+    debugPrint('✅ Proposal submitted successfully');
+    return Proposal.fromJson(decodedData);
+  } else {
+    debugPrint('❌ Failed to submit proposal: ${decodedData['error'] ?? responseBody}');
+    throw Exception(decodedData['error'] ?? 'Failed to submit proposal');
+  }
+}
+static Future<List<Map<String, dynamic>>> fetchTasks(http.Response response, {required BuildContext context}) async {
   try {
     if (response.statusCode == 200) {
       final dynamic data = jsonDecode(response.body);
@@ -1043,149 +1032,98 @@ Future<List<Contract>> fetchContracts() async {
         return 'Unknown';
     }
   }
-/// Get authentication token for Employer API calls
-static Future<String?> _getToken() async {
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    
-    // First try to get employer token
-    String? token = prefs.getString('employer_token');
-    
-    // If no employer token, try user token (some employers might use same token)
-    if (token == null || token.isEmpty) {
-      token = prefs.getString('user_token');
-    }
-    
-    if (token == null || token.isEmpty) {
-      print('❌ No authentication token found for employer');
-      return null;
-    }
-    
-    print('✅ Employer token found: ${token.substring(0, min(20, token.length))}...');
-    return token;
-  } catch (e) {
-    print('Error getting employer token: $e');
-    return null;
-  }
+  static Future<String?> _getToken() async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.reload(); // 🔥 Add this line! It forces a fresh look at the disk.
+  return prefs.getString('user_token');
 }
-
-Future<void> saveUserToken(String token) async {
+static Future<void> saveUserToken(String token) async {
+  if (token.isEmpty) return;
   final prefs = await SharedPreferences.getInstance();
   await prefs.setString('user_token', token);
-  print(" Token saved to SharedPreferences: $token");
+  await prefs.reload(); // 🔥 Force disk sync
+  final saved = prefs.getString('user_token');
+  print("🛠 Token saved successfully: ${saved?.substring(0,5)}...");
 }
 
+static Future<String?> getUserToken() async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.reload(); // Ensure latest value
+  final token = prefs.getString('user_token');
+  print("🔑 Token read: ${token?.substring(0,5) ?? 'null'}");
+  return token;
+}
 
+  // Login API
+ Future<Map<String, dynamic>> apilogin(String username, String password) async {
+    try {
+      print("=== LOGIN API CALL ===");
+      final response = await http.post(
+        Uri.parse(apiloginUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'username': username,
+          'password': password,
+        }),
+      );
 
-Future<Map<String, dynamic>> apilogin(String username, String password) async {
-  try {
-    print("=== LOGIN API CALL ===");
-    print("URL: $apiloginUrl");
-    print("Username: $username");
-
-    final response = await http.post(
-      Uri.parse(apiloginUrl),
-      headers: {'Content-Type': 'application/json'},
-      body: json.encode({
-        'username': username,
-        'password': password,
-      }),
-    );
-
-    print("Response status: ${response.statusCode}");
-    print("Response body: ${response.body}");
-
-    if (response.statusCode == 200) {
-      final responseData = json.decode(response.body);
-
-      // Check if token exists in the response
-      if (responseData['token'] != null && responseData['token'].toString().isNotEmpty) {
-        final token = responseData['token'].toString();
-
-        //  Save token locally for future API calls
-        await saveUserToken(token);
-        print(" Token saved locally: $token");
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['token'] != null) {
+          await saveUserToken(data['token']); // Must await!
+        }
+        return {'success': true, 'data': data};
       } else {
-        print(" No token found in response: ${response.body}");
+        return {'success': false, 'statusCode': response.statusCode, 'error': 'Invalid credentials'};
       }
-
-      return {
-        'success': true,
-        'data': responseData,
-      };
-    } else {
-      print(" Login failed — ${response.statusCode}");
-      return {
-        'success': false,
-        'error': 'Invalid credentials. Please try again.',
-        'statusCode': response.statusCode,
-      };
+    } catch (e) {
+      return {'success': false, 'error': 'Network error: $e'};
     }
-  } catch (e) {
-    print("=== LOGIN API ERROR ===");
-    print("Error: $e");
-    print("Error type: ${e.runtimeType}");
-
-    return {
-      'success': false,
-      'error': 'Network error. Please check your connection.',
-    };
   }
-}
-Future<Map<String, dynamic>> fetchDashboardData() async {
+
+  // Dashboard fetch
+ Future<Map<String, dynamic>> fetchDashboardData() async {
   try {
     print("=== DASHBOARD API CALL ===");
-    print("URL: $dashboardUrl");
+    
+    // 1. First attempt to get token
+    String? token = await getUserToken();
 
-    final String? token = await _getUserToken();
-
-    final headers = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    };
-
-    if (token != null && token.isNotEmpty) {
-      headers['Authorization'] = 'Bearer $token';
-      print(" Added Authorization header: Bearer $token");
-    } else {
-      print(" No token found. You may need to log in again.");
+    // 2. 🔥 If null, wait and retry (Race Condition Handler)
+    if (token == null || token.isEmpty) {
+      print("⏳ Token not found yet. Waiting 1.5 seconds for login to finish...");
+      await Future.delayed(Duration(milliseconds: 1500));
+      token = await getUserToken(); // Try again
     }
 
-    final response = await http.get(Uri.parse(dashboardUrl), headers: headers);
+    if (token == null || token.isEmpty) {
+      print("❌ Final Attempt: Token still null.");
+      throw Exception("Unauthorized: Token not found. Please login.");
+    }
+
+    // 3. Proceed with Request
+    final response = await http.get(
+      Uri.parse(dashboardUrl),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
 
     print("Status Code: ${response.statusCode}");
-    print("Response Body: ${response.body}");
-
+    
     if (response.statusCode == 200) {
-      final responseData = json.decode(response.body);
-      print("Parsed Response: $responseData");
-
-      // Unified data structure handling
-      if (responseData is Map<String, dynamic>) {
-        if (responseData['success'] == true && responseData.containsKey('data')) {
-          return responseData['data'];
-        } else {
-          return responseData;
-        }
-      } else {
-        throw Exception('Unexpected response format: Expected Map');
-      }
-    } else if (response.statusCode == 401) {
-      throw Exception('Unauthorized: Please login again');
-    } else if (response.statusCode == 404) {
-      throw Exception('Dashboard endpoint not found');
+      final data = json.decode(response.body);
+      return data['data'] ?? data;
     } else {
-      throw Exception('Failed to load dashboard: ${response.statusCode}');
+      throw Exception("Server Error: ${response.statusCode}");
     }
   } catch (e) {
-    print("=== DASHBOARD API ERROR ===");
-    print("Error: $e");
-    print("Error type: ${e.runtimeType}");
+    print("=== DASHBOARD ERROR === $e");
     rethrow;
   }
 }
-
-  // Add this method to your existing ApiService class
 Future<Map<String, dynamic>> apiforgotpassword({
   required String email,
 }) async {
@@ -1531,7 +1469,7 @@ Future<Map<String, dynamic>> fetchTaskStats() async {
 
 // In ApiService.dart - Add this method
 //
-static Future<List<dynamic>> getFreelancerProposals() async {
+ Future<List<dynamic>> getFreelancerProposals() async {
   try {
     // Get token
     final String? token = await _getUserToken();
