@@ -1,12 +1,13 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:helawork/api_config.dart';
+import 'package:helawork/client/models/client_contract_model.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ClientContractProvider extends ChangeNotifier {
   bool isLoading = false;
-  List<Map<String, dynamic>> contracts = [];
+  List<ContractModel> contracts = [];
 
   String get baseUrl => AppConfig.getBaseUrl();
 
@@ -21,112 +22,214 @@ class ClientContractProvider extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString("user_token") ?? "";
 
+      print("🔍 Fetching contracts from: $baseUrl/api/employer/contracts/");
+      
       final response = await http.get(
         Uri.parse("$baseUrl/api/employer/contracts/"),
         headers: {"Authorization": "Bearer $token"},
       );
 
-      final data = jsonDecode(response.body);
-
-      if (data["status"] == true && data["contracts"] is List) {
-        contracts = List<Map<String, dynamic>>.from(data["contracts"]);
+      print("📊 Response status: ${response.statusCode}");
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        print("📋 Response keys: ${data.keys}");
+        
+        if (data["status"] == true && data["contracts"] is List) {
+          final contractsList = data["contracts"] as List;
+          print("✅ Found ${contractsList.length} contracts");
+          
+          // Convert each JSON to ContractModel
+          contracts = contractsList.map<ContractModel>((json) {
+            try {
+              return ContractModel.fromJson(json);
+            } catch (e) {
+              print("❌ Error parsing contract: $e");
+              print("❌ Problematic JSON: $json");
+              return ContractModel.fromJson({});
+            }
+          }).where((contract) => contract.contractId != 0).toList();
+          
+          // Debug first contract
+          if (contracts.isNotEmpty) {
+            final first = contracts.first;
+            print("📝 First contract debug:");
+            print("   ID: ${first.contractId}");
+            print("   Order ID: ${first.orderId}");
+            print("   Order Status: ${first.orderStatus}");
+            print("   Title: ${first.taskTitle}");
+            print("   Service Type: ${first.serviceType}");
+            print("   Paid: ${first.isPaid}");
+            print("   Completed: ${first.isCompleted}");
+            print("   Has valid order ID: ${first.hasValidOrderId}");
+          }
+        } else {
+          print("❌ API returned false status or no contracts");
+          contracts = [];
+        }
       } else {
+        print("❌ HTTP Error: ${response.statusCode}");
+        print("Response body: ${response.body}");
         contracts = [];
       }
-    } catch (e) {
-      if (kDebugMode) print("Error fetching contracts: $e");
+    } catch (e, stackTrace) {
+      print("❌ Error fetching contracts: $e");
+      print("Stack trace: $stackTrace");
       contracts = [];
+    } finally {
+      isLoading = false;
+      notifyListeners();
     }
-
-    isLoading = false;
-    notifyListeners();
   }
 
   // ======================================================
-  // Release Escrow Payment
+  // Release Payment to Freelancer
   // ======================================================
-  Future<bool> releasePayment(int contractId) async {
+  Future<Map<String, dynamic>> releasePayment(int contractId) async {
     try {
+      print("💸 Releasing payment for contract: $contractId");
+      
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString("user_token") ?? "";
 
       final response = await http.post(
-        Uri.parse("$baseUrl/release-payment/"),
-        headers: {"Authorization": "Bearer $token"},
+        Uri.parse("$baseUrl/api/contracts/release-payment/"),
+        headers: {
+          "Authorization": "Bearer $token",
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
         body: {"contract_id": contractId.toString()},
       );
 
+      print("📊 Release response: ${response.statusCode}");
+      print("📋 Release body: ${response.body}");
+      
       final data = jsonDecode(response.body);
-
+      
       if (data["status"] == true) {
+        print("✅ Payment released successfully");
+        // Refresh contracts
         await fetchEmployerContracts();
-        return true;
+        return {
+          "success": true, 
+          "message": data["message"] ?? "Payment released successfully"
+        };
       } else {
-        throw Exception(data["message"]);
+        print("❌ Release failed: ${data['message']}");
+        return {
+          "success": false, 
+          "message": data["message"] ?? "Release failed"
+        };
       }
     } catch (e) {
-      if (kDebugMode) print("Error releasing payment: $e");
-      return false;
+      print("❌ Error in releasePayment: $e");
+      return {"success": false, "message": "Error: $e"};
     }
   }
 
   // ======================================================
-  // Mark On-Site Contract Completed
+  // Generate Verification Code for On-Site Contract
   // ======================================================
-  Future<bool> markContractCompleted(int contractId) async {
+  Future<Map<String, dynamic>> generateVerificationCode(int contractId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString("user_token") ?? "";
 
+      print("🔐 Generating verification code for contract: $contractId");
+      
       final response = await http.post(
-        Uri.parse("$baseUrl/contracts/<int:contract_id>/mark-completed/"),
-        headers: {"Authorization": "Bearer $token"},
-        body: {"contract_id": contractId.toString()},
+        Uri.parse('${baseUrl}/api/contracts/$contractId/generate-verification-code/'),
+        headers: {
+          "Authorization": "Bearer $token",
+          "Content-Type": "application/json",
+        },
+        body: jsonEncode({"contract_id": contractId.toString()}),
       );
 
+      print("📊 Generate code response: ${response.statusCode}");
+      print("📋 Response body: ${response.body}");
+      
       final data = jsonDecode(response.body);
-
+      
       if (data["status"] == true) {
-        await fetchEmployerContracts();
-        return true;
+        print("✅ Verification code generated");
+        await fetchEmployerContracts(); // Refresh to get new code
+        return {
+          "success": true, 
+          "code": data["verification_code"],
+          "message": data["message"] ?? "Code generated successfully"
+        };
+      } else {
+        return {
+          "success": false, 
+          "message": data["message"] ?? "Failed to generate code"
+        };
       }
     } catch (e) {
-      if (kDebugMode) print("Error completing contract: $e");
+      print("❌ Error generating verification code: $e");
+      return {"success": false, "message": "Error: $e"};
     }
-    return false;
   }
 
   // ======================================================
-  // Confirm Escrow Funding
+  // Verify On-Site Completion
   // ======================================================
-  Future<bool> confirmEscrowFunding(String orderId, double amount) async {
+  Future<Map<String, dynamic>> verifyOnSiteCompletion(int contractId, String code) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString("user_token") ?? "";
 
+      print("✅ Verifying on-site completion for contract: $contractId with code: $code");
+      
       final response = await http.post(
-        Uri.parse("$baseUrl/confirm-escrow/"),
-        headers: {"Authorization": "Bearer $token"},
-        body: {"order_id": orderId, "amount": amount.toString()},
+        Uri.parse("$baseUrl/api/contracts/$contractId/verify-otp/"),
+        headers: {
+          "Authorization": "Bearer $token",
+          "Content-Type": "application/json",
+        },
+        body: jsonEncode({"verification_code": code}),
       );
 
+      print("📊 Verify response: ${response.statusCode}");
+      print("📋 Verify body: ${response.body}");
+      
       final data = jsonDecode(response.body);
-
+      
       if (data["status"] == true) {
+        print("✅ On-site completion verified");
         await fetchEmployerContracts();
-        return true;
+        return {
+          "success": true, 
+          "message": data["message"] ?? "Verification successful"
+        };
+      } else {
+        return {
+          "success": false, 
+          "message": data["message"] ?? "Verification failed"
+        };
       }
     } catch (e) {
-      if (kDebugMode) print("Error confirming escrow: $e");
+      print("❌ Error in verifyOnSiteCompletion: $e");
+      return {"success": false, "message": "Error: $e"};
     }
-    return false;
   }
 
   // ======================================================
-  // Clear Contract Data
+  // Get Contract by ID
+  // ======================================================
+  ContractModel? getContractById(int contractId) {
+    try {
+      return contracts.firstWhere((contract) => contract.contractId == contractId);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // ======================================================
+  // Clear Contracts
   // ======================================================
   void clearContracts() {
-    contracts = [];
+    contracts.clear();
     notifyListeners();
   }
 }

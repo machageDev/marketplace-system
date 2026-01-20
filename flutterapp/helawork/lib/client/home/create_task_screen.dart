@@ -382,7 +382,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: DropdownButtonFormField<String>(
-                          value: _selectedCategory,
+                          initialValue: _selectedCategory,
                           decoration: const InputDecoration(
                             border: InputBorder.none,
                             labelText: "Category *",

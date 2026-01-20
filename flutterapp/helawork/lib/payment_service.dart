@@ -436,8 +436,9 @@ class PaymentService {
         };
       }
 
-      final url = Uri.parse('$baseUrl/api/payment/verify/$reference/');
+      final url = Uri.parse('$baseUrl/payment/verify/$reference/');
       print('🔗 Calling URL: $url');
+      print('🔗 Full API endpoint: $baseUrl/payment/verify/$reference/');
 
       final response = await http.get(
         url,

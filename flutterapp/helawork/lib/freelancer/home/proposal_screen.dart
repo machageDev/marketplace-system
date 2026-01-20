@@ -121,7 +121,7 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
                 labelText: "Select Task",
                 border: OutlineInputBorder(),
               ),
-              value: selectedTaskId,
+              initialValue: selectedTaskId,
               items: taskProvider.availableTasks.map((task) {
                 final id = task['task_id'] ?? task['id'];
                 return DropdownMenuItem<int>(
@@ -205,7 +205,7 @@ class _ProposalsScreenState extends State<ProposalsScreen> {
   Widget _buildEstimatedDaysDropdown() {
     return DropdownButtonFormField<int>(
       decoration: const InputDecoration(labelText: "Days to Complete", border: OutlineInputBorder()),
-      value: _estimatedDays,
+      initialValue: _estimatedDays,
       items: [3, 7, 14, 30].map((d) => DropdownMenuItem(value: d, child: Text("$d Days"))).toList(),
       onChanged: (val) => setState(() => _estimatedDays = val ?? 7),
     );

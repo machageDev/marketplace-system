@@ -208,16 +208,54 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 _errorMessage = 'Payment loading error: ${error.description}';
               });
             },
-            onNavigationRequest: (navigation) {
+            onNavigationRequest: (navigation) async {
               print('🌐 Navigation to: ${navigation.url}');
               
               if (navigation.url.contains('paystack.co')) {
                 return NavigationDecision.navigate;
               }
               
+              // Handle success URL with verification
+              if (navigation.url.contains('success') || navigation.url.contains('reference=')) {
+                try {
+                  // Extract reference from URL
+                  String? reference;
+                  final uri = Uri.parse(navigation.url);
+                  reference = uri.queryParameters['reference'] ?? uri.queryParameters['trxref'];
+
+                  // 1. Call your verify_payment API
+                  if (reference != null && _paymentService != null) {
+                    final verification = await _paymentService!.verifyPayment(reference);
+                    
+                    if (verification['status'] == true) {
+                      // 2. Return 'true' to the ClientProposalsScreen
+                      if (mounted) {
+                        Navigator.pop(context, true); 
+                      }
+                    } else {
+                      // Verification failed
+                      if (mounted) {
+                        Navigator.pop(context, false);
+                      }
+                    }
+                  } else {
+                    // No reference found
+                    if (mounted) {
+                      Navigator.pop(context, false);
+                    }
+                  }
+                } catch (e) {
+                  print('❌ Error in payment verification: $e');
+                  if (mounted) {
+                    Navigator.pop(context, false);
+                  }
+                }
+                return NavigationDecision.prevent;
+              }
+              
+              // Keep existing code for other URLs
               if (navigation.url.contains('callback') || 
                   navigation.url.contains('verify') ||
-                  navigation.url.contains('success') ||
                   navigation.url.contains('failed') ||
                   navigation.url.contains('cancel') ||
                   navigation.url.contains('close')) {
@@ -319,8 +357,17 @@ class _PaymentScreenState extends State<PaymentScreen> {
   void _handlePaymentResponse(String url) {
     print('🔗 Handling payment response: $url');
     
+    // Extract reference from URL if present
+    String? reference;
+    try {
+      final uri = Uri.parse(url);
+      reference = uri.queryParameters['reference'] ?? uri.queryParameters['trxref'];
+    } catch (e) {
+      print('⚠️ Error parsing URL: $e');
+    }
+    
     if (url.contains('success') || url.contains('completed')) {
-      _completePayment(true);
+      _completePayment(true, reference: reference);
     } else if (url.contains('failed') || url.contains('canceled') || url.contains('cancelled')) {
       _completePayment(false);
     } else if (url.contains('close')) {
@@ -333,62 +380,103 @@ class _PaymentScreenState extends State<PaymentScreen> {
       Navigator.pop(context, false);
     }
   }
-
-  void _completePayment(bool success) async {
-    if (_isPaymentComplete) return;
+  void _completePayment(bool success, {String? reference}) async {
+  if (_isPaymentComplete) return;
+  _isPaymentComplete = true;
+  
+  if (success) {
+    print('✅ Payment successful! Reference: $reference');
+    print('✅ PaymentService available: ${_paymentService != null}');
     
-    _isPaymentComplete = true;
+    bool verificationSuccess = false;
     
-    if (success) {
+    // CRITICAL: Call verification endpoint BEFORE popping the screen
+    if (reference != null && _paymentService != null) {
       try {
-        if (_paymentService != null) {
-          print('✅ Verifying payment for order: ${widget.orderId}');
-          final verification = await _paymentService!.verifyPayment(widget.orderId);
-          print('✅ Verification result: ${verification['status']}');
-          print('✅ Verification message: ${verification['message']}');
+        print('✅ Verifying payment with reference: $reference');
+        final verification = await _paymentService!.verifyPayment(reference);
+        print('✅ Verification result: ${verification['status']}');
+        print('✅ Verification message: ${verification['message']}');
+        print('✅ Verification data: ${verification['data']}');
+        
+        if (verification['status'] == true) {
+          verificationSuccess = true;
           
-          if (verification['status'] == true) {
+          // Check if this is an onsite task with OTP
+          final bool isOnsite = verification['data']?['is_onsite'] == true || 
+                                verification['is_onsite'] == true;
+          final String? otp = verification['data']?['verification_otp'] ?? 
+                              verification['verification_otp'];
+          
+          print('✅ Is onsite task: $isOnsite');
+          print('✅ OTP generated: $otp');
+          
+          if (isOnsite && otp != null && otp.isNotEmpty) {
+            // Show OTP dialog for onsite tasks
+            _showOTPDialog(otp);
+          } else {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('✅ Payment successful! Order completed.'),
+                content: Text('✅ Payment verified successfully! Order completed.'),
                 backgroundColor: Colors.green,
                 duration: Duration(seconds: 3),
               ),
             );
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('⚠️ Payment may have succeeded but verification failed: ${verification['message']}'),
-                backgroundColor: Colors.orange,
-                duration: const Duration(seconds: 3),
-              ),
-            );
           }
+        } else {
+          verificationSuccess = false;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('⚠️ Payment may have succeeded but verification failed: ${verification['message']}'),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 3),
+            ),
+          );
         }
       } catch (e) {
         print('⚠️ Error verifying payment: $e');
+        print('⚠️ Stack trace: ${e.toString()}');
+        verificationSuccess = false;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('✅ Payment appears successful! Please check your order status.'),
-            backgroundColor: Colors.green,
+            content: Text('⚠️ Verification error. Please check your order status.'),
+            backgroundColor: Colors.orange,
             duration: Duration(seconds: 3),
           ),
         );
       }
-      
-      await Future.delayed(const Duration(seconds: 2));
-      Navigator.pop(context, true);
     } else {
+      print('⚠️ No reference found or PaymentService not available');
+      print('⚠️ Reference: $reference');
+      print('⚠️ PaymentService: $_paymentService');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('❌ Payment failed or was cancelled. Please try again.'),
-          backgroundColor: Colors.red,
+          content: Text('✅ Payment appears successful! Please check your order status.'),
+          backgroundColor: Colors.green,
           duration: Duration(seconds: 3),
         ),
       );
-      Navigator.pop(context, false);
     }
+    
+    // CRITICAL: Only pop after backend confirms the update (status: true)
+    // Wait for user to see the message
+    await Future.delayed(const Duration(seconds: 2));
+    
+    // Pop with verification success status
+    if (mounted) {
+      Navigator.pop(context, verificationSuccess);
+    }
+  } else {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('❌ Payment failed or was cancelled. Please try again.'),
+        backgroundColor: Colors.red,
+        duration: Duration(seconds: 3),
+      ),
+    );
+    Navigator.pop(context, false);
   }
+}
 
   void _retryPayment() {
     setState(() {
@@ -402,6 +490,144 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   void _cancelPayment() {
     Navigator.pop(context, false);
+  }
+
+  void _showOTPDialog(String otp) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.location_on, color: Colors.orange, size: 28),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Onsite Payment OTP',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.orange,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Payment verified! Funds are held in escrow.',
+                  style: TextStyle(fontSize: 14, color: Colors.grey),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.orange, width: 2),
+                  ),
+                  child: Column(
+                    children: [
+                      const Text(
+                        'Verification Code',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.orange,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        otp,
+                        style: const TextStyle(
+                          fontSize: 36,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange,
+                          letterSpacing: 8,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.info_outline, color: Colors.blue, size: 20),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Share this OTP with the freelancer in person when they complete the work.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.blue,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.warning_amber, color: Colors.amber, size: 20),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Payment will be released only after the freelancer verifies this OTP.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.amber,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.pop(context, true);
+              },
+              child: const Text('Got it'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                // Copy OTP to clipboard
+                // You might want to add clipboard functionality here
+                Navigator.of(context).pop();
+                Navigator.pop(context, true);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Copy & Close'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   String _getCurrencySymbol() {

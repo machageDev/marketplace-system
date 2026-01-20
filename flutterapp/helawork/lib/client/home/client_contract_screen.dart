@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:helawork/api_config.dart';
 import 'package:helawork/client/home/client_payment_screen.dart';
+import 'package:helawork/client/models/client_contract_model.dart';
 import 'package:helawork/client/provider/client_contract_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 
 class ClientContractsScreen extends StatefulWidget {
   const ClientContractsScreen({super.key});
@@ -16,90 +14,170 @@ class ClientContractsScreen extends StatefulWidget {
 
 class _ClientContractsScreenState extends State<ClientContractsScreen> {
   final Color _primaryBlue = const Color(0xFF1976D2);
-  final Color _backgroundColor = Colors.white;
-  final Color _greenColor = const Color(0xFF4CAF50);
+  final Color _secondaryBlue = const Color(0xFF2196F3);
+  final Color _lightBlue = const Color(0xFFE3F2FD);
+  final Color _darkBlue = const Color(0xFF0D47A1);
+  final Color _whiteColor = Colors.white;
+  final Color _greenBlue = const Color(0xFF4CAF50);
+  final Color _warningBlue = const Color(0xFFFF9800);
+  final Color _errorBlue = const Color(0xFFF44336);
 
   String? token;
 
   @override
   void initState() {
     super.initState();
-    loadToken();
+    _loadData();
   }
 
-  Future<void> loadToken() async {
+  Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
     token = prefs.getString("user_token");
-
+    
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<ClientContractProvider>(context, listen: false)
           .fetchEmployerContracts();
     });
   }
 
-  String _getStatusText(Map<String, dynamic> c) {
-    final isPaid = c['is_paid'] == true || c['is_paid'] == 1;
-    final isCompleted = c['is_completed'] == true || c['is_completed'] == 1;
-    final service = c['service_type'] ?? 'remote';
-
-    if (!isPaid) return "Awaiting Escrow Payment";
-    if (isPaid && !isCompleted) {
-      return service == 'on_site'
-          ? "Awaiting OTP Handshake"
+  // ======================================================
+  // STATUS HELPERS
+  // ======================================================
+  String _getStatusText(ContractModel contract) {
+    if (!contract.isPaid) return "Awaiting Escrow Payment";
+    if (contract.isPaid && !contract.isCompleted) {
+      return contract.isOnSite
+          ? "Awaiting OTP Verification"
           : "In Escrow – Pending Release";
     }
-    if (isPaid && isCompleted) return "Paid & Completed";
-
-    return "Unknown";
+    if (contract.isPaid && contract.isCompleted) return "Paid & Completed";
+    return contract.status;
   }
 
-  Color _getStatusColor(Map<String, dynamic> c) {
-    final isPaid = c['is_paid'] == true || c['is_paid'] == 1;
-    final isCompleted = c['is_completed'] == true || c['is_completed'] == 1;
-
-    if (isPaid && isCompleted) return _greenColor;
-    if (!isPaid) return Colors.red;
+  Color _getStatusColor(ContractModel contract) {
+    if (contract.isPaid && contract.isCompleted) return _greenBlue;
+    if (!contract.isPaid) return _errorBlue;
+    if (contract.isPaid && !contract.isCompleted) {
+      return contract.isOnSite ? _warningBlue : _secondaryBlue;
+    }
     return _primaryBlue;
   }
 
-  String _getActionButtonText(Map<String, dynamic> c) {
-    final isPaid = c['is_paid'] == true || c['is_paid'] == 1;
-    final isCompleted = c['is_completed'] == true || c['is_completed'] == 1;
-    final service = c['service_type'] ?? 'remote';
-
-    if (!isPaid) return "Pay into Escrow";
-
-    if (isPaid && !isCompleted) {
-      return service == 'on_site'
+  String _getActionButtonText(ContractModel contract) {
+    if (!contract.isPaid) return "Pay into Escrow";
+    if (contract.isPaid && !contract.isCompleted) {
+      return contract.isOnSite
           ? "Show Verification Code"
           : "Release Payment";
     }
-
-    return "Completed";
+    return "View Details";
   }
 
-  void _showOTPDialog(BuildContext context, String? otp) {
+  // ======================================================
+  // DIALOGS
+  // ======================================================
+  void _showOTPDialog(BuildContext context, ContractModel contract) {
+    final code = contract.verificationOrCompletionCode;
+    
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text("Handshake Code"),
+        backgroundColor: _whiteColor,
+        surfaceTintColor: _whiteColor,
+        title: Text(
+          "On-Site Verification Code",
+          style: TextStyle(color: _primaryBlue, fontWeight: FontWeight.bold),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text("Give this code to the worker:"),
-            const SizedBox(height: 20),
             Text(
-              otp ?? "------",
-              style: const TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 4,
+              "Share this code with the worker ONLY when the job is complete.",
+              style: TextStyle(fontSize: 14, color: _darkBlue.withOpacity(0.7)),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: _lightBlue,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: _primaryBlue, width: 2),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    "Verification Code",
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: _darkBlue,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    code ?? "Not Generated",
+                    style: TextStyle(
+                      fontSize: 36,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 4,
+                      color: _primaryBlue,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    "Show this to the worker at the job site",
+                    style: TextStyle(fontSize: 12, color: _darkBlue.withOpacity(0.6)),
+                  ),
+                ],
               ),
             ),
+            const SizedBox(height: 20),
+            if (code == null)
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _primaryBlue,
+                  foregroundColor: _whiteColor,
+                  minimumSize: const Size(double.infinity, 50),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                onPressed: () async {
+                  Navigator.pop(context);
+                  _generateVerificationCode(context, contract.contractId);
+                },
+                child: const Text(
+                  "GENERATE VERIFICATION CODE",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            if (code != null)
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _greenBlue,
+                  foregroundColor: _whiteColor,
+                  minimumSize: const Size(double.infinity, 50),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                onPressed: () {
+                  Navigator.pop(context);
+                  _showConfirmCompletionDialog(context, contract);
+                },
+                child: const Text(
+                  "MARK AS COMPLETED",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
           ],
         ),
         actions: [
           TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: _primaryBlue,
+            ),
             child: const Text("Close"),
             onPressed: () => Navigator.pop(context),
           )
@@ -108,29 +186,38 @@ class _ClientContractsScreenState extends State<ClientContractsScreen> {
     );
   }
 
-  void _showReleaseConfirmation(
-      BuildContext context, int contractId, String taskTitle) {
+  void _showConfirmCompletionDialog(BuildContext context, ContractModel contract) {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text("Release Payment"),
+        backgroundColor: _whiteColor,
+        surfaceTintColor: _whiteColor,
+        title: Text(
+          "Confirm Completion",
+          style: TextStyle(color: _primaryBlue, fontWeight: FontWeight.bold),
+        ),
         content: Text(
-          "Release payment for \"$taskTitle\"?\nThis will transfer funds to the freelancer.",
+          "Are you sure the work for \"${contract.taskTitle}\" is complete?\n\n"
+          "This will release KES ${contract.amount} to ${contract.freelancerName}.",
+          style: TextStyle(color: _darkBlue),
         ),
         actions: [
           TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: _darkBlue.withOpacity(0.6),
+            ),
             child: const Text("Cancel"),
             onPressed: () => Navigator.pop(context),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
+              backgroundColor: _greenBlue,
+              foregroundColor: _whiteColor,
             ),
-            child: const Text("Release"),
+            child: const Text("Confirm & Release"),
             onPressed: () async {
               Navigator.pop(context);
-              await _releasePayment(contractId);
+              await _releasePayment(context, contract.contractId);
             },
           )
         ],
@@ -138,43 +225,126 @@ class _ClientContractsScreenState extends State<ClientContractsScreen> {
     );
   }
 
-  Future<void> _releasePayment(int contractId) async {
-    try {
-      final url = "${AppConfig.getBaseUrl()}/api/contracts/release-payment/";
-
-      final response = await http.post(
-        Uri.parse(url),
-        headers: {"Authorization": "Bearer $token"},
-        body: {"contract_id": contractId.toString()},
-      );
-
-      final data = jsonDecode(response.body);
-
-      if (data["status"] == true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Payment released successfully."),
-            backgroundColor: Colors.green,
+  void _showReleaseConfirmation(BuildContext context, ContractModel contract) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: _whiteColor,
+        surfaceTintColor: _whiteColor,
+        title: Text(
+          "Release Payment",
+          style: TextStyle(color: _primaryBlue, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          "Release KES ${contract.amount} for \"${contract.taskTitle}\"?\n\n"
+          "This will transfer funds to ${contract.freelancerName}.\n\n"
+          "⚠️ This action cannot be undone.",
+          style: TextStyle(color: _darkBlue),
+        ),
+        actions: [
+          TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: _darkBlue.withOpacity(0.6),
+            ),
+            child: const Text("Cancel"),
+            onPressed: () => Navigator.pop(context),
           ),
-        );
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _greenBlue,
+              foregroundColor: _whiteColor,
+            ),
+            child: const Text("Release Funds"),
+            onPressed: () async {
+              Navigator.pop(context);
+              await _releasePayment(context, contract.contractId);
+            },
+          )
+        ],
+      ),
+    );
+  }
 
-        Provider.of<ClientContractProvider>(context, listen: false)
-            .fetchEmployerContracts();
-      } else {
-        throw Exception(data["message"]);
-      }
+  // ======================================================
+  // ACTIONS
+  // ======================================================
+  Future<void> _releasePayment(BuildContext context, int contractId) async {
+    try {
+      final provider = Provider.of<ClientContractProvider>(context, listen: false);
+      final result = await provider.releasePayment(contractId);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result["success"] == true 
+              ? "✅ ${result["message"]}" 
+              : "❌ ${result["message"]}"),
+          backgroundColor: result["success"] == true ? _greenBlue : _errorBlue,
+          duration: const Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Error releasing payment: $e"),
-          backgroundColor: Colors.red,
+          content: Text("❌ Error: $e"),
+          backgroundColor: _errorBlue,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
         ),
       );
     }
   }
 
-  Future<void> _navigateToPaymentScreen(
-      BuildContext context, Map<String, dynamic> c) async {
+  Future<void> _generateVerificationCode(BuildContext context, int contractId) async {
+    try {
+      final provider = Provider.of<ClientContractProvider>(context, listen: false);
+      final result = await provider.generateVerificationCode(contractId);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result["success"] == true 
+              ? "✅ Verification code generated" 
+              : "❌ ${result["message"]}"),
+          backgroundColor: result["success"] == true ? _greenBlue : _errorBlue,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      );
+      
+      if (result["success"] == true) {
+        // Show the code in dialog
+        final contract = provider.getContractById(contractId);
+        if (contract != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _showOTPDialog(context, contract);
+          });
+        }
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("❌ Error: $e"),
+          backgroundColor: _errorBlue,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      );
+    }
+  }
+
+  // ======================================================
+  // PAYMENT NAVIGATION - FIXED VERSION
+  // ======================================================
+  Future<void> _navigateToPaymentScreen(BuildContext context, ContractModel contract) async {
     final prefs = await SharedPreferences.getInstance();
     final email = prefs.getString("user_email") ?? "";
 
@@ -183,17 +353,57 @@ class _ClientContractsScreenState extends State<ClientContractsScreen> {
       return;
     }
 
+    // Check if contract has a valid orderId (UUID)
+    if (!contract.hasValidOrderId) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text("❌ Payment setup in progress. Please wait a moment and try again."),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      
+      // Try to refresh contracts to get the orderId
+      await Provider.of<ClientContractProvider>(context, listen: false)
+          .fetchEmployerContracts();
+      return;
+    }
+
+    // Validate UUID format
+    final uuidRegex = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', caseSensitive: false);
+    if (!uuidRegex.hasMatch(contract.orderId!)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("❌ Invalid payment ID. Please contact support. ID: ${contract.orderId}"),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    print("💰 INITIALIZING PAYMENT");
+    print("   Order: ${contract.orderId}");
+    print("   Amount: ${contract.amount}");
+    print("   Email: $email");
+    print("   Freelancer: ${contract.freelancerName}");
+    
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => PaymentScreen(
-          orderId: c['contract_id'].toString(),
-          amount: double.parse(c['amount'].toString()),
+          orderId: contract.orderId!, // Use the UUID order_id
+          amount: contract.amount,
           email: email,
-          freelancerName: c['freelancer_name'] ?? "",
-          serviceDescription: c['task_title'] ?? "",
-          freelancerPhotoUrl: c['freelancer_photo'] ?? "",
-          currency: "KES", freelancerId: '', contractId: '', taskTitle: '', isValidOrderId: false, employerName: '', taskId: '',
+          freelancerName: contract.freelancerName,
+          serviceDescription: contract.taskTitle,
+          freelancerPhotoUrl: contract.freelancerPhoto,
+          currency: "KES",
+          freelancerId: contract.freelancerId.toString(),
+          contractId: contract.contractId.toString(),
+          taskTitle: contract.taskTitle,
+          isValidOrderId: true,
+          employerName: contract.employerName,
+          taskId: contract.taskId.toString(),
         ),
       ),
     );
@@ -205,14 +415,38 @@ class _ClientContractsScreenState extends State<ClientContractsScreen> {
     await showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text("Enter Email"),
-        content: TextField(controller: controller),
+        backgroundColor: _whiteColor,
+        surfaceTintColor: _whiteColor,
+        title: Text(
+          "Enter Email",
+          style: TextStyle(color: _primaryBlue, fontWeight: FontWeight.bold),
+        ),
+        content: TextField(
+          controller: controller,
+          decoration: InputDecoration(
+            hintText: "Enter your email for payment receipts",
+            border: OutlineInputBorder(
+              borderSide: BorderSide(color: _primaryBlue),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderSide: BorderSide(color: _primaryBlue, width: 2),
+            ),
+          ),
+          keyboardType: TextInputType.emailAddress,
+        ),
         actions: [
           TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: _darkBlue.withOpacity(0.6),
+            ),
             child: const Text("Cancel"),
             onPressed: () => Navigator.pop(context),
           ),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _primaryBlue,
+              foregroundColor: _whiteColor,
+            ),
             child: const Text("Save"),
             onPressed: () async {
               final prefs = await SharedPreferences.getInstance();
@@ -225,90 +459,297 @@ class _ClientContractsScreenState extends State<ClientContractsScreen> {
     );
   }
 
-  Widget _buildContractCard(Map<String, dynamic> c) {
-    final contractId = c['contract_id'];
-    final serviceType = c['service_type'] ?? 'remote';
-
+  // ======================================================
+  // CONTRACT CARD WIDGET - WHITE & BLUE THEME
+  // ======================================================
+  Widget _buildContractCard(ContractModel contract) {
     return Card(
-      elevation: 3,
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      elevation: 2,
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: _lightBlue, width: 1),
+      ),
+      color: _whiteColor,
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Task Title
             Text(
-              c['task_title'] ?? "Task",
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              contract.taskTitle,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: _darkBlue,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 8),
+            
+            // Freelancer Info
+            Row(
+              children: [
+                Icon(Icons.person_outline, size: 16, color: _primaryBlue),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    contract.freelancerName,
+                    style: TextStyle(fontSize: 14, color: _darkBlue.withOpacity(0.8)),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 6),
-            Text("Freelancer: ${c['freelancer_name']}"),
-            const SizedBox(height: 6),
-            Text("Amount: KES ${c['amount']}"),
-            const SizedBox(height: 10),
-
+            
+            // Amount
+            Row(
+              children: [
+                Icon(Icons.attach_money, size: 16, color: _primaryBlue),
+                const SizedBox(width: 6),
+                Text(
+                  "KES ${contract.amount.toStringAsFixed(2)}",
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: _darkBlue,
+                  ),
+                ),
+                const Spacer(),
+                // Service Type Badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: contract.isOnSite ? _warningBlue.withOpacity(0.1) : _lightBlue,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: contract.isOnSite ? _warningBlue : _primaryBlue,
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        contract.isOnSite ? Icons.location_on : Icons.computer,
+                        size: 12,
+                        color: contract.isOnSite ? _warningBlue : _primaryBlue,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        contract.isOnSite ? "On-Site" : "Remote",
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: contract.isOnSite ? _warningBlue : _primaryBlue,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            
+            // Status Badge
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: _getStatusColor(c),
+                color: _getStatusColor(contract),
                 borderRadius: BorderRadius.circular(6),
               ),
-              child: Text(
-                _getStatusText(c),
-                style: const TextStyle(color: Colors.white),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _getStatusIcon(contract),
+                    size: 14,
+                    color: _whiteColor,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    _getStatusText(contract),
+                    style: TextStyle(
+                      color: _whiteColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
             ),
-
-            const SizedBox(height: 12),
-
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _primaryBlue,
-                foregroundColor: Colors.white,
+            const SizedBox(height: 16),
+            
+            // Action Button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _getActionButtonColor(contract),
+                  foregroundColor: _whiteColor,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  elevation: 1,
+                ),
+                onPressed: () => _handleContractAction(context, contract),
+                child: Text(
+                  _getActionButtonText(contract),
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
               ),
-              child: Text(_getActionButtonText(c)),
-              onPressed: () {
-                final isPaid = c['is_paid'] == true || c['is_paid'] == 1;
-                final isCompleted =
-                    c['is_completed'] == true || c['is_completed'] == 1;
-
-                if (!isPaid) {
-                  _navigateToPaymentScreen(context, c);
-                } else if (isPaid && !isCompleted) {
-                  if (serviceType == 'on_site') {
-                    _showOTPDialog(context, c['verification_code']);
-                  } else {
-                    _showReleaseConfirmation(
-                        context, contractId, c['task_title']);
-                  }
-                }
-              },
-            )
+            ),
           ],
         ),
       ),
     );
   }
 
+  IconData _getStatusIcon(ContractModel contract) {
+    if (contract.isPaid && contract.isCompleted) return Icons.check_circle;
+    if (!contract.isPaid) return Icons.payment;
+    if (contract.isPaid && !contract.isCompleted) {
+      return contract.isOnSite ? Icons.verified_user : Icons.lock_clock;
+    }
+    return Icons.info;
+  }
+
+  Color _getActionButtonColor(ContractModel contract) {
+    if (!contract.isPaid) return _primaryBlue;
+    if (contract.isPaid && !contract.isCompleted) return _secondaryBlue;
+    return _darkBlue;
+  }
+
+  void _handleContractAction(BuildContext context, ContractModel contract) {
+    if (!contract.isPaid) {
+      _navigateToPaymentScreen(context, contract);
+    } else if (contract.isPaid && !contract.isCompleted) {
+      if (contract.isOnSite) {
+        _showOTPDialog(context, contract);
+      } else {
+        _showReleaseConfirmation(context, contract);
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text("✅ Contract is already completed"),
+          backgroundColor: _greenBlue,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      );
+    }
+  }
+
+  // ======================================================
+  // BUILD METHOD
+  // ======================================================
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<ClientContractProvider>(context);
-
+    
     return Scaffold(
-      backgroundColor: _backgroundColor,
+      backgroundColor: _whiteColor,
       appBar: AppBar(
-        title: const Text("My Contracts"),
+        title: const Text(
+          "My Contracts",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
         backgroundColor: _primaryBlue,
+        elevation: 2,
+        iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh, color: Colors.white),
+            onPressed: () {
+              Provider.of<ClientContractProvider>(context, listen: false)
+                  .fetchEmployerContracts();
+            },
+          ),
+        ],
       ),
-      body: provider.isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : provider.contracts.isEmpty
-              ? const Center(child: Text("No active contracts yet."))
-              : ListView.builder(
-                  itemCount: provider.contracts.length,
-                  itemBuilder: (_, index) =>
-                      _buildContractCard(provider.contracts[index]),
+      body: RefreshIndicator(
+        color: _primaryBlue,
+        backgroundColor: _whiteColor,
+        onRefresh: () async {
+          await Provider.of<ClientContractProvider>(context, listen: false)
+              .fetchEmployerContracts();
+        },
+        child: _buildBody(provider),
+      ),
+    );
+  }
+
+  Widget _buildBody(ClientContractProvider provider) {
+    if (provider.isLoading) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(color: _primaryBlue),
+            const SizedBox(height: 16),
+            Text(
+              "Loading your contracts...",
+              style: TextStyle(color: _darkBlue, fontSize: 16),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    if (provider.contracts.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.assignment, size: 80, color: _lightBlue),
+            const SizedBox(height: 16),
+            Text(
+              "No active contracts yet",
+              style: TextStyle(
+                fontSize: 18,
+                color: _darkBlue,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              child: Text(
+                "Create a task or accept a proposal to get started",
+                style: TextStyle(color: _darkBlue.withOpacity(0.6)),
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _primaryBlue,
+                foregroundColor: _whiteColor,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
+              ),
+              onPressed: () {
+                // TODO: Navigate to create task screen
+              },
+              child: const Text("Create New Task"),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: provider.contracts.length,
+      itemBuilder: (_, index) => _buildContractCard(provider.contracts[index]),
     );
   }
 }

@@ -3,6 +3,8 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.utils.translation import gettext_lazy as _
 from .models import *
 
+if admin.site.is_registered(User):
+    admin.site.unregister(User)
 @admin.register(User)
 class CustomUserAdmin(admin.ModelAdmin):
     list_display = ('user_id', 'name', 'email', 'phoneNo', 'wallet_balance')

@@ -267,21 +267,7 @@ class LoginSerializer(serializers.ModelSerializer):
         model = User
         fields = ['name','password']  
 
-class ProposalSerializer(serializers.ModelSerializer):
-    task_details = TaskSerializer(source='task', read_only=True)
-    freelancer_name = serializers.ReadOnlyField(source='freelancer.username')
-    
-    
-    
 
-    class Meta:
-        model = Proposal
-        fields = [
-            'proposal_id', 'task', 'task_details', 'freelancer', 
-            'freelancer_name', 'cover_letter', 'cover_letter_file', 
-            'submitted_at', 'status', 'estimated_days',
-             
-        ]
 class ContractSerializer(serializers.ModelSerializer):
     task_title = serializers.CharField(source="task.title", read_only=True)
     freelancer_name = serializers.CharField(source="freelancer.get_full_name", read_only=True)
@@ -1515,32 +1501,32 @@ class PaymentVerificationSerializer(serializers.Serializer):
     reference = serializers.CharField(max_length=100)        
     
 class ProposalSerializer(serializers.ModelSerializer):
-    # For read operations (GET) - these fields are read-only
+    # --- READ ONLY FIELDS (GET) ---
     task_id = serializers.IntegerField(source='task.task_id', read_only=True)
     task_title = serializers.CharField(source='task.title', read_only=True)
     freelancer_id = serializers.IntegerField(source='freelancer.user_id', read_only=True)
     freelancer_name = serializers.CharField(source='freelancer.name', read_only=True)
     employer_name = serializers.CharField(source='task.employer.username', read_only=True)
     
+    # CRITICAL FIX: Pull the UUID order_id for the Flutter Payment flow
+    order_id = serializers.SerializerMethodField(read_only=True)
+    
     # MOCK FIELD: Pulls the fixed budget from the Task model 
-    # This satisfies the Flutter frontend without needing a DB column in Proposal
     bid_amount = serializers.ReadOnlyField(source='task.budget')
-
-    # For write operations (POST) - these accept IDs
+    
+    # --- WRITE ONLY FIELDS (POST) ---
     task = serializers.PrimaryKeyRelatedField(
         queryset=Task.objects.all(), 
         write_only=True,
-        help_text="Task ID (not task_id field)"
+        help_text="Task ID"
     )
     
-    # File handling
     cover_letter_file = serializers.FileField(
         required=True,
         write_only=True,
         help_text="PDF cover letter file"
     )
     
-    # For API responses
     cover_letter_file_url = serializers.SerializerMethodField(read_only=True)
     
     class Meta:
@@ -1549,74 +1535,61 @@ class ProposalSerializer(serializers.ModelSerializer):
             'proposal_id', 'task', 'task_id', 'task_title',
             'freelancer_id', 'freelancer_name', 'employer_name',
             'cover_letter_file', 'cover_letter_file_url',
-            'bid_amount',  # Included here as a read-only field
+            'bid_amount', 'order_id', # <--- UUID included here
             'cover_letter', 'status',
             'estimated_days', 'submitted_at'
         ]
         read_only_fields = ['proposal_id', 'submitted_at', 'freelancer']
-    
+
+    def get_order_id(self, obj):
+        """
+        Retrieves the UUID from the Order table.
+        This allows the 'Pay Now' button to work by using the UUID string
+        instead of the integer proposal_id.
+        """
+        # Look for a pending or paid order associated with this specific task
+        order = Order.objects.filter(task=obj.task).first()
+        if order:
+            return str(order.order_id) # Returns the UUID (e.g., 5ec282ed...)
+        return None
+
     def get_cover_letter_file_url(self, obj):
         if obj.cover_letter_file:
             return obj.cover_letter_file.url
         return None
     
-    # REMOVED: validate_bid_amount (Logic no longer needed for fixed prices)
-    
     def validate(self, data):
-        """Custom validation for the entire proposal"""
         task = data.get('task')
         request = self.context.get('request')
         
-        # Check task is open and active
         if task.status != 'open':
-            raise serializers.ValidationError(
-                f"Task '{task.title}' is not open (status: {task.status})"
-            )
+            raise serializers.ValidationError(f"Task '{task.title}' is not open")
         
         if not task.is_active:
-            raise serializers.ValidationError(
-                f"Task '{task.title}' is not active"
-            )
+            raise serializers.ValidationError(f"Task '{task.title}' is not active")
         
         if task.assigned_user is not None:
-            raise serializers.ValidationError(
-                f"Task '{task.title}' is already assigned"
-            )
+            raise serializers.ValidationError(f"Task '{task.title}' is already assigned")
         
-        # Check for duplicate proposal
         if request and request.user:
-            existing = Proposal.objects.filter(
-                task=task, 
-                freelancer=request.user
-            ).exists()
-            
+            existing = Proposal.objects.filter(task=task, freelancer=request.user).exists()
             if existing:
-                raise serializers.ValidationError(
-                    "You have already submitted a proposal for this task"
-                )
+                raise serializers.ValidationError("You have already submitted a proposal")
         
         return data
     
     def create(self, validated_data):
-        """Create proposal with the authenticated user as freelancer"""
         request = self.context.get('request')
-        
-        # Extract file separately
         cover_letter_file = validated_data.pop('cover_letter_file', None)
         
-        # Create proposal (bid_amount is NOT passed here as it's not in the model)
         proposal = Proposal.objects.create(
             **validated_data,
             freelancer=request.user,
             submitted_at=timezone.now()
         )
         
-        
         if cover_letter_file:
-            proposal.cover_letter_file.save(
-                cover_letter_file.name,
-                cover_letter_file
-            )
+            proposal.cover_letter_file.save(cover_letter_file.name, cover_letter_file)
             proposal.save()
         
         return proposal

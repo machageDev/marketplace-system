@@ -559,10 +559,27 @@ class Proposal(models.Model):
         choices=[
             ('pending', 'Pending'),
             ('accepted', 'Accepted'),
-            ('rejected', 'Rejected')
+            ('rejected', 'Rejected'),
+            ('paid', 'Paid'),
+            ('completed', 'Completed'),
         ], 
         default='pending'
     )
+    
+    @property
+    def work_type(self):
+        """Get work_type from associated task"""
+        return self.task.service_type if self.task else 'remote'
+    
+    @property
+    def is_onsite(self):
+        """Check if this proposal is for an onsite task"""
+        return self.work_type == 'on_site'
+    
+    @property
+    def is_remote(self):
+        """Check if this proposal is for a remote task"""
+        return self.work_type == 'remote'
 
     def __str__(self):
         return f"{self.freelancer.name} -> {self.task.title}"
@@ -593,11 +610,16 @@ class Contract(models.Model):
     # Status choices
     STATUS_CHOICES = [
         ('pending', 'Pending'),
+        ('pending_verification', 'Pending Verification'),  # For onsite tasks awaiting OTP
         ('active', 'Active'),
         ('completed', 'Completed'),
         ('cancelled', 'Cancelled'),
     ]
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    
+    # OTP field for onsite payment verification
+    verification_otp = models.CharField(max_length=6, blank=True, null=True, help_text="6-digit OTP for onsite payment verification")
+    otp_generated_at = models.DateTimeField(null=True, blank=True, help_text="When OTP was generated")
 
     def __str__(self):
         return f"Contract for {self.task.title}"
@@ -1123,6 +1145,12 @@ class Freelancer(models.Model):
         verbose_name = "Freelancer"
         verbose_name_plural = "Freelancers"
         ordering = ['user__name']
+import uuid
+
+def generate_order_id():
+    """Generate a string UUID for order_id"""
+    return str(uuid.uuid4())
+
 class Order(models.Model):
     ORDER_STATUS = [
         ('pending', 'Pending'),
@@ -1131,11 +1159,16 @@ class Order(models.Model):
         ('cancelled', 'Cancelled'),
     ]
 
-    order_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    # Use CharField with function reference, not lambda
+    order_id = models.CharField(
+        max_length=36,  # UUIDs are 32 chars + 4 hyphens = 36 chars max
+        primary_key=True,
+        default=generate_order_id,  # Use function reference
+        editable=False
+    )
+    
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     currency = models.CharField(max_length=10, default='KSH')
-
-    # ✅ THIS FIELD WAS MISSING
     employer = models.ForeignKey(
         Employer,
         on_delete=models.CASCADE,
@@ -1144,7 +1177,6 @@ class Order(models.Model):
         related_name='orders'
     )
     task = models.ForeignKey(Task, on_delete=models.SET_NULL, null=True, blank=True, related_name='orders')
-
     freelancer = models.ForeignKey(
         Freelancer,
         on_delete=models.SET_NULL,
@@ -1152,7 +1184,6 @@ class Order(models.Model):
         blank=True,
         related_name='orders'
     )
-
     status = models.CharField(max_length=20, choices=ORDER_STATUS, default='pending')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -1195,5 +1226,10 @@ class PaymentTransaction(models.Model):
     status = models.CharField(max_length=20, choices=TRANSACTION_STATUS, default='pending')
     created_at = models.DateTimeField(auto_now_add=True)
     
+    # OTP for onsite payment verification
+    verification_otp = models.CharField(max_length=6, blank=True, null=True, help_text="6-digit OTP for onsite payment verification")
+    otp_generated_at = models.DateTimeField(null=True, blank=True, help_text="When OTP was generated")
+    
     def __str__(self):
         return f"TX-{self.paystack_reference}"
+ 

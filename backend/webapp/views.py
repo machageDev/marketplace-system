@@ -1,7 +1,9 @@
 from decimal import Decimal
 import hashlib
 import hmac
+from itertools import count
 import secrets
+import string
 from django.conf import settings
 from django.http import Http404, JsonResponse
 import json
@@ -47,7 +49,7 @@ from .models import Task, Proposal
 from rest_framework.parsers import MultiPartParser, FormParser
 from django_ratelimit.decorators import ratelimit
 from webapp import models
-
+from django.db import transaction as django_transaction
 @csrf_exempt
 @api_view(['GET', 'POST', 'PUT'])
 @authentication_classes([CustomTokenAuthentication])
@@ -1858,44 +1860,294 @@ def payment_order_details(request, order_id):
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def verify_payment_api(request, reference):
-
+    """
+    Verify payment with Paystack and update all related records atomically.
+    CRITICAL: Do not remove Paystack Split Payment logic or subaccount parameters.
+    """
     try:
+        # 1. Verify with Paystack API
         paystack = PaystackService()
         verification = paystack.verify_transaction(reference)
         
-        if verification and verification.get('status'):
-            transaction_data = verification['data']
+        if not verification or not verification.get('status'):
+            return Response({
+                'status': False,
+                'message': 'Paystack verification failed',
+                'data': {
+                    'payment_status': 'failed',
+                    'reference': reference
+                }
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        transaction_data = verification['data']
+        
+        # 2. Use atomic transaction to ensure all updates succeed or fail together
+        with transaction.atomic():
+            try:
+                # Lock the transaction row to prevent double-processing
+                txn = Transaction.objects.select_for_update().get(paystack_reference=reference)
+            except Transaction.DoesNotExist:
+                return Response({
+                    'status': False,
+                    'message': 'Transaction not found'
+                }, status=status.HTTP_404_NOT_FOUND)
             
-            # Find transaction
-            transaction = Transaction.objects.get(paystack_reference=reference)
+            # Check if already processed
+            if txn.status == 'completed':
+                return Response({
+                    'status': True,
+                    'message': 'Payment already verified',
+                    'data': {
+                        'payment_status': 'success',
+                        'reference': reference
+                    }
+                })
             
             if transaction_data['status'] == 'success':
-                # Update transaction status
-                transaction.status = 'success'
-                transaction.save()
+                print(f"\n{'='*60}")
+                print(f"✅ PAYSTACK PAYMENT SUCCESS - Reference: {reference}")
+                print(f"{'='*60}")
                 
-                # Update order status
-                order = transaction.order
+                # Update Transaction status (using 'completed' to match model choices)
+                txn.status = 'completed'
+                txn.save()
+                print(f"✅ Transaction {txn.transaction_id} status updated to: completed")
+                
+                # Update Order status
+                order = txn.order
+                if not order:
+                    print(f"⚠️ ERROR: Order not found for transaction {txn.transaction_id}")
+                    return Response({
+                        'status': False,
+                        'message': 'Order not found for this transaction'
+                    }, status=status.HTTP_404_NOT_FOUND)
+                
+                print(f"✅ Found Order: {order.order_id}")
                 order.status = 'paid'
                 order.save()
+                print(f"✅ Order {order.order_id} status updated to: paid")
+                
+                # Update Task status
+                if not order.task:
+                    print(f"⚠️ WARNING: Task not found for order {order.order_id}")
+                else:
+                    task = order.task
+                    print(f"✅ Found Task: {task.task_id} - {task.title}")
+                    
+                    # Check if this is an onsite task
+                    is_onsite = task.service_type == 'on_site'
+                    print(f"✅ Task service_type: {task.service_type} (is_onsite: {is_onsite})")
+                    
+                    # Update Task status to 'in_progress' for all tasks
+                    old_task_status = task.status
+                    task.status = 'in_progress'
+                    task.save()
+                    print(f"✅ Task {task.task_id} status updated: {old_task_status} -> in_progress")
+                    
+                    # Update Proposal status to 'paid'
+                    # Find the proposal associated with this task and freelancer
+                    if order.freelancer:
+                        freelancer_user = order.freelancer.user if order.freelancer else None
+                        print(f"✅ Order has freelancer: {order.freelancer}")
+                        print(f"✅ Freelancer user: {freelancer_user}")
+                        
+                        if freelancer_user:
+                            # Try to find proposal with status 'accepted' first, then 'paid' as fallback
+                            from django.db.models import Q
+                            proposal = Proposal.objects.filter(
+                                task=task,
+                                freelancer=freelancer_user
+                            ).filter(
+                                Q(status='accepted') | Q(status='paid')
+                            ).first()
+                            
+                            if proposal:
+                                old_proposal_status = proposal.status
+                                proposal.status = 'paid'
+                                proposal.save()
+                                print(f"✅ Proposal {proposal.proposal_id} status updated: {old_proposal_status} -> paid")
+                                print(f"   Task: {proposal.task.title}, Freelancer: {proposal.freelancer.name}")
+                            else:
+                                # Try without status filter
+                                all_proposals = Proposal.objects.filter(
+                                    task=task,
+                                    freelancer=freelancer_user
+                                )
+                                print(f"⚠️ No proposal found with accepted/paid status. Found {all_proposals.count()} proposals:")
+                                for p in all_proposals:
+                                    print(f"   - Proposal {p.proposal_id}: status={p.status}, freelancer={p.freelancer.name}")
+                                
+                                # Update the first proposal if any exist
+                                first_proposal = all_proposals.first()
+                                if first_proposal:
+                                    old_proposal_status = first_proposal.status
+                                    first_proposal.status = 'paid'
+                                    first_proposal.save()
+                                    print(f"✅ Proposal {first_proposal.proposal_id} status updated: {old_proposal_status} -> paid (fallback)")
+                        else:
+                            print(f"⚠️ WARNING: Freelancer user is None for order {order.order_id}")
+                    else:
+                        print(f"⚠️ WARNING: Order {order.order_id} has no freelancer assigned")
+                    
+                    # Update Contract
+                    try:
+                        contract = Contract.objects.get(task=task)
+                        print(f"✅ Found Contract: {contract.contract_id}")
+                        
+                        # Verify freelancer matches if we have it
+                        if order.freelancer and order.freelancer.user:
+                            contract_freelancer_match = contract.freelancer == order.freelancer.user
+                            print(f"✅ Contract freelancer match: {contract_freelancer_match}")
+                            print(f"   Contract freelancer: {contract.freelancer.name if contract.freelancer else 'None'}")
+                            print(f"   Order freelancer user: {order.freelancer.user.name if order.freelancer.user else 'None'}")
+                            
+                            if contract_freelancer_match or not contract.freelancer:
+                                if is_onsite:
+                                    # Generate 6-digit OTP for onsite tasks
+                                    import random
+                                    import string
+                                    otp = ''.join(random.choices(string.digits, k=6))
+                                    
+                                    # Store OTP in both Contract and PaymentTransaction
+                                    contract.verification_otp = otp
+                                    contract.otp_generated_at = timezone.now()
+                                    old_contract_status = contract.status
+                                    contract.status = 'pending_verification'  # Awaiting OTP verification
+                                    contract.is_paid = True  # Payment received but held in escrow
+                                    contract.is_active = False  # Not active until OTP verified
+                                    contract.payment_date = txn.created_at
+                                    contract.save()
+                                    print(f"✅ Contract {contract.contract_id} status updated: {old_contract_status} -> pending_verification")
+                                    print(f"✅ Contract {contract.contract_id} is_paid set to: True")
+                                    
+                                    # Also store in PaymentTransaction for client display
+                                    try:
+                                        payment_txn = PaymentTransaction.objects.filter(
+                                            order=order,
+                                            paystack_reference=reference
+                                        ).first()
+                                        if payment_txn:
+                                            payment_txn.verification_otp = otp
+                                            payment_txn.otp_generated_at = timezone.now()
+                                            payment_txn.save()
+                                            print(f"✅ PaymentTransaction OTP updated")
+                                    except Exception as e:
+                                        print(f"⚠️ Error updating PaymentTransaction OTP: {e}")
+                                    
+                                    # Update task payment status to escrowed
+                                    task.payment_status = 'escrowed'
+                                    task.amount_held_in_escrow = order.amount
+                                    task.save()
+                                    print(f"✅ Task {task.task_id} payment_status updated to: escrowed")
+                                    print(f"✅ Generated OTP {otp} for onsite task {task.task_id}")
+                                else:
+                                    # Remote task - activate immediately
+                                    old_contract_status = contract.status
+                                    contract.status = 'active'
+                                    contract.is_paid = True
+                                    contract.is_active = True
+                                    contract.payment_date = txn.created_at
+                                    contract.save()
+                                    print(f"✅ Contract {contract.contract_id} status updated: {old_contract_status} -> active")
+                                    print(f"✅ Contract {contract.contract_id} is_paid set to: True")
+                            else:
+                                print(f"⚠️ Contract freelancer mismatch - skipping contract update")
+                        else:
+                            # If no freelancer info, still update based on task type
+                            if is_onsite:
+                                # Generate OTP
+                                import random
+                                import string
+                                otp = ''.join(random.choices(string.digits, k=6))
+                                contract.verification_otp = otp
+                                contract.otp_generated_at = timezone.now()
+                                contract.status = 'pending_verification'
+                                contract.is_paid = True
+                                contract.is_active = False
+                                contract.payment_date = txn.created_at
+                                contract.save()
+                                print(f"✅ Contract {contract.contract_id} updated for onsite task (no freelancer match)")
+                            else:
+                                old_contract_status = contract.status
+                                contract.status = 'active'
+                                contract.is_paid = True
+                                contract.is_active = True
+                                contract.payment_date = txn.created_at
+                                contract.save()
+                                print(f"✅ Contract {contract.contract_id} status updated: {old_contract_status} -> active (no freelancer match)")
+                    except Contract.DoesNotExist:
+                        # Contract might not exist yet, log but don't fail
+                        print(f"⚠️ Contract not found for task {task.task_id}")
+                    except Contract.MultipleObjectsReturned:
+                        # Shouldn't happen with OneToOne, but handle it
+                        contracts = Contract.objects.filter(task=task)
+                        if order.freelancer and order.freelancer.user:
+                            contracts = contracts.filter(freelancer=order.freelancer.user)
+                        contract = contracts.first()
+                        if contract:
+                            if is_onsite:
+                                import random
+                                import string
+                                otp = ''.join(random.choices(string.digits, k=6))
+                                contract.verification_otp = otp
+                                contract.otp_generated_at = timezone.now()
+                                contract.status = 'pending_verification'
+                                contract.is_paid = True
+                                contract.is_active = False
+                                contract.payment_date = txn.created_at
+                                contract.save()
+                                print(f"✅ Contract {contract.contract_id} updated (multiple contracts found)")
+                            else:
+                                old_contract_status = contract.status
+                                contract.status = 'active'
+                                contract.is_paid = True
+                                contract.is_active = True
+                                contract.payment_date = txn.created_at
+                                contract.save()
+                                print(f"✅ Contract {contract.contract_id} status updated: {old_contract_status} -> active (multiple contracts found)")
+                        else:
+                            print(f"⚠️ No matching contract found in multiple contracts")
+                
+                print(f"\n{'='*60}")
+                print(f"✅ PAYMENT VERIFICATION COMPLETE")
+                print(f"{'='*60}\n")
                 
                 # Serialize response data
-                transaction_serializer = TransactionSerializer(transaction)
-                order_serializer = OrderSerializer(order)
+                transaction_serializer = TransactionSerializer(txn)
+                order_serializer = OrderSerializer(order) if order else None
+                
+                # Get OTP and contract info if onsite task
+                response_data = {
+                    'transaction': transaction_serializer.data,
+                    'order': order_serializer.data if order_serializer else None,
+                    'payment_status': 'success'
+                }
+                
+                # Include OTP for onsite tasks
+                if order and order.task and order.task.service_type == 'on_site':
+                    try:
+                        contract = Contract.objects.get(task=order.task)
+                        if contract.verification_otp:
+                            response_data['verification_otp'] = contract.verification_otp
+                            response_data['is_onsite'] = True
+                            response_data['message'] = 'Payment verified. Please provide this OTP to the freelancer in person.'
+                        else:
+                            response_data['is_onsite'] = True
+                            response_data['message'] = 'Payment verified for onsite task.'
+                    except Contract.DoesNotExist:
+                        pass
+                else:
+                    response_data['is_onsite'] = False
+                    response_data['message'] = 'Payment verified successfully. All records updated.'
                 
                 return Response({
                     'status': True,
-                    'message': 'Payment verified successfully',
-                    'data': {
-                        'transaction': transaction_serializer.data,
-                        'order': order_serializer.data,
-                        'payment_status': 'success'
-                    }
+                    **response_data
                 })
             else:
                 # Payment failed
-                transaction.status = 'failed'
-                transaction.save()
+                txn.status = 'failed'
+                txn.save()
                 
                 return Response({
                     'status': False,
@@ -1905,22 +2157,10 @@ def verify_payment_api(request, reference):
                         'reference': reference
                     }
                 })
-        else:
-            return Response({
-                'status': False,
-                'message': 'Payment verification failed',
-                'data': {
-                    'payment_status': 'failed',
-                    'reference': reference
-                }
-            })
             
-    except Transaction.DoesNotExist:
-        return Response({
-            'status': False,
-            'message': 'Transaction not found'
-        }, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return Response({
             'status': False,
             'message': f'Error: {str(e)}'
@@ -2612,77 +2852,93 @@ def recommended_jobs(request):
 @permission_classes([IsAuthenticated])
 def accept_proposal(request):
     try:
-        with transaction.atomic():  # ensures DB consistency
+        with transaction.atomic():
+            # 1. Get Employer
+            employer = request.user
+            print(f"✅ DEBUG: Using employer: {employer.username}, ID: {employer.employer_id}")
 
-            # 1️⃣ Get Employer
-            try:
-                employer = Employer.objects.get(employer_id=request.user.employer_id)
-            except Employer.DoesNotExist:
-                return Response({"success": False, "error": "Employer profile not found"}, status=404)
-
-            # 2️⃣ Get Proposal
+            # 2. Get Proposal & Task
             proposal_id = request.data.get('proposal_id')
             proposal = get_object_or_404(Proposal, pk=proposal_id)
-            task = proposal.task
+            task = proposal.task 
 
-            # 3️⃣ Validate Task
             if task.status != 'open':
                 return Response({"success": False, "error": f"Task is {task.status}, not open"}, status=400)
 
-            # 4️⃣ Update Proposal & Task
+            # 3. Get or Create Freelancer Profile (FIXED with get_or_create)
+            freelancer_profile, created = Freelancer.objects.get_or_create(
+                user=proposal.freelancer,
+                defaults={
+                    'business_name': f"{proposal.freelancer.name} Freelancing",
+                    'is_verified': False,
+                    'is_paystack_setup': False,
+                    'total_earnings': 0.00,
+                    'pending_payout': 0.00
+                }
+            )
+            
+            if created:
+                print(f"✅ DEBUG: Created new freelancer profile for {proposal.freelancer.name}")
+            else:
+                print(f"✅ DEBUG: Found existing freelancer profile for {proposal.freelancer.name}")
+
+            # 4. Status Updates
             proposal.status = 'accepted'
             proposal.save()
-            Proposal.objects.filter(task=task).exclude(pk=proposal.pk).update(status='rejected')
+            print(f"✅ DEBUG: Proposal {proposal_id} marked as accepted")
+            
+            # Reject other proposals
+            rejected_count = Proposal.objects.filter(task=task).exclude(pk=proposal.pk).update(status='rejected')
+            print(f"✅ DEBUG: Rejected {rejected_count} other proposals")
+            
+            # Assign user to task
             task.assigned_user = proposal.freelancer
             task.status = 'awaiting_payment'
             task.save()
+            print(f"✅ DEBUG: Task {task.task_id} assigned to {proposal.freelancer.name}")
 
-            # 5️⃣ Get/Create Freelancer object
-            freelancer_obj, _ = Freelancer.objects.get_or_create(user=proposal.freelancer)
-
-            # 6️⃣ Create Contract
-            otp_code = str(random.randint(1000, 9999)) if task.service_type == 'on_site' else None
+            # 5. Create Contract
             contract = Contract.objects.create(
                 task=task,
                 freelancer=proposal.freelancer,
                 employer=employer,
                 status='pending',
-                completion_code=otp_code,
                 start_date=timezone.now()
             )
+            print(f"✅ DEBUG: Created contract ID: {contract.contract_id}")
 
-            # 7️⃣ Create/Get Order
-            amount_cents = task.budget or Decimal('0.00')
-            order, _ = Order.objects.get_or_create(
+            # 6. Create Order
+            order, created = Order.objects.get_or_create(
                 task=task,
                 employer=employer,
-                freelancer=freelancer_obj,
-                status='pending',
-                defaults={'order_id': uuid.uuid4(), 'amount': Decimal(amount_cents), 'currency': 'KSH'}
+                freelancer=freelancer_profile,
+                defaults={
+                    'order_id': uuid.uuid4(), # Pure UUID object
+                    'amount': Decimal(str(task.budget or 0)),
+                    'currency': 'KSH',
+                    'status': 'pending'
+                }
             )
+            print(f"✅ DEBUG: {'Created' if created else 'Found existing'} order: {order.order_id}")
 
-            # ✅ Return ONLY data for Flutter PaymentScreen - NO CHECKOUT URL
+            # 7. Return payload for Flutter
             return Response({
                 "success": True,
-                "order_id": str(order.order_id),
+                "order_id": str(order.order_id), # Send as string to Flutter
                 "amount": float(order.amount),
                 "contract_id": contract.contract_id,
                 "task_title": task.title,
-                "employer_name": employer.username,
-                "task_type": task.service_type,
-                "freelancer_name": proposal.freelancer.name,
-                "freelancer_id": proposal.freelancer.user_id,
-                "proposal_id": proposal.proposal_id,
-                "task_id": task.task_id,
-                "employer_email": employer.contact_email,
+                "contact_email": employer.contact_email,
+                "freelancer_name": freelancer_profile.name,
                 "currency": "KSH",
-                "requires_payment": True
+                "requires_payment": True,
+                "message": f"Proposal accepted! Order {order.order_id} created."
             })
 
     except Exception as e:
+        import traceback
         traceback.print_exc()
         return Response({"success": False, "error": str(e)}, status=500)
-
 @api_view(['POST'])
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -2741,6 +2997,7 @@ def freelancer_contracts(request):
                     'description': contract.task.description,
                     'budget': float(contract.task.budget) if contract.task.budget else None,
                     'deadline': contract.task.deadline.isoformat() if contract.task.deadline else None,
+                    'status': contract.task.status,  # Include task status
                 },
                 'employer': {
                     'id': contract.employer.employer_id,
@@ -2754,7 +3011,8 @@ def freelancer_contracts(request):
                 'freelancer_accepted': contract.freelancer_accepted,
                 'is_active': contract.is_active,
                 'is_fully_accepted': contract.is_fully_accepted,
-                'status': 'active' if contract.is_active else 'pending',
+                'is_paid': contract.is_paid,  # Include is_paid field
+                'status': contract.status,  # Use actual contract status field
             }
             data.append(contract_data)
         
@@ -2837,14 +3095,17 @@ def employer_mark_contract_completed(request, contract_id):
         return Response({
             'error': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)    
-# Add this to your views.py file
+
+
+from rest_framework import status  
+
 @api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def employer_contracts(request):
     """
     GET /api/employer/contracts/
-    Returns ALL contracts for the employer (not just pending completions)
+    Returns ALL contracts for the employer with their order IDs
     """
     try:
         print(f"\n{'='*60}")
@@ -2852,7 +3113,6 @@ def employer_contracts(request):
         print(f"{'='*60}")
         print(f"Employer: {request.user.username}")
         
-        # Get ALL contracts where this employer is involved
         contracts = Contract.objects.filter(
             employer=request.user
         ).select_related(
@@ -2864,37 +3124,50 @@ def employer_contracts(request):
         
         contracts_data = []
         for contract in contracts:
-            # Get freelancer name
-            freelancer_name = contract.freelancer.name if contract.freelancer else 'Unknown'
+            # Find the Order for this contract
+            order_id = None
+            order_status = 'not_found'
+            try:
+                # Find order by task and employer
+                order = Order.objects.filter(
+                    task=contract.task,
+                    employer=contract.employer
+                ).first()
+                if order:
+                    order_id = str(order.order_id)  # Convert UUID to string
+                    order_status = order.status
+                    print(f"✅ Found order {order_id} for contract {contract.contract_id}")
+                else:
+                    print(f"⚠️ No order found for contract {contract.contract_id}")
+            except Exception as e:
+                print(f"⚠️ Error finding order for contract {contract.contract_id}: {e}")
             
-            # Determine contract status
-            status = 'active'
-            if contract.is_completed:
-                status = 'completed'
-            elif not contract.is_active:
-                status = 'pending'
-            
-            # Determine if contract can be marked as completed
-            # A contract can be completed if:
-            # 1. It's paid AND not completed, OR
-            # 2. It's active and both parties accepted (for testing/demo)
-            can_complete = (contract.is_paid and not contract.is_completed) or (
-                contract.is_active and 
-                contract.employer_accepted and 
-                contract.freelancer_accepted
-            )
+            # Determine status text
+            status_text = 'Active'
+            if contract.is_completed and contract.is_paid:
+                status_text = 'Completed & Paid'
+            elif contract.is_paid and not contract.is_completed:
+                if contract.task and contract.task.service_type == 'on_site':
+                    status_text = 'Awaiting OTP Verification'
+                else:
+                    status_text = 'In Escrow - Pending Release'
+            elif not contract.is_paid:
+                status_text = 'Awaiting Payment'
             
             contract_data = {
                 'contract_id': contract.contract_id,
+                'order_id': order_id,  # UUID for payments
+                'order_status': order_status,  # Order status
                 'task_id': contract.task.task_id if contract.task else None,
                 'task_title': contract.task.title if contract.task else 'Unknown Task',
+                'task_description': contract.task.description if contract.task else '',
+                'task_category': contract.task.category if contract.task else 'other',
                 'freelancer_id': contract.freelancer.user_id if contract.freelancer else None,
-                'freelancer_name': freelancer_name,
+                'freelancer_name': contract.freelancer.name if contract.freelancer else 'Unknown',
                 'freelancer_email': contract.freelancer.email if contract.freelancer else '',
-                'freelancer_photo': None,  # Add if you have profile pictures
                 'amount': float(contract.task.budget) if contract.task and contract.task.budget else 0.0,
-                'status': status,
-                'contract_status': contract.status if hasattr(contract, 'status') else status,
+                'status': status_text,
+                'service_type': contract.task.service_type if contract.task else 'remote',
                 'employer_accepted': contract.employer_accepted,
                 'freelancer_accepted': contract.freelancer_accepted,
                 'is_active': contract.is_active,
@@ -2902,14 +3175,21 @@ def employer_contracts(request):
                 'is_paid': contract.is_paid,
                 'start_date': contract.start_date.strftime('%Y-%m-%d') if contract.start_date else None,
                 'end_date': contract.end_date.strftime('%Y-%m-%d') if contract.end_date else None,
-                'created_date': contract.start_date.strftime('%Y-%m-%d %H:%M:%S') if contract.start_date else None,
-                'can_complete': can_complete,
-                'requires_payment': not contract.is_paid and contract.is_active,
+                'payment_date': contract.payment_date.strftime('%Y-%m-%d %H:%M:%S') if contract.payment_date else None,
+                'completed_date': contract.completed_date.strftime('%Y-%m-%d %H:%M:%S') if contract.completed_date else None,
+                'verification_code': contract.completion_code,  # For on-site tasks
+                'location_address': contract.task.location_address if contract.task else None,
+                'deadline': contract.task.deadline.strftime('%Y-%m-%d %H:%M') if contract.task and contract.task.deadline else None,
             }
             contracts_data.append(contract_data)
+            
+            print(f"  Contract {contract.contract_id}: {contract.task.title if contract.task else 'No task'} | "
+                  f"Service: {contract.task.service_type if contract.task else 'remote'} | "
+                  f"Paid: {contract.is_paid} | Completed: {contract.is_completed} | "
+                  f"Order ID: {order_id} | Order Status: {order_status}")
         
         return Response({
-            'success': True,
+            'status': True,
             'count': len(contracts_data),
             'contracts': contracts_data,
             'message': f'Found {len(contracts_data)} contracts'
@@ -2917,10 +3197,13 @@ def employer_contracts(request):
         
     except Exception as e:
         print(f"ERROR in employer_contracts: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return Response({
+            'status': False,
             'error': f'Failed to fetch contracts: {str(e)}'
-        }, status=500)
-                        
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 @api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -3002,6 +3285,325 @@ def employer_pending_completions(request):
     except Exception as e:
         print(f"ERROR: {str(e)}")
         return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def release_payment(request):
+    """
+    POST /api/contracts/release-payment/
+    Release payment to freelancer for a completed contract
+    """
+    try:
+        print(f"\n{'='*60}")
+        print("RELEASE PAYMENT API CALLED")
+        print(f"{'='*60}")
+        
+        contract_id = request.data.get('contract_id')
+        if not contract_id:
+            return Response({
+                'status': False,
+                'message': 'contract_id is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        print(f"Releasing payment for contract: {contract_id}")
+        
+        # Get the contract
+        try:
+            contract = Contract.objects.get(
+                contract_id=contract_id,
+                employer=request.user
+            )
+        except Contract.DoesNotExist:
+            return Response({
+                'status': False,
+                'message': 'Contract not found or you do not have permission'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if contract is paid
+        if not contract.is_paid:
+            return Response({
+                'status': False,
+                'message': 'Contract is not paid yet. Please pay into escrow first.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if already completed
+        if contract.is_completed:
+            return Response({
+                'status': False,
+                'message': 'Payment has already been released for this contract.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if task exists
+        if not contract.task:
+            return Response({
+                'status': False,
+                'message': 'Associated task not found'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Start database transaction
+        with transaction.atomic():
+            # Mark contract as completed
+            contract.is_completed = True
+            contract.completed_date = timezone.now()
+            contract.status = 'completed'
+            contract.save()
+            
+            # Update task status
+            task = contract.task
+            task.status = 'completed'
+            task.payment_status = 'released'
+            task.save()
+            
+            # Get freelancer and update their wallet
+            freelancer = contract.freelancer
+            if freelancer:
+                amount = task.budget if task.budget else 0
+                
+                # Update freelancer's wallet balance
+                freelancer.wallet_balance += amount
+                freelancer.save()
+                
+                # Update freelancer profile earnings if exists
+                try:
+                    freelancer_profile = Freelancer.objects.get(user=freelancer)
+                    freelancer_profile.total_earnings += amount
+                    freelancer_profile.save()
+                except Freelancer.DoesNotExist:
+                    pass
+                
+                # Update order status if exists
+                try:
+                    order = Order.objects.filter(
+                        task=task,
+                        employer=contract.employer
+                    ).first()
+                    if order:
+                        order.status = 'completed'
+                        order.save()
+                except Exception as e:
+                    print(f"⚠️ Error updating order status: {e}")
+                
+                print(f"✅ Payment of {amount} released to freelancer: {freelancer.name}")
+                
+                return Response({
+                    'status': True,
+                    'success': True,
+                    'message': f'Payment of KES {amount} released to {freelancer.name}',
+                    'amount': float(amount),
+                    'freelancer_name': freelancer.name,
+                    'contract_id': contract.contract_id,
+                    'completed_date': contract.completed_date.strftime('%Y-%m-%d %H:%M:%S')
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'status': False,
+                    'success': False,
+                    'message': 'Freelancer not found for this contract'
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+    except Exception as e:
+        print(f"❌ Error in release_payment: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return Response({
+            'status': False,
+            'success': False,
+            'message': f'Failed to release payment: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+@api_view(['POST'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+# Note the added contract_id=None to catch URL parameters safely
+def generate_verification_code(request, contract_id=None):
+    """
+    POST /api/contracts/generate-verification-code/
+    OR POST /api/contracts/<id>/generate-verification-code/
+    """
+    try:
+        print(f"\n{'='*60}")
+        print("GENERATE VERIFICATION CODE")
+        print(f"{'='*60}")
+        
+        # 1. Get ID from URL or from request body
+        final_contract_id = contract_id or request.data.get('contract_id')
+        
+        if not final_contract_id:
+            return Response({
+                'status': False,
+                'message': 'contract_id is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        print(f"Generating code for contract: {final_contract_id}")
+        
+        # 2. Get the contract (Secured by employer=request.user)
+        try:
+            contract = Contract.objects.get(
+                contract_id=final_contract_id,
+                employer=request.user
+            )
+        except (Contract.DoesNotExist, ValueError):
+            return Response({
+                'status': False,
+                'message': 'Contract not found or unauthorized'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # 3. Business Logic Validations
+        if not contract.task or contract.task.service_type != 'on_site':
+            return Response({
+                'status': False,
+                'message': 'Only on-site tasks require verification codes'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not contract.is_paid:
+            return Response({
+                'status': False,
+                'message': 'Contract must be paid before generating verification code'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if contract.is_completed:
+            return Response({
+                'status': False,
+                'message': 'Contract is already completed'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 4. Generate 6-digit code
+        code = ''.join(random.choices('0123456789', k=6))
+        
+        # 5. Save to contract model
+        contract.completion_code = code
+        contract.save()
+        
+        print(f"✅ Generated verification code: {code} for contract {final_contract_id}")
+        
+        return Response({
+            'status': True,
+            'success': True,
+            'message': 'Verification code generated',
+            'verification_code': code,
+            'contract_id': final_contract_id,
+            'task_title': contract.task.title if contract.task else 'Unknown Task'
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return Response({
+            'status': False,
+            'message': f'Failed to generate code: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def verify_on_site_completion(request, contract_id):
+    """
+    POST /api/contracts/<int:contract_id>/verify-otp/
+    Verify OTP and mark on-site contract as completed
+    """
+    try:
+        print(f"\n{'='*60}")
+        print(f"VERIFY ON-SITE COMPLETION FOR CONTRACT {contract_id}")
+        print(f"{'='*60}")
+        
+        verification_code = request.data.get('verification_code')
+        if not verification_code:
+            return Response({
+                'status': False,
+                'success': False,
+                'message': 'verification_code is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get the contract
+        try:
+            contract = Contract.objects.get(
+                contract_id=contract_id,
+                employer=request.user
+            )
+        except Contract.DoesNotExist:
+            return Response({
+                'status': False,
+                'success': False,
+                'message': 'Contract not found or not an on-site task'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if it's an on-site task
+        if not contract.task or contract.task.service_type != 'on_site':
+            return Response({
+                'status': False,
+                'success': False,
+                'message': 'Only on-site tasks require verification'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if code matches
+        if not contract.completion_code or str(contract.completion_code) != str(verification_code):
+            return Response({
+                'status': False,
+                'success': False,
+                'message': 'Invalid verification code'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Mark as completed
+        with transaction.atomic():
+            contract.is_completed = True
+            contract.completed_date = timezone.now()
+            contract.status = 'completed'
+            contract.save()
+            
+            # Update task
+            task = contract.task
+            task.status = 'completed'
+            task.payment_status = 'released'
+            task.save()
+            
+            # Release payment to freelancer
+            freelancer = contract.freelancer
+            amount = task.budget if task.budget else 0
+            
+            if freelancer:
+                freelancer.wallet_balance += amount
+                freelancer.save()
+                
+                # Update freelancer profile
+                try:
+                    freelancer_profile = Freelancer.objects.get(user=freelancer)
+                    freelancer_profile.total_earnings += amount
+                    freelancer_profile.save()
+                except Freelancer.DoesNotExist:
+                    pass
+                
+                # Update order status
+                try:
+                    order = Order.objects.filter(
+                        task=task,
+                        employer=contract.employer
+                    ).first()
+                    if order:
+                        order.status = 'completed'
+                        order.save()
+                except Exception as e:
+                    print(f"⚠️ Error updating order status: {e}")
+            
+            print(f"✅ On-site contract {contract_id} verified and completed")
+            
+            return Response({
+                'status': True,
+                'success': True,
+                'message': f'Contract completed! Payment of KES {amount} released to {freelancer.name if freelancer else "freelancer"}',
+                'contract_id': contract_id,
+                'completed': True
+            }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        print(f"❌ Error in verify_on_site_completion: {str(e)}")
+        return Response({
+            'status': False,
+            'success': False,
+            'message': f'Failed to verify completion: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)    
+    
 @api_view(['POST'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -3853,154 +4455,54 @@ def order_detail(request, order_id):
         traceback.print_exc()
         return Response({'status': False, 'message': str(e)}, status=500)
 
-
-@api_view(['POST'])
+@api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
-def initialize_payment(request):
+def verify_order_payment(request, order_id):
     """
-    POST /api/payment/initialize/
-    Initialize Paystack payment for an order
+    Verify that an order is ready for payment.
     """
     try:
-        print(f"\n{'='*60}")
-        print("🚀 INITIALIZE PAYMENT API")
-        print(f"{'='*60}")
-        
-        # Get request data
-        order_id = request.data.get('order_id')
-        email = request.data.get('email', '')
-        
-        print(f"Order ID: {order_id}")
-        print(f"Email: {email}")
-        
-        # ✅ request.user is ALREADY an Employer instance!
-        employer = request.user
-        print(f"✅ Employer: {employer.username}")
-        print(f"   Contact Email: {employer.contact_email}")
-        print(f"   Employer ID: {employer.employer_id}")
-        
-        # ✅ Now query the order with the employer instance
-        print(f"🔍 Looking for order {order_id} with employer {employer.username}")
-        
-        # Debug: Check all orders first
-        all_orders = Order.objects.all()
-        print(f"Total orders in DB: {all_orders.count()}")
-        for o in all_orders:
-            employer_name = o.employer.username if o.employer else 'None'
-            print(f"  - {o.order_id} | Employer: {employer_name} | Status: {o.status}")
-        
-        # Get the specific order
+        # STEP 1: CAST STRING TO UUID (Fixes Postgres Error)
         try:
-            order = Order.objects.get(order_id=order_id, employer=employer)
-            print(f"✅ Found order: {order.order_id}")
-            print(f"   Amount: {order.amount} {order.currency}")
-            print(f"   Status: {order.status}")
-            print(f"   Task: {order.task.title if order.task else 'No task'}")
-            print(f"   Freelancer: {order.freelancer.name if order.freelancer else 'None'}")
-            
-        except Order.DoesNotExist:
-            print(f"❌ Order {order_id} not found OR not owned by employer {employer.username}")
-            
-            # Check if order exists at all
-            order_exists = Order.objects.filter(order_id=order_id).exists()
-            if order_exists:
-                wrong_order = Order.objects.get(order_id=order_id)
-                wrong_employer = wrong_order.employer.username if wrong_order.employer else 'None'
-                print(f"   Order exists but belongs to: {wrong_employer}")
-                return Response({
-                    'status': False,
-                    'message': 'Order found but you are not authorized to pay for it.'
-                }, status=403)
-            else:
-                print(f"   Order {order_id} does not exist in database")
-                return Response({
-                    'status': False,
-                    'message': f'Order {order_id} not found in database.'
-                }, status=404)
-        
-        # Generate email if empty
-        if not email:
-            email = f"{employer.username.replace(' ', '.').lower()}@helawork.pay"
-            print(f"✅ Generated email: {email}")
-        
-        # Calculate amount in CENTS (not kobo!)
-        amount_ksh = float(order.amount)
-        amount_cents = int(amount_ksh * 100)  # Convert KSH to cents
-        print(f"💰 Amount: {amount_ksh} KSH = {amount_cents} cents")
-        
-        # Generate reference
-        import secrets
-        reference = f"HW_{order_id}_{secrets.token_hex(5)}"
-        print(f"✅ Reference: {reference}")
-        
-        # Initialize Paystack payment
-        paystack_service = PaystackService()
-        
-        print(f"🔄 Initializing Paystack transaction...")
-        response = paystack_service.initialize_transaction(
-            email=email,
-            amount_cents=amount_cents,  # Pass in CENTS
-            reference=reference,
-            callback_url=f"{settings.FRONTEND_URL}/payment/callback?reference={reference}",
-            currency="KES"
-        )
-        
-        print(f"💰 Paystack response status: {response.get('status') if response else 'No response'}")
-        print(f"💰 Paystack message: {response.get('message') if response else 'No message'}")
-        
-        if response and response.get('status'):
-            # Create transaction record
-            try:
-                # PaymentTransaction doesn't have employer field, so don't include it
-                transaction = PaymentTransaction.objects.create(
-                    order=order,
-                    paystack_reference=reference,
-                    amount=order.amount,
-                    platform_commission=Decimal('0.00'),
-                    freelancer_share=order.amount,
-                    status='pending',
-                )
-                print(f"✅ PaymentTransaction created: {transaction.id}")
-                print(f"   Reference: {transaction.paystack_reference}")
-                
-            except Exception as e:
-                print(f"⚠️ Could not create PaymentTransaction: {e}")
-                import traceback
-                traceback.print_exc()
-            
-            return Response({
-                'status': True,
-                'message': 'Payment initialized successfully',
-                'data': {
-                    'authorization_url': response['data']['authorization_url'],
-                    'reference': reference,
-                    'access_code': response['data']['access_code'],
-                    'order_id': str(order.order_id),
-                    'amount_ksh': amount_ksh,
-                    'amount_cents': amount_cents,
-                    'email': email,
-                    'currency': 'KES',
-                    'employer': employer.username
-                }
-            })
-        else:
-            error_msg = response.get('message', 'Failed to initialize payment') if response else 'No response from Paystack'
-            print(f"❌ Paystack error: {error_msg}")
-            return Response({
-                'status': False,
-                'message': f'Payment failed: {error_msg}',
-                'paystack_response': response
-            }, status=status.HTTP_400_BAD_REQUEST)
-            
-    except Exception as e:
-        print(f"❌ Error in initialize_payment: {str(e)}")
-        import traceback
-        traceback.print_exc()
+            order_uuid = uuid.UUID(str(order_id))
+        except (ValueError, TypeError):
+            return Response({'status': False, 'message': 'Invalid UUID format'}, status=400)
+
+        # STEP 2: Query using the UUID object
+        order = get_object_or_404(Order, order_id=order_uuid)
+
+        freelancer_id = request.GET.get('freelancer_id')
+        if not freelancer_id:
+            return Response({'status': False, 'message': 'Freelancer ID required'}, status=400)
+
+        # Verify freelancer assignment
+        if not order.freelancer or str(order.freelancer.user.id) != str(freelancer_id):
+            return Response({'status': False, 'message': 'Freelancer mismatch'}, status=400)
+
+        # Get profile for paystack subaccount info
+        freelancer_user = order.freelancer.user
+        # Use filter().first() to avoid DoesNotExist crashes
+        freelancer_profile = UserProfile.objects.filter(user=freelancer_user).first()
+
         return Response({
-            'status': False,
-            'message': str(e)
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            'status': True,
+            'message': 'Payment verified successfully',
+            'data': {
+                'order_id': str(order.order_id),
+                'freelancer_id': freelancer_user.id,
+                'freelancer_name': f"{freelancer_user.first_name} {freelancer_user.last_name}",
+                'freelancer_email': freelancer_user.email,
+                'freelancer_paystack_account': getattr(freelancer_profile, 'paystack_account_id', 'default_account') if freelancer_profile else 'default_account',
+                'amount': float(order.amount),
+                'currency': order.currency,
+                'order_status': order.status,
+            }
+        })
+    except Exception as e:
+        traceback.print_exc()
+        return Response({'status': False, 'message': f"Verification Error: {str(e)}"}, status=500)
+
 @api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -4108,174 +4610,297 @@ def get_order_for_contract(request, contract_id):
             'status': False,
             'message': str(e)
         }, status=500)
-
 @api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def verify_order_payment(request, order_id):
     """
-    Verify that an order is completed and the freelancer is correct.
+    Verify that an order is ready for payment.
     """
     try:
-        # Get the order
-        order = get_object_or_404(Order, order_id=order_id)
+        # STEP 1: CAST STRING TO UUID
+        try:
+            order_uuid = uuid.UUID(str(order_id))
+        except (ValueError, TypeError):
+            return Response({'status': False, 'message': 'Invalid UUID format'}, status=400)
 
-        # Get freelancer_id from query params
+        # STEP 2: Query using the UUID object with order_id field
+        order = get_object_or_404(Order, order_id=order_uuid, employer=request.user)
+
         freelancer_id = request.GET.get('freelancer_id')
         if not freelancer_id:
-            return Response({
-                'status': False,
-                'message': 'Freelancer ID is required',
-                'code': 'MISSING_FREELANCER_ID'
-            }, status=400)
+            return Response({'status': False, 'message': 'Freelancer ID required'}, status=400)
 
-        # Verify freelancer is assigned to this order
-        if not order.freelancer or str(order.freelancer.user.user_id) != freelancer_id:
-            return Response({
-                'status': False,
-                'message': 'Freelancer not assigned to this order',
-                'code': 'FREELANCER_MISMATCH'
-            }, status=400)
+        # Verify freelancer assignment
+        if not order.freelancer or str(order.freelancer.user.id) != str(freelancer_id):
+            return Response({'status': False, 'message': 'Freelancer mismatch'}, status=400)
 
-        # Get freelancer profile safely
+        # Get profile for paystack subaccount info
         freelancer_user = order.freelancer.user
-        try:
-            freelancer_profile = UserProfile.objects.get(user=freelancer_user)
-        except UserProfile.DoesNotExist:
-            freelancer_profile = None
-
-        # Check if work is completed
-        if order.status != 'completed':
-            return Response({
-                'status': False,
-                'message': 'Work not completed yet',
-                'code': 'WORK_INCOMPLETE'
-            }, status=400)
+        freelancer_profile = UserProfile.objects.filter(user=freelancer_user).first()
 
         return Response({
             'status': True,
             'message': 'Payment verified successfully',
             'data': {
                 'order_id': str(order.order_id),
-                'freelancer_id': freelancer_user.user_id,
-                'freelancer_name': freelancer_user.name,
+                'freelancer_id': freelancer_user.id,
+                'freelancer_name': f"{freelancer_user.first_name} {freelancer_user.last_name}",
                 'freelancer_email': freelancer_user.email,
                 'freelancer_paystack_account': getattr(freelancer_profile, 'paystack_account_id', 'default_account') if freelancer_profile else 'default_account',
                 'amount': float(order.amount),
                 'currency': order.currency,
                 'order_status': order.status,
-                'work_completed': True,
-                'service_description': order.task.title if order.task else 'N/A',
+            }
+        })
+    except Exception as e:
+        traceback.print_exc()
+        return Response({'status': False, 'message': f"Verification Error: {str(e)}"}, status=500)
+
+@api_view(['POST'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def initialize_payment(request):
+    try:
+        data = request.data
+        order_id_raw = data.get('order_id')
+        email = data.get('email')
+        freelancer_paystack_account = data.get('freelancer_paystack_account', 'default_account')
+
+        # CRITICAL: CASTING TO UUID OBJECT
+        try:
+            order_uuid = uuid.UUID(str(order_id_raw))
+            # FIX: Query using order_id field with UUID object
+            order = Order.objects.get(order_id=order_uuid)
+        except (Order.DoesNotExist, ValueError):
+            return Response({'status': False, 'message': 'Order not found'}, status=404)
+
+        # Verify the order belongs to the authenticated employer
+        if order.employer != request.user:
+            return Response({'status': False, 'message': 'Unauthorized access to order'}, status=403)
+
+        task = order.task
+        is_onsite = (task.service_type == 'on_site') if task else False
+        amount_cents = int(order.amount * 100)
+
+        # Generate Paystack Reference
+        random_suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        # Use str(order_uuid) to get string representation
+        paystack_reference = f"HW_{str(order_uuid)[:8]}_{random_suffix}"
+
+        paystack_service = PaystackService()
+        
+        if freelancer_paystack_account != 'default_account':
+            platform_amount = int(amount_cents * 0.1)
+            freelancer_amount = amount_cents - platform_amount
+            subaccounts = [
+                {"subaccount": freelancer_paystack_account, "share": freelancer_amount},
+                {"subaccount": settings.PAYSTACK_PLATFORM_SUBACCOUNT, "share": platform_amount}
+            ]
+            paystack_response = paystack_service.initialize_split_transaction(
+                email=email, amount_cents=amount_cents, reference=paystack_reference,
+                subaccounts=subaccounts, callback_url=f"{settings.FRONTEND_URL}/payment/callback", currency="KES"
+            )
+        else:
+            paystack_response = paystack_service.initialize_transaction(
+                email=email, amount_cents=amount_cents, reference=paystack_reference,
+                callback_url=f"{settings.FRONTEND_URL}/payment/callback", currency="KES"
+            )
+
+        if not paystack_response.get('status'):
+            return Response({'status': False, 'message': paystack_response.get('message')}, status=400)
+
+        paystack_data = paystack_response['data']
+        
+        with django_transaction.atomic():
+            # Create the transaction record
+            payment_transaction = PaymentTransaction.objects.create(
+                order=order,  # Pass the object, not the ID string
+                paystack_reference=paystack_data.get('reference'),
+                amount=order.amount,
+                platform_commission=Decimal(str(float(order.amount) * 0.1)),
+                freelancer_share=Decimal(str(float(order.amount) * 0.9)),
+                status='pending'
+            )
+            order.status = 'pending_payment'
+            order.save()
+
+        return Response({
+            'status': True,
+            'message': 'Payment initialized successfully',
+            'data': {
+                'authorization_url': paystack_data.get('authorization_url'),
+                'reference': paystack_data.get('reference'),
+                'transaction_id': str(payment_transaction.id),
+                'is_onsite': is_onsite
             }
         })
 
-    except Order.DoesNotExist:
-        return Response({
-            'status': False,
-            'message': 'Order not found',
-            'code': 'ORDER_NOT_FOUND'
-        }, status=404)
     except Exception as e:
-        import traceback
+        print("!!! SERVER ERROR LOG !!!")
         traceback.print_exc()
-        return Response({
-            'status': False,
-            'message': str(e),
-            'code': 'SERVER_ERROR'
-        }, status=500)   
+        return Response({'status': False, 'message': f"Server Error: {str(e)}"}, status=500)
+
 @api_view(['GET'])
-@authentication_classes([EmployerTokenAuthentication])
+@authentication_classes([EmployerTokenAuthentication]) 
 @permission_classes([IsAuthenticated])
 def verify_payment(request, reference):
-    """
-    GET /api/payment/verify/<str:reference>/
-    Verify Paystack payment
-    """
     try:
-        print(f"\n{'='*60}")
-        print("VERIFY PAYMENT API")
-        print(f"{'='*60}")
-        print(f"Reference: {reference}")
-        print(f"Employer: {request.user.username}")
+        print(f"🔍 DEBUG Django: Looking for reference: {reference}")
         
-        # Verify transaction with Paystack
         paystack_service = PaystackService()
         verification = paystack_service.verify_transaction(reference)
         
-        if verification and verification.get('status'):
-            transaction_data = verification['data']
-            
-            # Get transaction from database
+        print(f"🔍 DEBUG Django: Paystack verification response: {verification}")
+        
+        if not verification or not verification.get('status'):
+            return Response({'status': False, 'message': 'Paystack verification failed'}, status=400)
+
+        data = verification['data']
+        
+        with django_transaction.atomic():
             try:
-                transaction = Transaction.objects.get(paystack_reference=reference)
-            except Transaction.DoesNotExist:
-                return Response({
-                    'status': False,
-                    'message': 'Transaction not found'
-                }, status=status.HTTP_404_NOT_FOUND)
-            
-            if transaction_data['status'] == 'success':
-                # Update transaction status
-                transaction.status = 'success'
-                transaction.save()
-                
-                # Update order status
-                order = transaction.order
+                # Find transaction
+                txn = PaymentTransaction.objects.select_for_update().get(paystack_reference=reference)
+                print(f"✅ DEBUG Django: Found transaction: {txn.id}")
+            except PaymentTransaction.DoesNotExist:
+                print(f"❌ DEBUG Django: No transaction found with reference: {reference}")
+                return Response({'status': False, 'message': 'Transaction not found'}, status=404)
+
+            if txn.status == 'success':
+                print(f"ℹ️ DEBUG Django: Transaction already processed")
+                return Response({'status': True, 'message': 'Already processed', 'data': {'order_id': txn.order.order_id}})
+
+            if data['status'] == 'success':
+                # ============ 1. UPDATE TRANSACTION ============
+                txn.status = 'success'
+                txn.save()
+                print(f"✅ DEBUG Django: Transaction marked as success")
+
+                # ============ 2. UPDATE ORDER ============
+                order = txn.order
                 order.status = 'paid'
                 order.save()
+                print(f"✅ DEBUG Django: Order {order.order_id} marked as paid")
+
+                # ============ 3. GET TASK ============
+                task = order.task
+                if not task:
+                    print(f"❌ DEBUG Django: No task associated with order {order.order_id}")
+                    return Response({'status': False, 'message': 'No task found for this order'}, status=400)
                 
-                # Update contract payment status
-                contract = Contract.objects.filter(
-                    task=order.task,
-                    employer=request.user,
-                    freelancer=order.freelancer
-                ).first()
+                print(f"✅ DEBUG Django: Task found: {task.title}")
+
+                # ============ 4. UPDATE TASK ============
+                task.is_paid = True
+                task.payment_status = 'escrowed'
+                task.amount_held_in_escrow = order.amount
+                task.status = 'in_progress'
+                task.save()
+                print(f"✅ DEBUG Django: Task updated: paid=True, status=in_progress")
+
+                # ============ 5. UPDATE PROPOSAL ============
+                try:
+                    proposal = Proposal.objects.get(task=task, status='accepted')
+                    proposal.status = 'paid'
+                    proposal.save()
+                    print(f"✅ DEBUG Django: Proposal {proposal.proposal_id} marked as paid")
+                except Proposal.DoesNotExist:
+                    # Try alternative: find proposal by freelancer
+                    if order.freelancer:
+                        try:
+                            proposal = Proposal.objects.get(
+                                task=task,
+                                freelancer=order.freelancer.user  # Use freelancer.user
+                            )
+                            proposal.status = 'paid'
+                            proposal.save()
+                            print(f"✅ DEBUG Django: Proposal found via freelancer, marked as paid")
+                        except Proposal.DoesNotExist:
+                            print(f"⚠️ DEBUG Django: No proposal found for task {task.task_id}")
+
+                # ============ 6. UPDATE/CREATE CONTRACT ============
+                # FIX: Use order.freelancer.user instead of order.freelancer
+                freelancer_user = order.freelancer.user if order.freelancer else None
                 
-                if contract:
-                    contract.is_paid = True
-                    contract.payment_date = transaction.created_at
-                    contract.save()
+                if freelancer_user and order.employer:
+                    # Try to get existing contract
+                    contract = Contract.objects.filter(
+                        task=task,
+                        freelancer=freelancer_user,  # ✅ CORRECT: User instance
+                        employer=order.employer
+                    ).first()
+                    
+                    if contract:
+                        # Update existing contract
+                        contract.is_paid = True
+                        contract.is_active = True
+                        contract.status = 'active'
+                        contract.payment_date = timezone.now()
+                        contract.save()
+                        print(f"✅ DEBUG Django: Existing contract updated")
+                    else:
+                        # Create new contract
+                        contract = Contract.objects.create(
+                            task=task,
+                            freelancer=freelancer_user,  # ✅ CORRECT: User instance
+                            employer=order.employer,
+                            is_paid=True,
+                            is_active=True,
+                            status='active',
+                            payment_date=timezone.now()
+                        )
+                        print(f"✅ DEBUG Django: New contract created")
+
+                # ============ 7. CHECK IF ONSITE ============
+                is_onsite = (task.service_type == 'on_site')
+                verification_otp = None
                 
-                print(f"✅ Payment verified successfully")
-                
+                if is_onsite:
+                    print(f"🔍 DEBUG Django: This is an ONSITE task")
+                    otp = task.generate_otp()
+                    verification_otp = otp
+                    
+                    # Save OTP to transaction
+                    txn.verification_otp = otp
+                    txn.otp_generated_at = timezone.now()
+                    txn.save()
+                    
+                    # Save OTP to contract if exists
+                    if 'contract' in locals() and contract:
+                        contract.verification_otp = otp
+                        contract.otp_generated_at = timezone.now()
+                        contract.save()
+                    
+                    print(f"✅ DEBUG Django: Generated OTP: {otp}")
+
                 return Response({
                     'status': True,
                     'message': 'Payment verified successfully',
                     'data': {
-                        'reference': reference,
-                        'amount': float(transaction.amount),
-                        'currency': transaction_data.get('currency', 'NGN'),
-                        'paid_at': transaction_data.get('paid_at'),
-                        'transaction_status': 'success',
-                        'order_status': 'paid',
-                        'order_id': str(order.order_id)
+                        'order_id': str(order.order_id),
+                        'task_id': task.task_id,
+                        'is_onsite': is_onsite,
+                        'verification_otp': verification_otp,
+                        'proposal_status': 'paid',
+                        'task_status': task.status,
+                        'payment_status': task.payment_status,
+                        'contract_updated': 'contract' in locals()
                     }
                 })
             else:
                 # Payment failed
-                transaction.status = 'failed'
-                transaction.save()
-                
-                return Response({
-                    'status': False,
-                    'message': 'Payment failed or was cancelled',
-                    'data': {
-                        'reference': reference,
-                        'transaction_status': 'failed'
-                    }
-                })
-        else:
-            return Response({
-                'status': False,
-                'message': 'Payment verification failed'
-            }, status=status.HTTP_400_BAD_REQUEST)
-            
+                txn.status = 'failed'
+                txn.save()
+                print(f"❌ DEBUG Django: Payment failed at gateway")
+                return Response({'status': False, 'message': 'Payment failed at gateway'})
+
     except Exception as e:
-        print(f"Error: {str(e)}")
-        return Response({
-            'status': False,
-            'message': str(e)
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        print(f"❌ DEBUG Django: Verification Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return Response({'status': False, 'message': str(e)}, status=500)
+        
 
 @api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication])
@@ -4485,15 +5110,22 @@ def register_bank(request):
         print("=== BANK REGISTRATION STARTED ===")
         print(f"User: {user.name} (ID: {user.user_id})")
         
-        if not hasattr(user, 'freelancer_profile'):
-            print("ERROR: User has no freelancer_profile")
-            return Response({
-                'status': False,
-                'message': 'User does not have a freelancer profile.'
-            }, status=status.HTTP_400_BAD_REQUEST)
+        # FIXED: Use get_or_create instead of checking for existence
+        freelancer, created = Freelancer.objects.get_or_create(
+            user=user,
+            defaults={
+                'business_name': f"{user.name} Freelancing",
+                'is_verified': False,
+                'is_paystack_setup': False,
+                'total_earnings': 0.00,
+                'pending_payout': 0.00
+            }
+        )
         
-        freelancer = user.freelancer_profile
-        print(f"Freelancer found: {freelancer.name}")
+        if created:
+            print(f"✅ Created new freelancer profile for {user.name}")
+        else:
+            print(f"✅ Found existing freelancer profile for {user.name}")
         
         account_number = request.data.get('account_number', '').strip()
         internal_bank_code = request.data.get('bank_code', '').strip()
@@ -4637,6 +5269,7 @@ def register_bank(request):
                 'recipient_code': recipient_code,
                 'is_verified': True,
                 'verified_at': timezone.now().isoformat(),
+                'profile_created': created  # Let the frontend know if profile was just created
             }
         }, status=status.HTTP_200_OK)
         
@@ -5153,6 +5786,223 @@ def generate_task_otp(request, task_id):
             "success": False,
             "message": f"Error: {str(e)}"
         }, status=500)
+@api_view(['POST'])
+@authentication_classes([CustomTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def verify_work_otp(request):
+    """
+    Verify OTP for onsite payment release.
+    Called by freelancer after receiving OTP from client in person.
+    If OTP matches, contract is marked as completed and Paystack transfer is triggered.
+    """
+    try:
+        # Get OTP and contract_id from request
+        otp_code = request.data.get('otp_code', '').strip()
+        contract_id = request.data.get('contract_id')
+        
+        if not otp_code:
+            return Response({
+                "success": False,
+                "message": "OTP code is required"
+            }, status=400)
+        
+        if not contract_id:
+            return Response({
+                "success": False,
+                "message": "Contract ID is required"
+            }, status=400)
+        
+        # Get contract
+        try:
+            contract = Contract.objects.get(contract_id=contract_id)
+        except Contract.DoesNotExist:
+            return Response({
+                "success": False,
+                "message": "Contract not found"
+            }, status=404)
+        
+        # Verify freelancer is authorized
+        if contract.freelancer != request.user:
+            return Response({
+                "success": False,
+                "message": "You are not authorized to verify this contract"
+            }, status=403)
+        
+        # Verify contract is in pending_verification status
+        if contract.status != 'pending_verification':
+            return Response({
+                "success": False,
+                "message": f"Contract is not in pending verification status. Current status: {contract.status}"
+            }, status=400)
+        
+        # Verify OTP matches
+        if not contract.verification_otp or str(contract.verification_otp) != str(otp_code):
+            return Response({
+                "success": False,
+                "message": "Invalid OTP code. Please verify the code with the client."
+            }, status=400)
+        
+        # Check if OTP is expired (24 hours)
+        if contract.otp_generated_at:
+            time_diff = timezone.now() - contract.otp_generated_at
+            if time_diff.total_seconds() > 86400:  # 24 hours
+                return Response({
+                    "success": False,
+                    "message": "OTP has expired. Please contact the client to generate a new one."
+                }, status=400)
+        
+        # All checks passed - Use atomic transaction to update all records and trigger transfer
+        with transaction.atomic():
+            # Update Contract status to completed
+            contract.status = 'completed'
+            contract.is_completed = True
+            contract.is_active = True
+            contract.completed_date = timezone.now()
+            contract.save()
+            
+            # Update Task status
+            task = contract.task
+            if task:
+                task.status = 'completed'
+                task.payment_status = 'released'
+                task.save()
+            
+            # Get order and freelancer for Paystack transfer
+            order = Order.objects.filter(task=task, status='paid').first()
+            if not order:
+                return Response({
+                    "success": False,
+                    "message": "Order not found for this contract"
+                }, status=404)
+            
+            # Get freelancer profile
+            try:
+                freelancer_profile = Freelancer.objects.get(user=contract.freelancer)
+            except Freelancer.DoesNotExist:
+                return Response({
+                    "success": False,
+                    "message": "Freelancer profile not found"
+                }, status=404)
+            
+            # Check if freelancer has Paystack setup (subaccount or recipient code)
+            # First check for recipient code in UserProfile
+            recipient_code = None
+            try:
+                user_profile = UserProfile.objects.get(user=contract.freelancer)
+                recipient_code = user_profile.paystack_recipient_code if hasattr(user_profile, 'paystack_recipient_code') else None
+            except UserProfile.DoesNotExist:
+                pass
+            
+            # If no recipient code, check if we have bank details to create one
+            if not recipient_code:
+                if freelancer_profile.bank_code and freelancer_profile.account_number:
+                    # Create transfer recipient
+                    paystack_service = PaystackService()
+                    recipient_data = {
+                        'type': 'nuban',
+                        'name': freelancer_profile.account_name or freelancer_profile.business_name or contract.freelancer.name,
+                        'account_number': freelancer_profile.account_number,
+                        'bank_code': freelancer_profile.bank_code,
+                        'currency': 'KES'
+                    }
+                    recipient_response = paystack_service.create_transfer_recipient(recipient_data)
+                    
+                    if recipient_response and recipient_response.get('status'):
+                        recipient_code = recipient_response.get('data', {}).get('recipient_code')
+                        # Save recipient code for future use
+                        try:
+                            user_profile, _ = UserProfile.objects.get_or_create(user=contract.freelancer)
+                            user_profile.paystack_recipient_code = recipient_code
+                            user_profile.save()
+                        except Exception as e:
+                            print(f"⚠️ Error saving recipient code: {e}")
+                elif freelancer_profile.paystack_subaccount_code:
+                    # If we have subaccount code, we might be able to use it directly
+                    # But Paystack transfers typically need recipient codes
+                    recipient_code = freelancer_profile.paystack_subaccount_code
+                    # Try to use it, but it may not work
+                    print(f"⚠️ Using subaccount code as recipient: {recipient_code}")
+            
+            if not recipient_code:
+                return Response({
+                    "success": False,
+                    "message": "Freelancer has not set up bank details or Paystack account. Please complete payment setup first."
+                }, status=400)
+            
+            # Calculate freelancer share (90% of order amount, 10% platform fee)
+            total_amount_cents = int(float(order.amount) * 100)
+            platform_fee_cents = int(total_amount_cents * 0.10)
+            freelancer_share_cents = total_amount_cents - platform_fee_cents
+            
+            # Trigger Paystack transfer to freelancer
+            paystack_service = PaystackService()
+            transfer_response = paystack_service.transfer_to_subaccount(
+                amount_cents=freelancer_share_cents,
+                recipient=recipient_code,
+                reason=f"Payment release for onsite task: {task.title if task else 'Task'}"
+            )
+            
+            # Check transfer response
+            if not transfer_response or not transfer_response.get('status'):
+                # Transfer failed, but contract is already marked as completed
+                # Log the error and notify admin
+                error_message = transfer_response.get('message', 'Unknown error') if transfer_response else 'No response from Paystack'
+                print(f"⚠️ Paystack transfer failed for contract {contract_id}: {error_message}")
+                
+                # Update freelancer pending payout (for manual processing)
+                freelancer_profile.pending_payout += Decimal(str(order.amount)) * Decimal('0.90')
+                freelancer_profile.save()
+                
+                return Response({
+                    "success": True,
+                    "message": "OTP verified and contract completed. Payment transfer initiated but may need manual verification.",
+                    "contract_id": contract.contract_id,
+                    "task_id": task.task_id if task else None,
+                    "transfer_status": "pending_verification",
+                    "transfer_error": error_message
+                })
+            
+            # Transfer successful
+            # Update freelancer earnings
+            freelancer_profile.total_earnings += Decimal(str(order.amount)) * Decimal('0.90')
+            freelancer_profile.save()
+            
+            # Create Transaction record for the transfer
+            try:
+                Transaction.objects.create(
+                    transaction_type='withdrawal',
+                    freelancer=freelancer_profile,
+                    contract=contract,
+                    task=task,
+                    amount=Decimal(str(order.amount)),
+                    freelancer_share=Decimal(str(order.amount)) * Decimal('0.90'),
+                    platform_fee=Decimal(str(order.amount)) * Decimal('0.10'),
+                    status='completed',
+                    paystack_transfer_code=transfer_response.get('data', {}).get('transfer_code', ''),
+                    metadata=transfer_response,
+                    notes=f"Onsite task payment release - OTP verified"
+                )
+            except Exception as e:
+                print(f"⚠️ Error creating Transaction record: {e}")
+            
+            return Response({
+                "success": True,
+                "message": "OTP verified successfully! Payment has been released to your account.",
+                "contract_id": contract.contract_id,
+                "task_id": task.task_id if task else None,
+                "amount_transferred": float(freelancer_share_cents / 100),
+                "transfer_code": transfer_response.get('data', {}).get('transfer_code', ''),
+                "status": "completed"
+            })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return Response({
+            "success": False,
+            "message": f"Error verifying OTP: {str(e)}"
+        }, status=500)
+
 @api_view(['POST'])
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])

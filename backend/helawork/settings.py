@@ -94,7 +94,7 @@ import dj_database_url
 DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
-            'NAME': 'systemdb',       
+            'NAME': 'helawork_db',       
             'USER': 'postgres',         
             'PASSWORD': 'admin',
             'HOST': 'localhost',

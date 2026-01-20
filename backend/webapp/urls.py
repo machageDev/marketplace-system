@@ -35,7 +35,9 @@ urlpatterns = [
     path('api/contracts/<int:contract_id>/mark-completed/', views.employer_mark_contract_completed, name='mark-contract-completed'),
     path('contracts/employer/pending-completions/', views.employer_pending_completions, name='employer_pending_completions'),
     path('contracts/<int:contract_id>/mark-completed/', views.mark_contract_completed, name='mark_contract_completed'),
-    
+    path('api/contracts/release-payment/', views.release_payment, name='release_payment'),
+    path('api/contracts/<int:contract_id>/verify-otp/', views.verify_on_site_completion, name='verify_on_site_completion'),
+    path('api/contracts/<int:contract_id>/generate-verification-code/',views.generate_verification_code,name='generate_verification_code'),
     # ============ SUBMISSIONS ============
     path('submissions/create/', views.create_submission, name='submission_create'),
     path('api/submissions/create/', views.create_submission, name='create-submission'),     
@@ -57,11 +59,13 @@ urlpatterns = [
     #path('api/transactions/history/', views.transaction_history, name='api_transaction_history'),
     path('api/orders/pending-payment/', views.pending_payment_orders, name='pending_payment_orders'),
     path('api/payment/transactions/', views.employer_transactions, name='employer_transactions'),
-    path('api/orders/<uuid:order_id>/verify-payment/', views.verify_order_payment, name='verify-order-payment'),
+    path('api/orders/<str:order_id>/verify-payment/', views.verify_order_payment, name='verify-order-payment'),
     path('contracts/<int:contract_id>/order/', views.get_order_for_contract, name='contract-order'),
     path('tasks/<uuid:task_id>/verify-otp/',views.verify_onsite_completion,name='verify-onsite-otp'),
     path('api/banks/', views.register_bank,name='register-bank'),
     path('api/webhooks/paystack/', views.paystack_webhook, name='paystack_webhook'),
+    path('payment/verify/<str:reference>/', views.verify_payment, name='verify_payment'),
+   
     # OPTION B: Use new payment endpoints (if you implemented them) - REMOVE ABOVE IF USING THESE
     # path('api/payment/order/<str:order_id>/', views.order_detail, name='order_detail'),
     # path('api/orders/pending-payment/', views.pending_payment_orders, name='pending_payment_orders'),
@@ -100,6 +104,7 @@ urlpatterns = [
     path('task-completions/<int:pk>/', views.task_completion_detail, name='task-completion-detail'),
     path('tasks/<int:task_id>/generate-otp/', views.generate_task_otp, name='generate_task_otp'),
     path('tasks/<int:task_id>/verify-otp/', views.verify_task_otp, name='verify_task_otp'),
+    path('api/contracts/verify-work-otp/', views.verify_work_otp, name='verify_work_otp'),
     
     # Wallet endpoints
     path('api/wallet/', views.get_wallet_data, name='wallet-data'),
