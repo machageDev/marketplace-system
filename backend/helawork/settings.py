@@ -172,7 +172,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # CHANGED: Read from environment variables for security
 PAYSTACK_PUBLIC_KEY = os.environ.get('PAYSTACK_PUBLIC_KEY', 'pk_test_5a2cefd171ac7fe5c789d6b460a17b4dab2b7e32')
 PAYSTACK_SECRET_KEY = os.environ.get('PAYSTACK_SECRET_KEY', 'sk_test_a8f7126609cc45319d0a682d4b4764fbd6413db8')
-PAYSTACK_CALLBACK_URL = os.environ.get('PAYSTACK_CALLBACK_URL', 'http://192.168.100.188:8000/payment/verify/')
+#PAYSTACK_CALLBACK_URL = os.environ.get('PAYSTACK_CALLBACK_URL', 'http://192.168.100.188:8000/payment/verify/')
+PAYSTACK_CALLBACK_URL = 'https://marketplace-system-1.onrender.com/payment/verify/'
 
 # Add CORS settings for Flutter frontend
 CORS_ALLOWED_ORIGINS = [
