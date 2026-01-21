@@ -102,7 +102,7 @@ import dj_database_url
         }
     }'''
 
-#postgresql://helawork_db_user:Xgfo1L6B59XyVQ3AnpDoJxCmp0hU4r2M@dpg-d5ob3mpr0fns73d4u8eg-a.oregon-postgres.render.com/helawork_db
+
 DATABASES = {
     'default': dj_database_url.parse(
         "postgresql://helawork_db_user:Xgfo1L6B59XyVQ3AnpDoJxCmp0hU4r2M@dpg-d5ob3mpr0fns73d4u8eg-a.oregon-postgres.render.com/helawork_db",

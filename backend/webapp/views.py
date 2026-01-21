@@ -908,23 +908,32 @@ def _update_verification_status(profile):
         profile.verification_status = 'unverified'
     profile.save()
 
-# ============ API VIEWS ============
 @api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def get_employer_profile(request):
     try:
-        employer = get_employer_from_token(request)
-        if not employer:
-            return Response({'error': 'Invalid authentication token'}, status=status.HTTP_401_UNAUTHORIZED)
+        # Use the authenticated user directly from the request
+        employer = request.user 
         
-        profile = EmployerProfile.objects.get(employer=employer)
-        serializer = EmployerProfileSerializer(profile)
-        return Response(serializer.data)
-    except EmployerProfile.DoesNotExist:
-        return Response({'error': 'Profile not found. Create one first.'}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            profile = EmployerProfile.objects.get(employer=employer)
+            serializer = EmployerProfileSerializer(profile)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except EmployerProfile.DoesNotExist:
+            # DO NOT return 404/500 if the app needs to show a "Create Profile" screen
+            # Return a 200 with an empty structure to avoid Flutter crashes
+            return Response({
+                'id': None,
+                'name': employer.name if hasattr(employer, 'name') else employer.username,
+                'email': employer.email,
+                'is_profile_complete': False,
+                'message': 'Profile not found'
+            }, status=status.HTTP_200_OK)
+
     except Exception as e:
-        return Response({'error': f'Server error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        print(f"CRITICAL PROFILE ERROR: {str(e)}")
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['POST'])
 @authentication_classes([EmployerTokenAuthentication])
