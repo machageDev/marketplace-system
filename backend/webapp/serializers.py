@@ -5,7 +5,7 @@ from .models import Freelancer, Notification, Order, Submission, TaskCompletion,
 from .models import Contract, Proposal, TaskCompletion, Transaction, User, UserProfile, Wallet
 from .models import Employer, User
 from .models import Task, Skill, UserSkill, PortfolioItem
-
+from .models import Employer, EmployerProfile
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -78,7 +78,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
         return PortfolioItemSerializer(portfolio_items, many=True, context={'request': request}).data
     
     def get_work_passport_data(self, obj):
-        # Calculate work passport data from completed tasks
+        
         from .models import TaskCompletion, Rating, UserSkill, Contract
         from django.utils import timezone
         from datetime import timedelta
@@ -478,14 +478,16 @@ class EmployerContractSerializer(serializers.ModelSerializer):
     def get_payment_ready(self, obj):
         """Check if payment is ready to be made"""
         return not obj.is_paid and obj.is_fully_accepted and self.get_order_id(obj) is not None           
-from .models import Employer, EmployerProfile
+
 class EmployerLoginSerializer(serializers.Serializer):
     username = serializers.CharField()
     password = serializers.CharField()
 
 
 
+
 class EmployerProfileSerializer(serializers.ModelSerializer):
+    """Main Serializer for reading/displaying employer profile"""
     display_name = serializers.CharField(source='get_display_name', read_only=True)
     is_fully_verified = serializers.BooleanField(source='is_fully_verified', read_only=True)
     verification_progress = serializers.IntegerField(source='get_verification_progress', read_only=True)
@@ -493,353 +495,85 @@ class EmployerProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = EmployerProfile
         fields = [
-            'id',
-            'employer',
-            'full_name',
-            'profile_picture',
-            'contact_email',
-            'phone_number',
-            'alternate_phone',
-            'email_verified',
-            'phone_verified',
-            'id_verified',
-            'id_document',
-            'country',
-            'city',
-            'address',
-            'profession',
-            'skills',
-            'bio',
-            'linkedin_url',
-            'twitter_url',
-            'verification_status',
-            'total_projects_posted',
-            'total_spent',
-            'avg_freelancer_rating',
-            'notification_preferences',
-            'created_at',
-            'updated_at',
-            'display_name',
-            'is_fully_verified',
-            'verification_progress',
+            'id', 'employer', 'full_name', 'profile_picture',
+            'contact_email', 'phone_number', 'alternate_phone',
+            'email_verified', 'phone_verified', 'id_verified',
+            'id_number',  # Added this as it's in your model
+            'city', 'address', 'profession', 'skills',
+            'bio', 'linkedin_url', 'twitter_url', 'verification_status',
+            'total_projects_posted', 'total_spent', 'avg_freelancer_rating',
+            'notification_preferences', 'created_at', 'updated_at',
+            'display_name', 'is_fully_verified', 'verification_progress',
         ]
         read_only_fields = [
-            'id',
-            'employer',
-            'email_verified',
-            'phone_verified',
-            'id_verified',
-            'id_verified_by',
-            'id_verified_at',
-            'verification_status',
-            'total_projects_posted',
-            'total_spent',
-            'avg_freelancer_rating',
-            'created_at',
-            'updated_at',
-            'display_name',
-            'is_fully_verified',
-            'verification_progress',
+            'id', 'employer', 'email_verified', 'phone_verified',
+            'id_verified', 'id_verified_by', 'id_verified_at',
+            'verification_status', 'total_projects_posted', 'total_spent',
+            'avg_freelancer_rating', 'created_at', 'updated_at',
+            'display_name', 'is_fully_verified', 'verification_progress',
         ]
-    
-    def validate_contact_email(self, value):
-        """Ensure email is unique"""
-        # Exclude current instance during updates
-        if self.instance:
-            if EmployerProfile.objects.filter(contact_email=value).exclude(id=self.instance.id).exists():
-                raise serializers.ValidationError("This email is already registered.")
-        else:
-            if EmployerProfile.objects.filter(contact_email=value).exists():
-                raise serializers.ValidationError("This email is already registered.")
-        return value
-    
-    def validate_phone_number(self, value):
-        """Basic phone number validation"""
-        if not value:
-            raise serializers.ValidationError("Phone number is required.")
-        # Add more validation as needed
-        return value
-from rest_framework import serializers
-from .models import Employer, EmployerProfile
 
-# Removed duplicate EmployerProfileSerializer
+    def validate_contact_email(self, value):
+        # Prevent duplicate emails across different profiles
+        query = EmployerProfile.objects.filter(contact_email=value)
+        if self.instance:
+            query = query.exclude(id=self.instance.id)
+        if query.exists():
+            raise serializers.ValidationError("This email is already registered.")
+        return value
+
 class EmployerProfileCreateSerializer(serializers.ModelSerializer):
-    """Serializer for creating employer profile"""
-    id_number = serializers.CharField(
-        required=True,
-        allow_blank=False,
-        error_messages={
-            'required': 'ID number is required.',
-            'blank': 'ID number cannot be blank.'
-        }
-    )
-    
-    linkedin_url = serializers.CharField(
-        required=False,
-        allow_blank=True,
-        max_length=200,
-        error_messages={
-            'max_length': 'LinkedIn URL is too long.'
-        }
-    )
-    
-    twitter_url = serializers.CharField(
-        required=False,
-        allow_blank=True,
-        max_length=200,
-        error_messages={
-            'max_length': 'Twitter URL is too long.'
-        }
-    )
-    
+    """Serializer for creating employer profile from Flutter"""
     class Meta:
         model = EmployerProfile
         fields = [
-            'full_name',
-            'profile_picture',
-            'contact_email',
-            'phone_number',
-            'alternate_phone',
-            'city',
-            'address',
-            'profession',
-            'skills',
-            'bio',
-            'linkedin_url',
-            'twitter_url',
-            'notification_preferences',
+            'full_name', 'profile_picture', 'contact_email', 'phone_number',
+            'alternate_phone', 'city', 'address', 'profession', 'skills',
+            'bio', 'linkedin_url', 'twitter_url', 'notification_preferences',
             'id_number',
         ]
+        # These match your 'Not provided' defaults but ensure Flutter sends them
         extra_kwargs = {
-            'full_name': {'required': True},
-            'contact_email': {'required': True},
-            'phone_number': {'required': True},
-            'city': {'required': True},
-            'address': {'required': True},
-            'id_number': {'required': True},
+            'full_name': {'required': True, 'allow_blank': False},
+            'contact_email': {'required': True, 'allow_blank': False},
+            'phone_number': {'required': True, 'allow_blank': False},
+            'id_number': {'required': True, 'allow_blank': False},
         }
-    
+
     def validate_linkedin_url(self, value):
-        """Preprocess LinkedIn URL"""
-        if not value or value.strip() == '':
-            return ''
-        
+        if not value: return None
         value = value.strip()
-        
-        # If it's just a LinkedIn username without full URL
-        if '/' not in value and not value.startswith(('http://', 'https://')):
-            return f'https://linkedin.com/in/{value}'
-        
-        # Ensure it has a protocol
-        if not value.startswith(('http://', 'https://')):
-            return f'https://{value}'
-        
-        return value
-    
-    def validate_twitter_url(self, value):
-        """Preprocess Twitter/X URL - FIXED for x.com"""
-        if not value or value.strip() == '':
-            return ''
-        
-        value = value.strip()
-        print(f"Validating Twitter URL: '{value}'")  # Debug log
-        
-        # If empty after stripping, return empty
-        if value == '':
-            return ''
-        
-        # Handle @username format
-        if value.startswith('@'):
-            return f'https://x.com/{value[1:]}'
-        
-        # Handle x.com without protocol
-        if value.startswith('x.com/'):
-            return f'https://{value}'
-        
-        # Handle twitter.com without protocol
-        if value.startswith('twitter.com/'):
-            return f'https://x.com/{value[12:]}'  # Convert twitter.com to x.com
-        
-        # If it's just a username (no dots, no slashes)
-        if '.' not in value and '/' not in value:
-            return f'https://x.com/{value}'
-        
-        # If it has a dot but no protocol, add https://
-        if '.' in value and not value.startswith(('http://', 'https://')):
-            return f'https://{value}'
-        
-        # If it already has http:// or https://, ensure twitter.com is converted to x.com
-        if value.startswith(('http://', 'https://')):
-            if 'twitter.com/' in value:
-                # Replace twitter.com with x.com
-                if value.startswith('http://twitter.com/'):
-                    return value.replace('http://twitter.com/', 'https://x.com/')
-                elif value.startswith('https://twitter.com/'):
-                    return value.replace('https://twitter.com/', 'https://x.com/')
-        
-        return value
-    
-    def validate(self, data):
-        """Additional validation"""
-        # Validate ID number length
-        id_number = data.get('id_number', '')
-        if id_number and len(id_number.strip()) < 5:
-            raise serializers.ValidationError({
-                'id_number': 'ID number is too short. Minimum 5 characters required.'
-            })
-        
-        # Optional: Validate URLs after preprocessing
-        from django.core.validators import URLValidator
-        from django.core.exceptions import ValidationError
-        
-        validator = URLValidator()
-        
-        # Validate LinkedIn URL if present
-        linkedin_url = data.get('linkedin_url', '')
-        if linkedin_url:
-            try:
-                validator(linkedin_url)
-            except ValidationError:
-                # Try to fix common issues
-                if linkedin_url.startswith('linkedin.com/'):
-                    linkedin_url = f'https://{linkedin_url}'
-                    try:
-                        validator(linkedin_url)
-                        data['linkedin_url'] = linkedin_url
-                    except ValidationError:
-                        raise serializers.ValidationError({
-                            'linkedin_url': 'Please enter a valid LinkedIn URL.'
-                        })
-        
-        # Validate Twitter URL if present
-        twitter_url = data.get('twitter_url', '')
-        if twitter_url:
-            try:
-                validator(twitter_url)
-            except ValidationError as e:
-                print(f"Twitter URL validation failed: {e}")
-                # Don't raise error - we're being permissive with Twitter URLs
-                # Just ensure it's at least a string that can be stored
-        
-        return data
-    
-    def create(self, validated_data):
-        """Create employer profile - using employer from context"""
-        try:
-            # Get employer from context (passed by view)
-            employer = self.context.get('employer')
-            
-            if not employer:
-                raise serializers.ValidationError({
-                    'detail': 'No employer provided in context.'
-                })
-            
-            # Check if profile already exists
-            if EmployerProfile.objects.filter(employer=employer).exists():
-                raise serializers.ValidationError({
-                    'detail': 'Profile already exists for this employer. Use update instead.'
-                })
-            
-            # Add employer to validated data
-            validated_data['employer'] = employer
-            
-            # Create the profile
-            return super().create(validated_data)
-            
-        except serializers.ValidationError:
-            # Re-raise validation errors
-            raise
-        except Exception as e:
-            # Log the error for debugging
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"Error creating employer profile: {str(e)}")
-            raise serializers.ValidationError({
-                'detail': f'Failed to create profile: {str(e)}'
-            })
-class EmployerProfileUpdateSerializer(serializers.ModelSerializer):
-    """Serializer for updating employer profile"""
-    linkedin_url = serializers.URLField(
-        required=False,
-        allow_blank=True,
-        error_messages={
-            'invalid': 'Enter a valid LinkedIn URL.'
-        }
-    )
-    
-    twitter_url = serializers.URLField(
-        required=False,
-        allow_blank=True,
-        error_messages={
-            'invalid': 'Enter a valid Twitter URL.'
-        }
-    )
-    
-    class Meta:
-        model = EmployerProfile
-        fields = [
-            'full_name',
-            'profile_picture',
-            'phone_number',
-            'alternate_phone',
-            'city',
-            'address',
-            'profession',
-            'skills',
-            'bio',
-            'linkedin_url',
-            'twitter_url',
-            'notification_preferences',
-        ]
-        extra_kwargs = {
-            'full_name': {'required': False},
-            'phone_number': {'required': False},
-            'city': {'required': False},
-            'address': {'required': False},
-        }
-    
-    def validate_linkedin_url(self, value):
-        """Preprocess LinkedIn URL"""
-        if not value or value.strip() == '':
-            return ''
-        
-        value = value.strip()
-        
-        if not value.startswith(('http://', 'https://')):
-            return f'https://{value}'
-        
-        return value
-    
-    def validate_twitter_url(self, value):
-        """Preprocess Twitter/X URL"""
-        if not value or value.strip() == '':
-            return ''
-        
-        value = value.strip()
-        
-        # Handle various Twitter URL formats
-        if value.startswith('@'):
-            return f'https://x.com/{value[1:]}'
-        
-        if not value.startswith(('http://', 'https://')):
-            # Check if it looks like a domain
-            if '.' in value:
-                return f'https://{value}'
-            else:
-                # Assume it's a username
-                return f'https://x.com/{value}'
-        
+        if not value.startswith('http'):
+            return f'https://linkedin.com/in/{value}' if '/' not in value else f'https://{value}'
         return value
 
+    def validate_twitter_url(self, value):
+        if not value: return None
+        value = value.strip().replace('twitter.com', 'x.com')
+        if value.startswith('@'): return f'https://x.com/{value[1:]}'
+        if not value.startswith('http'): return f'https://x.com/{value}'
+        return value
+
+    def create(self, validated_data):
+        employer = self.context.get('employer')
+        if not employer:
+            raise serializers.ValidationError({'detail': 'No employer in context.'})
+        # Final safety check
+        if EmployerProfile.objects.filter(employer=employer).exists():
+            raise serializers.ValidationError({'detail': 'Profile already exists.'})
+        
+        validated_data['employer'] = employer
+        return super().create(validated_data)
+# Add this to the bottom of webapp/serializers.py
+
 class IDNumberUpdateSerializer(serializers.ModelSerializer):
-    """Serializer for updating ID number"""
+    """Serializer for updating ID number specifically"""
     class Meta:
         model = EmployerProfile
         fields = ['id_number']
         extra_kwargs = {
             'id_number': {
-                'required': True,
-                'allow_null': False,
+                'required': True, 
                 'allow_blank': False,
                 'error_messages': {
                     'required': 'ID number is required.',
@@ -849,20 +583,25 @@ class IDNumberUpdateSerializer(serializers.ModelSerializer):
         }
     
     def validate_id_number(self, value):
-        """Validate ID number format"""
+        """Validate ID number format and length"""
         if not value or value.strip() == '':
             raise serializers.ValidationError("ID number cannot be empty.")
         
-        # Add ID number length validation (adjust for your country)
-        if len(value) < 5:
-            raise serializers.ValidationError("ID number seems too short.")
         
-        # Check for duplicates (optional - remove if not needed)
-        if self.instance:
-            if EmployerProfile.objects.filter(id_number=value).exclude(id=self.instance.id).exists():
-                raise serializers.ValidationError("This ID number is already registered.")
-        
-        return value.strip()
+        if len(value.strip()) < 5:
+            raise serializers.ValidationError("ID number must be at least 5 characters.")
+            
+        return value.strip()    
+
+class EmployerProfileUpdateSerializer(serializers.ModelSerializer):
+    """Used for PATCH updates from Flutter"""
+    class Meta:
+        model = EmployerProfile
+        fields = [
+            'full_name', 'profile_picture', 'phone_number', 'alternate_phone',
+            'city', 'address', 'profession', 'skills', 'bio',
+            'linkedin_url', 'twitter_url', 'notification_preferences',
+        ]
 
 class EmployerSerializer(serializers.ModelSerializer):
     profile = EmployerProfileSerializer(required=False)
