@@ -908,8 +908,8 @@ def _update_verification_status(profile):
         profile.verification_status = 'unverified'
     profile.save()
 @api_view(['GET'])
-#@authentication_classes([EmployerTokenAuthentication])
-#@permission_classes([IsAuthenticated])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
 def get_employer_profile(request):
     try:
         employer = request.user 
