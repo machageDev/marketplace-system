@@ -38,6 +38,7 @@ urlpatterns = [
     path('api/contracts/release-payment/', views.release_payment, name='release_payment'),
     path('api/contracts/<int:contract_id>/verify-otp/', views.verify_on_site_completion, name='verify_on_site_completion'),
     path('api/contracts/<int:contract_id>/generate-verification-code/',views.generate_verification_code,name='generate_verification_code'),
+    path('api/contracts/<int:contract_id>/request-refund/', views.request_refund, name='request_refund'),
     # ============ SUBMISSIONS ============
     path('submissions/create/', views.create_submission, name='submission_create'),
     path('api/submissions/create/', views.create_submission, name='create-submission'),     

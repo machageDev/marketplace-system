@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:helawork/client/home/client_payment_screen.dart';
 import 'package:helawork/client/models/client_contract_model.dart';
@@ -40,43 +41,150 @@ class _ClientContractsScreenState extends State<ClientContractsScreen> {
     });
   }
 
-  // ======================================================
-  // STATUS HELPERS
-  // ======================================================
   String _getStatusText(ContractModel contract) {
-    if (!contract.isPaid) return "Awaiting Escrow Payment";
-    if (contract.isPaid && !contract.isCompleted) {
-      return contract.isOnSite
-          ? "Awaiting OTP Verification"
-          : "In Escrow – Pending Release";
+    // DEBUG
+    print('🔄 _getStatusText called for contract ${contract.contractId}');
+    print('   Backend status: "${contract.status}"');
+    print('   isPaid: ${contract.isPaid}, isCompleted: ${contract.isCompleted}');
+    
+    // Clean the backend status
+    String backendStatus = contract.status.trim();
+    
+    // FIRST PRIORITY: Show backend status if it's specific
+    if (backendStatus.isNotEmpty && 
+        backendStatus != 'Unknown' && 
+        backendStatus != 'unknown' &&
+        backendStatus != 'pending' &&
+        backendStatus != 'Pending') {
+      
+      // These are the statuses that should override our calculations
+      if (backendStatus == 'Accepted & Paid' || 
+          backendStatus == 'Accepted and Paid' ||
+          backendStatus == 'Work in Progress' ||
+          backendStatus == 'Work In Progress' ||
+          backendStatus == 'Completed & Paid' ||
+          backendStatus == 'Completed and Paid' ||
+          backendStatus == 'Awaiting OTP Verification' ||
+          backendStatus == 'Awaiting Payment' ||
+          backendStatus.toLowerCase() == 'rejected' ||
+          backendStatus.toLowerCase() == 'cancelled') {
+        
+        // Special handling for "Accepted & Paid" status
+        if (backendStatus == 'Accepted & Paid' || backendStatus == 'Accepted and Paid') {
+          return contract.isOnSite ? "Awaiting OTP" : "In Escrow";
+        }
+        
+        print('✅ Using backend status: $backendStatus');
+        return backendStatus;
+      }
     }
-    if (contract.isPaid && contract.isCompleted) return "Paid & Completed";
-    return contract.status;
+    
+    // SECOND: Fallback to calculated status (only if backend status is generic)
+    print('📝 Using calculated status');
+    if (contract.isPaid && contract.isCompleted) {
+      return "Paid & Completed";
+    }
+    
+    if (contract.isPaid && !contract.isCompleted) {
+      return contract.isOnSite ? "Awaiting OTP" : "In Escrow";
+    }
+    
+    if (!contract.isPaid) {
+      if (!contract.freelancerAccepted) {
+        return "Awaiting Freelancer";
+      }
+      return "Awaiting Payment";
+    }
+    
+    return backendStatus; // Last resort
   }
 
   Color _getStatusColor(ContractModel contract) {
+    String status = contract.status.toLowerCase().trim();
+    
+    // Handle backend status colors
+    if (status.contains('accepted & paid') || status.contains('accepted and paid')) {
+      return contract.isOnSite ? _warningBlue : _secondaryBlue;
+    }
+    
+    if (status.contains('work in progress') || status.contains('work_in_progress')) {
+      return _greenBlue; // Green for active work
+    }
+    
+    if (status.contains('awaiting otp verification')) {
+      return _warningBlue; // Orange for waiting
+    }
+    
+    if (status.contains('completed & paid') || status.contains('completed and paid')) {
+      return _greenBlue; // Green for complete
+    }
+    
+    if (status.contains('rejected') || status.contains('cancelled')) {
+      return _errorBlue; // Red for rejected/cancelled
+    }
+    
+    // Fallback to calculated status colors
     if (contract.isPaid && contract.isCompleted) return _greenBlue;
-    if (!contract.isPaid) return _errorBlue;
+    
     if (contract.isPaid && !contract.isCompleted) {
       return contract.isOnSite ? _warningBlue : _secondaryBlue;
     }
+    
+    if (!contract.isPaid) {
+      if (!contract.freelancerAccepted) return _warningBlue;
+      return _errorBlue;
+    }
+    
     return _primaryBlue;
   }
 
   String _getActionButtonText(ContractModel contract) {
-    if (!contract.isPaid) return "Pay into Escrow";
+    String status = contract.status.toLowerCase().trim();
+    
+    // Handle backend status actions
+    if (status.contains('accepted & paid') || status.contains('accepted and paid')) {
+      return contract.isOnSite
+          ? "Show Verification Code"
+          : "Release Payment";
+    }
+    
+    if (status.contains('awaiting otp verification')) {
+      return "Show Verification Code";
+    }
+    
+    if (status.contains('work in progress') || status.contains('work_in_progress')) {
+      return "View Details";
+    }
+    
+    // Fallback to calculated actions
+    if (contract.isPaid && contract.isCompleted) {
+      return "View Details";
+    }
+    
     if (contract.isPaid && !contract.isCompleted) {
       return contract.isOnSite
           ? "Show Verification Code"
           : "Release Payment";
     }
+    
+    if (!contract.isPaid) {
+      if (status.contains('rejected') || status.contains('cancelled')) {
+        return contract.isPaid ? "Request Refund" : "Find New";
+      }
+      
+      if (contract.freelancerAccepted) {
+        return "Pay into Escrow";
+      }
+    }
+    
     return "View Details";
   }
 
   // ======================================================
-  // DIALOGS
+  // DIALOGS (Keep your existing dialog code)
   // ======================================================
   void _showOTPDialog(BuildContext context, ContractModel contract) {
+    // Keep your existing _showOTPDialog code exactly as is
     final code = contract.verificationOrCompletionCode;
     
     showDialog(
@@ -187,6 +295,7 @@ class _ClientContractsScreenState extends State<ClientContractsScreen> {
   }
 
   void _showConfirmCompletionDialog(BuildContext context, ContractModel contract) {
+    // Keep your existing _showConfirmCompletionDialog code
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -226,6 +335,7 @@ class _ClientContractsScreenState extends State<ClientContractsScreen> {
   }
 
   void _showReleaseConfirmation(BuildContext context, ContractModel contract) {
+    // Keep your existing _showReleaseConfirmation code
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -265,8 +375,50 @@ class _ClientContractsScreenState extends State<ClientContractsScreen> {
     );
   }
 
+  void _showRefundRequestDialog(BuildContext context, ContractModel contract) {
+    // Keep your existing _showRefundRequestDialog code
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: _whiteColor,
+        surfaceTintColor: _whiteColor,
+        title: Text(
+          "Request Refund",
+          style: TextStyle(color: _primaryBlue, fontWeight: FontWeight.bold),
+        ),
+        content: const Text(
+          "The freelancer rejected this task. Would you like to pull your funds back from Escrow into your HelaWork Wallet?",
+          style: TextStyle(color: Colors.black87),
+        ),
+        actions: [
+          TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: _darkBlue.withOpacity(0.6),
+            ),
+            onPressed: () => Navigator.pop(context), 
+            child: const Text("Not Now"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _greenBlue,
+              foregroundColor: _whiteColor,
+            ),
+            onPressed: () async {
+              Navigator.pop(context);
+              await _requestRefund(context, contract.contractId);
+            },
+            child: const Text(
+              "Confirm Refund",
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ======================================================
-  // ACTIONS
+  // ACTIONS (Keep your existing action code)
   // ======================================================
   Future<void> _releasePayment(BuildContext context, int contractId) async {
     try {
@@ -319,7 +471,6 @@ class _ClientContractsScreenState extends State<ClientContractsScreen> {
       );
       
       if (result["success"] == true) {
-        // Show the code in dialog
         final contract = provider.getContractById(contractId);
         if (contract != null) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -341,8 +492,40 @@ class _ClientContractsScreenState extends State<ClientContractsScreen> {
     }
   }
 
+  Future<void> _requestRefund(BuildContext context, int contractId) async {
+    try {
+      final provider = Provider.of<ClientContractProvider>(context, listen: false);
+      final result = await provider.requestRefund(contractId);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result["success"] == true 
+              ? "✅ Refund request submitted" 
+              : "❌ ${result["message"]}"),
+          backgroundColor: result["success"] == true ? _greenBlue : _errorBlue,
+          duration: const Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("❌ Error: $e"),
+          backgroundColor: _errorBlue,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      );
+    }
+  }
+
   // ======================================================
-  // PAYMENT NAVIGATION - FIXED VERSION
+  // PAYMENT NAVIGATION (Keep your existing code)
   // ======================================================
   Future<void> _navigateToPaymentScreen(BuildContext context, ContractModel contract) async {
     final prefs = await SharedPreferences.getInstance();
@@ -353,7 +536,6 @@ class _ClientContractsScreenState extends State<ClientContractsScreen> {
       return;
     }
 
-    // Check if contract has a valid orderId (UUID)
     if (!contract.hasValidOrderId) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -363,13 +545,11 @@ class _ClientContractsScreenState extends State<ClientContractsScreen> {
         ),
       );
       
-      // Try to refresh contracts to get the orderId
       await Provider.of<ClientContractProvider>(context, listen: false)
           .fetchEmployerContracts();
       return;
     }
 
-    // Validate UUID format
     final uuidRegex = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', caseSensitive: false);
     if (!uuidRegex.hasMatch(contract.orderId!)) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -391,7 +571,7 @@ class _ClientContractsScreenState extends State<ClientContractsScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => PaymentScreen(
-          orderId: contract.orderId!, // Use the UUID order_id
+          orderId: contract.orderId!,
           amount: contract.amount,
           email: email,
           freelancerName: contract.freelancerName,
@@ -460,9 +640,12 @@ class _ClientContractsScreenState extends State<ClientContractsScreen> {
   }
 
   // ======================================================
-  // CONTRACT CARD WIDGET - WHITE & BLUE THEME
+  // CONTRACT CARD WIDGET (Updated with debug info)
   // ======================================================
   Widget _buildContractCard(ContractModel contract) {
+    // Debug info in the card (temporary)
+    final statusText = _getStatusText(contract);
+    
     return Card(
       elevation: 2,
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -553,6 +736,17 @@ class _ClientContractsScreenState extends State<ClientContractsScreen> {
             ),
             const SizedBox(height: 12),
             
+            // DEBUG: Show raw backend status (temporary)
+            if (kDebugMode)
+              Text(
+                "API: ${contract.status}",
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.grey,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            
             // Status Badge
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -570,7 +764,7 @@ class _ClientContractsScreenState extends State<ClientContractsScreen> {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    _getStatusText(contract),
+                    statusText,
                     style: TextStyle(
                       color: _whiteColor,
                       fontSize: 12,
@@ -609,30 +803,62 @@ class _ClientContractsScreenState extends State<ClientContractsScreen> {
   }
 
   IconData _getStatusIcon(ContractModel contract) {
+    String status = contract.status.toLowerCase();
+    
+    if (status.contains('accepted & paid') || status.contains('accepted and paid')) {
+      return contract.isOnSite ? Icons.verified_user : Icons.lock_clock;
+    }
+    
+    if (status.contains('work in progress') || status.contains('work_in_progress')) {
+      return Icons.build;
+    }
+    
+    if (status.contains('awaiting otp verification')) {
+      return Icons.verified_user;
+    }
+    
     if (contract.isPaid && contract.isCompleted) return Icons.check_circle;
-    if (!contract.isPaid) return Icons.payment;
     if (contract.isPaid && !contract.isCompleted) {
       return contract.isOnSite ? Icons.verified_user : Icons.lock_clock;
     }
+    if (!contract.isPaid) return Icons.payment;
     return Icons.info;
   }
 
   Color _getActionButtonColor(ContractModel contract) {
+    String status = contract.status.toLowerCase();
+    
+    if (status.contains('accepted & paid') || status.contains('accepted and paid')) {
+      return _secondaryBlue;
+    }
+    
+    if (contract.isPaid && contract.isCompleted) return _darkBlue;
     if (!contract.isPaid) return _primaryBlue;
     if (contract.isPaid && !contract.isCompleted) return _secondaryBlue;
     return _darkBlue;
   }
 
   void _handleContractAction(BuildContext context, ContractModel contract) {
-    if (!contract.isPaid) {
-      _navigateToPaymentScreen(context, contract);
-    } else if (contract.isPaid && !contract.isCompleted) {
+    String status = contract.status.toLowerCase();
+    
+    // Handle backend status "Accepted & Paid" first
+    if (status.contains('accepted & paid') || status.contains('accepted and paid')) {
       if (contract.isOnSite) {
         _showOTPDialog(context, contract);
       } else {
         _showReleaseConfirmation(context, contract);
       }
-    } else {
+      return;
+    }
+    
+    // Handle "Awaiting OTP Verification"
+    if (status.contains('awaiting otp verification')) {
+      _showOTPDialog(context, contract);
+      return;
+    }
+    
+    // Your existing logic for other cases
+    if (contract.isPaid && contract.isCompleted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text("✅ Contract is already completed"),
@@ -643,6 +869,52 @@ class _ClientContractsScreenState extends State<ClientContractsScreen> {
           ),
         ),
       );
+      return;
+    }
+    
+    if (contract.isPaid && !contract.isCompleted) {
+      if (contract.isOnSite) {
+        _showOTPDialog(context, contract);
+      } else {
+        _showReleaseConfirmation(context, contract);
+      }
+      return;
+    }
+    
+    if (!contract.isPaid) {
+      if (status.contains('rejected') || status.contains('cancelled')) {
+        if (contract.isPaid) {
+          _showRefundRequestDialog(context, contract);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text("Freelancer rejected this contract"),
+              backgroundColor: _warningBlue,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          );
+        }
+        return;
+      }
+      
+      if (contract.freelancerAccepted) {
+        _navigateToPaymentScreen(context, contract);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text("Waiting for freelancer to accept"),
+            backgroundColor: _warningBlue,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      }
+      return;
     }
   }
 

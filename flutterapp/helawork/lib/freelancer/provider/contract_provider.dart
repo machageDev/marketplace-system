@@ -9,14 +9,16 @@ import 'auth_provider.dart';
 class ContractProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
   List<Contract> _contracts = [];
+  List<Contract> _filteredContracts = [];
   bool _isLoading = false;
   String? _errorMessage;
 
-  List<Contract> get contracts => _contracts;
+  List<Contract> get contracts => _filteredContracts;
+  List<Contract> get allContracts => _contracts;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
-  // Get token from AuthProvider
+  // Helper to get Auth Token
   String? _getToken(BuildContext context) {
     try {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
@@ -27,7 +29,42 @@ class ContractProvider with ChangeNotifier {
     }
   }
 
-  // Fetch all contracts
+  // Filter contracts to show only relevant ones
+  void _filterContracts() {
+    _filteredContracts = _contracts.where((contract) {
+      return contract.shouldShowInList;
+    }).toList();
+    
+    // Sort: pending acceptance first, then awaiting action, then completed
+    _filteredContracts.sort((a, b) {
+      // First: contracts needing acceptance
+      if (a.canAccept && !b.canAccept) return -1;
+      if (!a.canAccept && b.canAccept) return 1;
+      
+      // Second: contracts needing OTP verification
+      if (a.needsOtpVerification && !b.needsOtpVerification) return -1;
+      if (!a.needsOtpVerification && b.needsOtpVerification) return 1;
+      
+      // Third: contracts needing work submission
+      if (a.needsWorkSubmission && !b.needsWorkSubmission) return -1;
+      if (!a.needsWorkSubmission && b.needsWorkSubmission) return 1;
+      
+      // Fourth: completed contracts (show newest first)
+      if (a.isPaidAndCompleted && !b.isPaidAndCompleted) return 1;
+      if (!a.isPaidAndCompleted && b.isPaidAndCompleted) return -1;
+      
+      // Finally: sort by start date (newest first)
+      try {
+        final aDate = DateTime.parse(a.startDate);
+        final bDate = DateTime.parse(b.startDate);
+        return bDate.compareTo(aDate);
+      } catch (e) {
+        return 0;
+      }
+    });
+  }
+
+  // --- FETCH ALL CONTRACTS ---
   Future<void> fetchContracts(BuildContext context) async {
     _isLoading = true;
     _errorMessage = null;
@@ -35,13 +72,8 @@ class ContractProvider with ChangeNotifier {
 
     try {
       final token = _getToken(context);
-      if (token == null) {
-        throw Exception("Not authenticated. Please login again.");
-      }
+      if (token == null) throw Exception("Not authenticated. Please login again.");
 
-      debugPrint("Fetching contracts...");
-
-      
       final url = Uri.parse('${ApiService.baseUrl}/api/freelancer/contracts/');
 
       final response = await http.get(
@@ -52,129 +84,115 @@ class ContractProvider with ChangeNotifier {
         },
       );
 
-      debugPrint("Contracts API Response: ${response.statusCode}");
-      debugPrint("Contracts API Body: ${response.body}");
-
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
 
         if (data['status'] == true) {
-          List<dynamic> contractsData = data['contracts'] ?? [];
-          _contracts = contractsData.map((json) => Contract.fromJson(json)).toList();
-          debugPrint("Loaded ${_contracts.length} contracts");
+          // Map all lists from Django response
+          List<dynamic> pending = data['pending_contracts'] ?? [];
+          List<dynamic> active = data['active_contracts'] ?? [];
+          List<dynamic> completed = data['completed_contracts'] ?? [];
+          
+          // Combine them into one list
+          List<dynamic> combined = [...pending, ...active, ...completed];
+          
+          _contracts = combined.map((json) => Contract.fromJson(json))
+              .where((contract) => contract.contractId != 0)
+              .toList();
+          
+          // Filter contracts to show only relevant ones
+          _filterContracts();
+          
+          debugPrint("✅ Loaded ${_contracts.length} contracts (${_filteredContracts.length} filtered)");
         } else {
-          throw Exception(data['error'] ?? "Failed to load contracts");
+          throw Exception(data['error'] ?? "Failed to parse contract data");
         }
-      } else if (response.statusCode == 500) {
-        throw Exception("Server error. Please try again later.");
       } else {
-        throw Exception("Failed to load contracts: ${response.statusCode}");
+        throw Exception("Server returned ${response.statusCode}");
       }
     } catch (e) {
-      debugPrint("Error fetching contracts: $e");
-      _errorMessage = "Failed to load contracts: ${e.toString()}";
+      debugPrint("❌ Fetch Error: $e");
+      _errorMessage = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
-
-    _isLoading = false;
-    notifyListeners();
   }
 
-  // Accept a contract
+  // --- VERIFY ON-SITE COMPLETION (OTP HANDSHAKE) ---
+  Future<bool> verifyContractOTP(BuildContext context, int contractId, String otpCode) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final token = _getToken(context);
+      if (token == null) throw Exception("Session expired");
+
+      final url = Uri.parse('${ApiService.baseUrl}/api/contracts/$contractId/verify-completion/');
+
+      final response = await http.post(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({'completion_code': otpCode}),
+      );
+
+      final data = json.decode(response.body);
+
+      if (response.statusCode == 200 && data['status'] == true) {
+        await fetchContracts(context);
+        return true;
+      } else {
+        throw Exception(data['error'] ?? "Incorrect code. Please try again.");
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceAll("Exception: ", "")), backgroundColor: Colors.red),
+      );
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // --- ACCEPT CONTRACT ---
   Future<void> acceptContract(BuildContext context, int contractId) async {
     try {
       final token = _getToken(context);
-      if (token == null) {
-        throw Exception("Not authenticated. Please login again.");
-      }
-
-      debugPrint("Accepting contract $contractId");
-
-      await _apiService.acceptContract(token, contractId);
-
-      // Refresh contracts after acceptance
+      await _apiService.acceptContract(token!, contractId);
       await fetchContracts(context);
-
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Contract accepted successfully!'),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 2),
-        ),
+        const SnackBar(content: Text('Contract accepted!'), backgroundColor: Colors.green),
       );
     } catch (e) {
-      debugPrint("Error accepting contract: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: ${e.toString()}'),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 3),
-        ),
-      );
-      rethrow;
+      debugPrint("Accept Error: $e");
     }
   }
 
-  // Reject a contract
+  // --- REJECT CONTRACT ---
   Future<void> rejectContract(BuildContext context, int contractId) async {
     try {
       final token = _getToken(context);
-      if (token == null) {
-        throw Exception("Not authenticated. Please login again.");
-      }
-
-      debugPrint("Rejecting contract $contractId");
-
-      await _apiService.rejectContract(token, contractId);
-
-      // Refresh contracts after rejection
+      await _apiService.rejectContract(token!, contractId);
       await fetchContracts(context);
-
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Contract rejected.'),
-          backgroundColor: Colors.orange,
-          duration: Duration(seconds: 2),
-        ),
+        const SnackBar(content: Text('Contract rejected'), backgroundColor: Colors.orange),
       );
     } catch (e) {
-      debugPrint("Error rejecting contract: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: ${e.toString()}'),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 3),
-        ),
-      );
-      rethrow;
+      debugPrint("Reject Error: $e");
     }
   }
 
-  // Get pending contracts (employer accepted, freelancer not accepted)
-  List<Contract> get pendingContracts {
-    return _contracts
-        .where((contract) => contract.employerAccepted && !contract.freelancerAccepted)
-        .toList();
-  }
+  // --- GETTERS FOR DASHBOARD ---
+  List<Contract> get activeContracts => _contracts.where((c) => c.isAccepted).toList();
+  List<Contract> get pendingContracts => _contracts.where((c) => c.canAccept).toList();
 
-  // Get active contracts (both accepted)
-  List<Contract> get activeContracts {
-    return _contracts
-        .where((contract) => contract.employerAccepted && contract.freelancerAccepted)
-        .toList();
-  }
-
-  // Get contract by ID
-  Contract? getContractById(int contractId) {
-    try {
-      return _contracts.firstWhere((contract) => contract.contractId == contractId);
-    } catch (e) {
-      return null;
-    }
-  }
-
-  // Clear all data
   void clear() {
     _contracts = [];
+    _filteredContracts = [];
     _errorMessage = null;
     notifyListeners();
   }

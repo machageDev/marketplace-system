@@ -1,20 +1,20 @@
 class ContractModel {
   final int contractId;
-  final String? orderId; // UUID for payments
-  final String? orderStatus; // Order status
+  final String? orderId; 
+  final String? orderStatus; 
   final String taskTitle;
   final String taskDescription;
   final String taskCategory;
   final String freelancerName;
   final String freelancerEmail;
   final double amount;
-  final String serviceType; // 'remote' or 'on_site'
+  final String serviceType; 
   final bool isPaid;
   final bool isCompleted;
   final bool isActive;
   final bool employerAccepted;
   final bool freelancerAccepted;
-  final String status; // Display status
+  final String status; 
   final String? startDate;
   final String? endDate;
   final String? paymentDate;
@@ -23,7 +23,6 @@ class ContractModel {
   final String? locationAddress;
   final String? deadline;
   
-  // ADD THESE MISSING PROPERTIES:
   final String freelancerPhoto;
   final int freelancerId;
   final String employerName;
@@ -55,7 +54,6 @@ class ContractModel {
     this.locationAddress,
     this.deadline,
     
-    // ADD THESE TO THE CONSTRUCTOR:
     this.freelancerPhoto = '',
     this.freelancerId = 0,
     this.employerName = '',
@@ -89,7 +87,6 @@ class ContractModel {
       locationAddress: json['location_address'] as String?,
       deadline: json['deadline'] as String?,
       
-      // ADD THESE MAPPINGS:
       freelancerPhoto: json['freelancer_photo'] as String? ?? '',
       freelancerId: json['freelancer_id'] as int? ?? 0,
       employerName: json['employer_name'] as String? ?? '',
@@ -123,7 +120,6 @@ class ContractModel {
       'verification_code': verificationCode,
       'location_address': locationAddress,
       'deadline': deadline,
-      // ADD THESE TO JSON:
       'freelancer_photo': freelancerPhoto,
       'freelancer_id': freelancerId,
       'employer_name': employerName,
@@ -132,7 +128,7 @@ class ContractModel {
     };
   }
 
-  // Helper methods
+  // --- HELPER METHODS ---
   bool get isOnSite => serviceType == 'on_site';
   bool get isRemote => serviceType == 'remote';
   bool get isFullyAccepted => employerAccepted && freelancerAccepted;
@@ -141,9 +137,10 @@ class ContractModel {
   bool get isAwaitingPayment => !isPaid;
   bool get isInProgress => isPaid && !isCompleted;
   bool get isFinished => isPaid && isCompleted;
-  bool get hasVerificationCode => verificationCode != null && verificationCode!.isNotEmpty;
-  bool get hasValidOrderId => orderId != null && orderId!.isNotEmpty && orderId!.contains('-'); // UUID check
+  bool get hasVerificationCode => (verificationCode != null && verificationCode!.isNotEmpty) || (completionCode != null && completionCode!.isNotEmpty);
+  bool get hasValidOrderId => orderId != null && orderId!.isNotEmpty && orderId!.contains('-');
   
-  // ADD THIS HELPER GETTER:
+  // NEW GETTERS ADDED FOR THE SCREEN
+  bool get isRejected => status.toLowerCase() == 'rejected';
   String? get verificationOrCompletionCode => verificationCode ?? completionCode;
 }

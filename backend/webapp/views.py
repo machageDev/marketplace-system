@@ -2944,20 +2944,20 @@ def accept_proposal(request):
 @permission_classes([IsAuthenticated])
 def reject_contract(request, contract_id):
     contract = get_object_or_404(Contract, contract_id=contract_id)
-
-    # Authorization: Only freelancer can reject their own contract
+    
     if request.user != contract.freelancer:
         return Response({"error": "Unauthorized"}, status=403)
 
-    # Reject contract
-    contract.delete()  # Or mark as rejected if you want to keep record
-    
+    # Instead of contract.delete(), change status
+    contract.status = 'rejected'
+    contract.is_active = False
+    contract.save()
+
     return Response({
-        "message": "Contract rejected and removed"
+        "status": True,
+        "message": "Contract rejected. Client can now see rejection status and request refund.",
+        "is_paid": contract.is_paid
     })
-    
-    
-        
 @api_view(['POST'])
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -2968,68 +2968,76 @@ def accept_contract(request, contract_id):
         return Response({"error": "Unauthorized"}, status=403)
 
     contract.freelancer_accepted = True
-    contract.activate_contract()
+    contract.status = 'accepted' # Update the status string too
+    contract.activate_contract() # Assuming this sets is_active = True
+    contract.save()
 
     return Response({
+        "status": True,
         "message": "Contract accepted",
-        "is_active": contract.is_active
+        "is_active": contract.is_active,
+        "freelancer_accepted": contract.freelancer_accepted
     })
 @api_view(['GET'])
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def freelancer_contracts(request):
     try:
-        # CORRECT: Filter by User directly since Contract.freelancer points to User
+        # Get all contracts where this user is the freelancer
         contracts = Contract.objects.filter(
             freelancer=request.user
-        ).select_related('task', 'employer').all()
-        
-        data = []
+        ).select_related('task', 'employer')
+
+        all_contracts_data = []
+        pending_contracts = []
+        active_contracts = []
+
         for contract in contracts:
-            # Note: Your Employer model doesn't have a 'profile' field
-            # Remove employer__profile from select_related if it doesn't exist
-            
             contract_data = {
-                'contract_id': contract.contract_id,
-                'task': {
-                    'task_id': contract.task.task_id,
-                    'title': contract.task.title,
-                    'description': contract.task.description,
-                    'budget': float(contract.task.budget) if contract.task.budget else None,
-                    'deadline': contract.task.deadline.isoformat() if contract.task.deadline else None,
-                    'status': contract.task.status,  # Include task status
+                "contract_id": contract.contract_id,
+                "task": {
+                    "task_id": contract.task.task_id,
+                    "title": contract.task.title,
+                    "description": contract.task.description,
+                    "budget": float(contract.task.budget) if contract.task.budget else 0.0,
+                    "deadline": contract.task.deadline.isoformat() if contract.task.deadline else None,
+                    "status": contract.task.status,
+                    "service_type": getattr(contract.task, 'service_type', 'remote'), # Crucial for UI
                 },
-                'employer': {
-                    'id': contract.employer.employer_id,
-                    'name': contract.employer.username,  # Direct field from Employer model
-                    'email': contract.employer.contact_email,
-                    'phone': contract.employer.phone_number,
+                "employer": {
+                    "id": contract.employer.employer_id,
+                    "name": contract.employer.username,
+                    "username": contract.employer.username,
+                    "email": getattr(contract.employer, 'contact_email', ''),
                 },
-                'start_date': contract.start_date.isoformat(),
-                'end_date': contract.end_date.isoformat() if contract.end_date else None,
-                'employer_accepted': contract.employer_accepted,
-                'freelancer_accepted': contract.freelancer_accepted,
-                'is_active': contract.is_active,
-                'is_fully_accepted': contract.is_fully_accepted,
-                'is_paid': contract.is_paid,  # Include is_paid field
-                'status': contract.status,  # Use actual contract status field
+                "start_date": contract.start_date.isoformat(),
+                "end_date": contract.end_date.isoformat() if contract.end_date else None,
+                "employer_accepted": contract.employer_accepted,
+                "freelancer_accepted": contract.freelancer_accepted,
+                "is_active": contract.is_active,
+                "status": contract.status,
             }
-            data.append(contract_data)
-        
+
+            # LOGIC FIX: If freelancer hasn't accepted, it belongs in pending
+            if not contract.freelancer_accepted:
+                pending_contracts.append(contract_data)
+            # If both have accepted, it is active
+            elif contract.employer_accepted and contract.freelancer_accepted:
+                active_contracts.append(contract_data)
+            
+            all_contracts_data.append(contract_data)
+
         return Response({
             "status": True,
-            "contracts": data,
-            "count": len(data)
+            "contracts": all_contracts_data, # Flutter looks for this key
+            "pending_contracts": pending_contracts,
+            "active_contracts": active_contracts,
+            "pending_count": len(pending_contracts),
+            "active_count": len(active_contracts),
         })
-        
+
     except Exception as e:
-        print(f"Error in freelancer_contracts: {e}")
-        import traceback
-        print(traceback.format_exc())  # Add this for detailed error
-        return Response({"error": str(e)}, status=500)
-    
-    
-# views.py
+        return Response({"status": False, "error": str(e)}, status=500)  
 @api_view(['POST'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -3098,112 +3106,137 @@ def employer_mark_contract_completed(request, contract_id):
 
 
 from rest_framework import status  
-
 @api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def employer_contracts(request):
-    """
-    GET /api/employer/contracts/
-    Returns ALL contracts for the employer with their order IDs
-    """
     try:
         print(f"\n{'='*60}")
-        print("EMPLOYER ALL CONTRACTS API CALLED")
+        print(f"FETCHING CONTRACTS FOR: {request.user.username}")
         print(f"{'='*60}")
-        print(f"Employer: {request.user.username}")
         
+        # Removed select_related to prevent 'user' join errors
         contracts = Contract.objects.filter(
             employer=request.user
-        ).select_related(
-            'task', 
-            'freelancer'
         ).order_by('-start_date')
         
-        print(f"Found {contracts.count()} total contracts")
-        
         contracts_data = []
+        
         for contract in contracts:
-            # Find the Order for this contract
+            # 1. Resolve Order ID
             order_id = None
-            order_status = 'not_found'
             try:
-                # Find order by task and employer
-                order = Order.objects.filter(
-                    task=contract.task,
-                    employer=contract.employer
-                ).first()
+                order = Order.objects.filter(task=contract.task, employer=contract.employer).first()
                 if order:
-                    order_id = str(order.order_id)  # Convert UUID to string
-                    order_status = order.status
-                    print(f"✅ Found order {order_id} for contract {contract.contract_id}")
-                else:
-                    print(f"⚠️ No order found for contract {contract.contract_id}")
-            except Exception as e:
-                print(f"⚠️ Error finding order for contract {contract.contract_id}: {e}")
-            
-            # Determine status text
-            status_text = 'Active'
-            if contract.is_completed and contract.is_paid:
+                    order_id = str(order.order_id)
+            except Exception: 
+                pass
+
+            # 2. STATUS MAPPING LOGIC (KEEPING YOUR EXACT LOGIC)
+            status_text = "Unknown"
+
+            if contract.status == 'cancelled':
+                status_text = 'Cancelled'
+            elif contract.is_completed and contract.is_paid:
                 status_text = 'Completed & Paid'
-            elif contract.is_paid and not contract.is_completed:
-                if contract.task and contract.task.service_type == 'on_site':
+            elif not contract.freelancer_accepted and not contract.is_active:
+                status_text = 'Rejected'
+            elif contract.is_paid:
+                if contract.status == 'pending_verification':
                     status_text = 'Awaiting OTP Verification'
+                elif contract.status == 'accepted' or contract.status == 'active':
+                    status_text = 'Accepted & Paid'
                 else:
-                    status_text = 'In Escrow - Pending Release'
+                    status_text = 'In Escrow'
             elif not contract.is_paid:
-                status_text = 'Awaiting Payment'
-            
+                if not contract.freelancer_accepted:
+                    status_text = 'Awaiting Freelancer'
+                else:
+                    status_text = 'Awaiting Payment'
+
+            # 3. CONSTRUCT DATA (Ensuring all fields match Flutter ContractModel)
             contract_data = {
                 'contract_id': contract.contract_id,
-                'order_id': order_id,  # UUID for payments
-                'order_status': order_status,  # Order status
-                'task_id': contract.task.task_id if contract.task else None,
-                'task_title': contract.task.title if contract.task else 'Unknown Task',
+                'order_id': order_id,
+                'order_status': 'paid' if contract.is_paid else 'pending',
+                'task_id': contract.task.task_id if contract.task else 0,
+                'task_title': contract.task.title if contract.task else 'Unknown',
                 'task_description': contract.task.description if contract.task else '',
                 'task_category': contract.task.category if contract.task else 'other',
-                'freelancer_id': contract.freelancer.user_id if contract.freelancer else None,
+                'freelancer_id': contract.freelancer.user_id if contract.freelancer else 0,
                 'freelancer_name': contract.freelancer.name if contract.freelancer else 'Unknown',
                 'freelancer_email': contract.freelancer.email if contract.freelancer else '',
                 'amount': float(contract.task.budget) if contract.task and contract.task.budget else 0.0,
                 'status': status_text,
-                'service_type': contract.task.service_type if contract.task else 'remote',
-                'employer_accepted': contract.employer_accepted,
-                'freelancer_accepted': contract.freelancer_accepted,
                 'is_active': contract.is_active,
                 'is_completed': contract.is_completed,
                 'is_paid': contract.is_paid,
+                'employer_accepted': contract.employer_accepted,
+                'freelancer_accepted': contract.freelancer_accepted,
+                'service_type': contract.task.service_type if contract.task else 'remote',
                 'start_date': contract.start_date.strftime('%Y-%m-%d') if contract.start_date else None,
-                'end_date': contract.end_date.strftime('%Y-%m-%d') if contract.end_date else None,
-                'payment_date': contract.payment_date.strftime('%Y-%m-%d %H:%M:%S') if contract.payment_date else None,
-                'completed_date': contract.completed_date.strftime('%Y-%m-%d %H:%M:%S') if contract.completed_date else None,
-                'verification_code': contract.completion_code,  # For on-site tasks
-                'location_address': contract.task.location_address if contract.task else None,
-                'deadline': contract.task.deadline.strftime('%Y-%m-%d %H:%M') if contract.task and contract.task.deadline else None,
+                'payment_date': contract.payment_date.strftime('%Y-%m-%d') if contract.payment_date else None,
+                'completed_date': contract.completed_date.strftime('%Y-%m-%d') if contract.completed_date else None,
+                'verification_code': contract.completion_code, 
+                'completion_code': contract.completion_code,
+                'location_address': contract.task.location_address if contract.task else '',
+                'deadline': contract.task.deadline.strftime('%Y-%m-%d') if contract.task and hasattr(contract.task, 'deadline') and contract.task.deadline else None,
             }
             contracts_data.append(contract_data)
             
-            print(f"  Contract {contract.contract_id}: {contract.task.title if contract.task else 'No task'} | "
-                  f"Service: {contract.task.service_type if contract.task else 'remote'} | "
-                  f"Paid: {contract.is_paid} | Completed: {contract.is_completed} | "
-                  f"Order ID: {order_id} | Order Status: {order_status}")
-        
+            print(f"ID: {contract.contract_id} | UI: {status_text} | DB: {contract.status}")
+
         return Response({
             'status': True,
-            'count': len(contracts_data),
             'contracts': contracts_data,
-            'message': f'Found {len(contracts_data)} contracts'
         }, status=status.HTTP_200_OK)
-        
-    except Exception as e:
-        print(f"ERROR in employer_contracts: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return Response({
-            'status': False,
-            'error': f'Failed to fetch contracts: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    except Exception as e:
+        print(f"❌ API ERROR: {str(e)}")
+        return Response({'status': False, 'error': str(e)}, status=500)
+@api_view(['POST'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def request_refund(request, contract_id):
+    # 1. Get the contract
+    contract = get_object_or_404(Contract, contract_id=contract_id)
+
+    # 2. Authorization: Only the Employer (Client) who paid can request the refund
+    if request.user != contract.employer:
+        return Response({"status": False, "message": "Unauthorized"}, status=403)
+
+    # 3. Validation: Only refund if Freelancer rejected AND payment was made
+    if contract.status != 'rejected':
+        return Response({"status": False, "message": "Refund only available for rejected contracts."}, status=400)
+    
+    if not contract.is_paid:
+        return Response({"status": False, "message": "No payment found for this contract."}, status=400)
+
+    if contract.status == 'refunded':
+        return Response({"status": False, "message": "Refund already processed."}, status=400)
+
+    # 4. Process Refund (Atomic Transaction)
+    try:
+        with transaction.atomic():
+            # Get Client's Wallet
+            wallet, created = Wallet.objects.get_or_create(user=request.user)
+            
+            # Add funds back to client wallet
+            wallet.balance += contract.amount
+            wallet.save()
+
+            # Update contract status so it can't be refunded again
+            contract.status = 'refunded'
+            contract.is_active = False
+            contract.save()
+
+            return Response({
+                "status": True, 
+                "message": f"KES {contract.amount} has been refunded to your wallet balance."
+            })
+            
+    except Exception as e:
+        return Response({"status": False, "message": f"Refund failed: {str(e)}"}, status=500)
 @api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
