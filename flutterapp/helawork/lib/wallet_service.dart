@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class WalletService {
-  final String baseUrl = "http://192.168.100.188:8000/api/wallet"; 
+  //final String baseUrl = "http://192.168.100.188:8000/api/wallet"; 
 
-   //static const String baseUrl = 'https://marketplace-system-1.onrender.com';
+   static const String baseUrl = 'https://marketplace-system-1.onrender.com';
  
   Future<Map<String, dynamic>?> getWalletData(String token) async {
     try {

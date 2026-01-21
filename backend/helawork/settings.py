@@ -102,10 +102,10 @@ import dj_database_url
         }
     }'''
 
-
+#postgresql://helawork_db_user:Xgfo1L6B59XyVQ3AnpDoJxCmp0hU4r2M@dpg-d5ob3mpr0fns73d4u8eg-a.oregon-postgres.render.com/helawork_db
 DATABASES = {
     'default': dj_database_url.parse(
-        "postgresql://helawork_m611_user:Ob2b5HO1Tjw37wIXM25dAuPTYTAy0bv2@dpg-d5jh7v9r0fns73d3hdog-a.oregon-postgres.render.com/helawork_m611",
+        "postgresql://helawork_db_user:Xgfo1L6B59XyVQ3AnpDoJxCmp0hU4r2M@dpg-d5ob3mpr0fns73d4u8eg-a.oregon-postgres.render.com/helawork_db",
         conn_max_age=600,
         ssl_require=True
     )
