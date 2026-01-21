@@ -352,12 +352,34 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
         ),
         iconTheme: const IconThemeData(color: Colors.black),
         actions: [
+          // CREATE PROFILE BUTTON - SHOWS WHEN NO PROFILE EXISTS
+          if (!provider.isLoading && provider.profile == null && !provider.hasError)
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.person_add, size: 18),
+                label: const Text('Create Profile'),
+                onPressed: () => _navigateToEditScreen(context, true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: themeBlue,
+                  foregroundColor: themeWhite,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                ),
+              ),
+            ),
+          
+          // EDIT BUTTON - SHOWS WHEN PROFILE EXISTS
           if (!provider.isLoading && provider.profile != null)
             IconButton(
               icon: const Icon(Icons.edit, size: 22),
               onPressed: () => _navigateToEditScreen(context, false),
               tooltip: 'Edit Profile',
             ),
+          
+          // REFRESH BUTTON
           IconButton(
             icon: _isRefreshing
                 ? const SizedBox(
@@ -374,6 +396,19 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
           ),
         ],
       ),
+      // FLOATING ACTION BUTTON FOR CREATE PROFILE
+      floatingActionButton: !provider.isLoading && 
+                          provider.profile == null && 
+                          !provider.hasError
+          ? FloatingActionButton.extended(
+              onPressed: () => _navigateToEditScreen(context, true),
+              backgroundColor: themeBlue,
+              foregroundColor: themeWhite,
+              icon: const Icon(Icons.add),
+              label: const Text('Create Profile'),
+              elevation: 4,
+            )
+          : null,
       body: _buildBody(provider, themeBlue, themeWhite),
     );
   }
@@ -429,6 +464,17 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                   foregroundColor: themeWhite,
                 ),
               ),
+              const SizedBox(height: 10),
+              // ADDED: Create Profile button in error state
+              ElevatedButton.icon(
+                icon: const Icon(Icons.person_add),
+                label: const Text('Create New Profile'),
+                onPressed: () => _navigateToEditScreen(context, true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: themeWhite,
+                ),
+              ),
             ],
           ),
         ),
@@ -454,30 +500,50 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(
-                width: 150,
-                height: 150,
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.grey[300]!, width: 2),
-                ),
-                child: const Icon(
-                  Icons.person_add,
-                  size: 70,
-                  color: Colors.grey,
+              // Hero animation for profile icon
+              Hero(
+                tag: 'profile_creation',
+                child: Container(
+                  width: 150,
+                  height: 150,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.grey[300]!, width: 2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: themeBlue.withOpacity(0.1),
+                        blurRadius: 20,
+                        spreadRadius: 5,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.person_add_alt_1,
+                    size: 70,
+                    color: Color(0xFF1976D2),
+                  ),
                 ),
               ),
               const SizedBox(height: 32),
-              const Text(
-                'Complete Your Profile',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.black87,
+              
+              // Animated title
+              AnimatedOpacity(
+                opacity: 1,
+                duration: const Duration(milliseconds: 500),
+                child: const Text(
+                  'Complete Your Profile',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black87,
+                  ),
                 ),
               ),
+              
               const SizedBox(height: 12),
+              
+              // Description
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 40.0),
                 child: Text(
@@ -490,32 +556,58 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                   ),
                 ),
               ),
+              
               const SizedBox(height: 32),
+              
+              // Benefits List
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 40),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey[200]!),
+                ),
+                child: Column(
+                  children: [
+                    _buildBenefitItem(Icons.check_circle, 'Connect with freelancers'),
+                    _buildBenefitItem(Icons.check_circle, 'Post projects and jobs'),
+                    _buildBenefitItem(Icons.check_circle, 'Build your business reputation'),
+                    _buildBenefitItem(Icons.check_circle, 'Get better proposals'),
+                  ],
+                ),
+              ),
+              
+              const SizedBox(height: 32),
+              
+              // CREATE PROFILE BUTTON - Large and prominent
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 40),
                 child: SizedBox(
                   width: double.infinity,
-                  height: 50,
+                  height: 56,
                   child: ElevatedButton(
                     onPressed: () => _navigateToEditScreen(context, true),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: themeBlue,
                       foregroundColor: themeWhite,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(25),
+                        borderRadius: BorderRadius.circular(28),
                       ),
-                      elevation: 0,
+                      elevation: 4,
+                      shadowColor: themeBlue.withOpacity(0.3),
                     ),
                     child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.add_circle_outline, size: 22),
-                        SizedBox(width: 10),
+                        Icon(Icons.add_circle_outline, size: 24),
+                        SizedBox(width: 12),
                         Text(
-                          'Create Profile',
+                          'CREATE PROFILE',
                           style: TextStyle(
                             fontSize: 16,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.5,
                           ),
                         ),
                       ],
@@ -523,7 +615,10 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                   ),
                 ),
               ),
+              
               const SizedBox(height: 16),
+              
+              // Secondary CTA
               TextButton(
                 onPressed: () {
                   showDialog(
@@ -531,28 +626,85 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                     builder: (context) => AlertDialog(
                       title: const Text('Why Create a Profile?'),
                       content: const Text(
-                        'A complete profile helps freelancers understand your business needs better. It increases trust and helps you find the right talent for your projects.',
+                        'A complete profile helps freelancers understand your business needs better. It increases trust and helps you find the right talent for your projects.\n\n• Post unlimited projects\n• Access top freelancers\n• Build your business reputation\n• Secure payment system',
                       ),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.pop(context),
                           child: const Text('Got it'),
                         ),
+                        ElevatedButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _navigateToEditScreen(context, true);
+                          },
+                          child: const Text('Create Profile Now'),
+                        ),
                       ],
                     ),
                   );
                 },
                 child: Text(
-                  'Why is this important?',
+                  'Learn more about benefits',
                   style: TextStyle(
                     color: themeBlue,
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
                   ),
+                ),
+              ),
+              
+              const SizedBox(height: 20),
+              
+              // Quick tip
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 40),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue[100]!),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.lightbulb_outline, color: Colors.amber[700], size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'It only takes 2 minutes to create your profile',
+                        style: TextStyle(
+                          color: Colors.blue[900],
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildBenefitItem(IconData icon, String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.green, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                color: Colors.black87,
+                fontSize: 14,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1029,8 +1181,8 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
             },
           ),
         ],
-      ),
-    );
+      ),    );
+      
   }
 
   Widget _buildVerificationItem({

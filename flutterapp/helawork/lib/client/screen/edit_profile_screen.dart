@@ -250,6 +250,20 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     const themeBlue = Color(0xFF1976D2);
     const themeWhite = Colors.white;
 
+    // ADDED: Function to navigate to create profile from another screen
+    void _navigateToCreateProfile() {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => EditProfileScreen(
+            currentProfile: null,
+            isNewProfile: true,
+            employerId: 0,
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -261,6 +275,41 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         ),
         iconTheme: const IconThemeData(color: Colors.black),
         actions: [
+          // ADDED: CREATE BUTTON (only when not creating new profile)
+          if (!widget.isNewProfile)
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: TextButton.icon(
+                icon: const Icon(Icons.add_circle_outline, size: 18),
+                label: const Text('New Profile'),
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Create New Profile'),
+                      content: const Text('Are you sure you want to create a new profile? This will not delete your current profile.'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Cancel'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _navigateToCreateProfile();
+                          },
+                          child: const Text('Create New'),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+                style: TextButton.styleFrom(
+                  foregroundColor: themeBlue,
+                ),
+              ),
+            ),
+          
           if (_isSaving || _isUploadingImage)
             Padding(
               padding: const EdgeInsets.only(right: 16),
@@ -284,6 +333,47 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // ADDED: WELCOME MESSAGE FOR NEW PROFILE
+              if (widget.isNewProfile)
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(
+                    color: themeBlue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: themeBlue.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, color: themeBlue, size: 24),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Create Your Profile',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Fill in your details to complete your profile. Required fields are marked with *',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              
               // ADDED: PROFILE PICTURE SECTION
               Container(
                 padding: const EdgeInsets.all(20),
@@ -384,7 +474,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     
                     const SizedBox(height: 16),
                     Text(
-                      'Tap to change profile picture',
+                      widget.isNewProfile 
+                          ? 'Add profile picture (optional)'
+                          : 'Tap to change profile picture',
                       style: TextStyle(
                         color: Colors.grey[600],
                         fontSize: 14,
@@ -422,6 +514,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                   filled: true,
                   fillColor: Colors.grey[50],
+                  prefixIcon: const Icon(Icons.person_outline, color: Colors.grey),
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
@@ -449,6 +542,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                   filled: true,
                   fillColor: Colors.grey[50],
+                  prefixIcon: const Icon(Icons.work_outline, color: Colors.grey),
                 ),
                 onSaved: (value) => _formData['profession'] = value?.trim(),
               ),
@@ -482,6 +576,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                   filled: true,
                   fillColor: Colors.grey[50],
+                  prefixIcon: const Icon(Icons.email_outlined, color: Colors.grey),
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
@@ -513,6 +608,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                   filled: true,
                   fillColor: Colors.grey[50],
+                  prefixIcon: const Icon(Icons.phone_outlined, color: Colors.grey),
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
@@ -541,6 +637,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                   filled: true,
                   fillColor: Colors.grey[50],
+                  prefixIcon: const Icon(Icons.phone_iphone_outlined, color: Colors.grey),
                 ),
                 onSaved: (value) => _formData['alternate_phone'] = value?.trim(),
               ),
@@ -573,6 +670,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                   filled: true,
                   fillColor: Colors.grey[50],
+                  prefixIcon: const Icon(Icons.location_city_outlined, color: Colors.grey),
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
@@ -600,6 +698,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                   filled: true,
                   fillColor: Colors.grey[50],
+                  prefixIcon: const Icon(Icons.home_outlined, color: Colors.grey),
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
@@ -640,6 +739,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   filled: true,
                   fillColor: Colors.grey[50],
                   hintText: 'e.g., Web Development, Graphic Design, Marketing',
+                  prefixIcon: const Icon(Icons.work_outline, color: Colors.grey),
                 ),
                 onSaved: (value) => _formData['skills'] = value?.trim(),
               ),
@@ -664,6 +764,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   fillColor: Colors.grey[50],
                   alignLabelWithHint: true,
                   hintText: 'Tell about yourself and what services you need',
+                  prefixIcon: const Icon(Icons.description_outlined, color: Colors.grey),
                 ),
                 onSaved: (value) => _formData['bio'] = value?.trim(),
               ),
@@ -697,6 +798,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                   filled: true,
                   fillColor: Colors.grey[50],
+                  prefixIcon: const Icon(Icons.link_outlined, color: Colors.grey),
                 ),
                 onSaved: (value) => _formData['linkedin_url'] = value?.trim(),
               ),
@@ -719,6 +821,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                   filled: true,
                   fillColor: Colors.grey[50],
+                  prefixIcon: const Icon(Icons.link_outlined, color: Colors.grey),
                 ),
                 onSaved: (value) => _formData['twitter_url'] = value?.trim(),
               ),
@@ -759,10 +862,62 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   filled: true,
                   fillColor: Colors.grey[50],
                   hintText: 'National ID, Passport, or Driver\'s License',
+                  prefixIcon: const Icon(Icons.badge_outlined, color: Colors.grey),
                 ),
                 onSaved: (value) => _formData['id_number'] = value?.trim(),
               ),
               const SizedBox(height: 32),
+
+              // ADDED: CREATE BUTTON AT BOTTOM TOO
+              if (!widget.isNewProfile)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[50],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey[300]!),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.add_circle_outline, color: themeBlue, size: 24),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Need another profile?',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Create a new profile for a different business or purpose',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('New'),
+                        onPressed: _navigateToCreateProfile,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: themeBlue,
+                          foregroundColor: themeWhite,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
 
               // Save Button
               SizedBox(

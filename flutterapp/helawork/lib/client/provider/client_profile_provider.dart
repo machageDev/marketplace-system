@@ -45,6 +45,8 @@ class ClientProfileProvider with ChangeNotifier {
       
       if (_profileExists && result.containsKey('profile')) {
         _profile = result['profile'];
+      } else {
+        _profile = null; // Clear profile if doesn't exist
       }
       
       _isLoading = false;
@@ -53,6 +55,7 @@ class ClientProfileProvider with ChangeNotifier {
     } catch (e) {
       print('Error checking profile existence: $e');
       _profileExists = false;
+      _profile = null;
       _isLoading = false;
       notifyListeners();
       return false;
@@ -98,10 +101,13 @@ class ClientProfileProvider with ChangeNotifier {
       
       if (_profileExists && result.containsKey('profile')) {
         _profile = result['profile'];
+      } else {
+        _profile = null; // Clear profile if doesn't exist
       }
     } catch (e) {
       print('Silent check failed: $e');
       _profileExists = false;
+      _profile = null;
     }
   }
 
@@ -119,7 +125,11 @@ class ClientProfileProvider with ChangeNotifier {
         _hasError = false;
         _profileExists = true;
       } else {
-        throw Exception(result['error'] ?? 'Profile not found');
+        // If profile doesn't exist, ensure state is clear
+        _profile = null;
+        _profileExists = false;
+        _hasError = false;
+        _errorMessage = null;
       }
     } catch (e) {
       if (e.toString().contains("Profile not found") || 
@@ -216,11 +226,69 @@ class ClientProfileProvider with ChangeNotifier {
     }
   }
 
-  Future<bool> saveProfile(Map<String, dynamic> data) async {
-    if (_profile == null || !_profileExists) {
+Future<bool> saveProfile(Map<String, dynamic> data) async {
+  print('DEBUG: saveProfile called with data: $data');
+  
+  // First, ALWAYS check if profile exists on the server
+  try {
+    print('DEBUG: Checking if profile exists on server...');
+    final existsResult = await _apiService.checkProfileExists();
+    final serverSaysExists = existsResult['exists'] ?? false;
+    
+    print('DEBUG: Server response: $existsResult');
+    print('DEBUG: Server says profile exists? $serverSaysExists');
+    
+    // Update our local state to match server
+    _profileExists = serverSaysExists;
+    
+    if (serverSaysExists && existsResult.containsKey('profile')) {
+      _profile = existsResult['profile'];
+      print('DEBUG: Updated _profile from server: $_profile');
+    } else {
+      _profile = null;
+      print('DEBUG: Cleared _profile - server says no profile');
+    }
+    
+    notifyListeners();
+    
+    // Now decide based on SERVER response (most reliable)
+    if (!serverSaysExists) {
+      print('DEBUG: Server confirms no profile - creating new');
       return await createProfile(data);
     } else {
+      print('DEBUG: Server confirms profile exists - updating');
       return await updateProfile(data);
+    }
+  } catch (e) {
+    print('DEBUG: Error checking profile existence: $e');
+    // Fallback to local state if server check fails
+    if (_profile == null || !_profileExists) {
+      print('DEBUG: Falling back to create (local state says no profile)');
+      return await createProfile(data);
+    } else {
+      print('DEBUG: Falling back to update (local state says profile exists)');
+      return await updateProfile(data);
+    }
+  }
+}
+  // Alternative: Force check with server first
+  Future<bool> saveProfileWithCheck(Map<String, dynamic> data) async {
+    print('DEBUG: saveProfileWithCheck called');
+    
+    // First check if profile exists on server
+    try {
+      final exists = await checkProfileExists();
+      
+      if (!exists) {
+        print('DEBUG: Server says no profile exists - creating new');
+        return await createProfile(data);
+      } else {
+        print('DEBUG: Server says profile exists - updating');
+        return await updateProfile(data);
+      }
+    } catch (e) {
+      print('DEBUG: Error checking profile existence, defaulting to create: $e');
+      return await createProfile(data);
     }
   }
 

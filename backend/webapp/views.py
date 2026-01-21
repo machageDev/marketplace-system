@@ -907,32 +907,6 @@ def _update_verification_status(profile):
     else:
         profile.verification_status = 'unverified'
     profile.save()
-@api_view(['GET'])
-@authentication_classes([EmployerTokenAuthentication])
-@permission_classes([IsAuthenticated])
-def get_employer_profile(request):
-    try:
-        employer = request.user 
-        profile = EmployerProfile.objects.filter(employer=employer).first()
-        
-        if not profile:
-            return Response({
-                'exists': False,
-                'full_name': employer.username,
-                'is_profile_complete': False
-            }, status=200)
-
-        # The crash is likely happening HERE
-        try:
-            serializer = EmployerProfileSerializer(profile)
-            return Response(serializer.data, status=200)
-        except Exception as ser_error:
-            print(f"SERIALIZER CRASH: {str(ser_error)}")
-            return Response({'error': f'Data Error: {str(ser_error)}'}, status=500)
-
-    except Exception as e:
-        return Response({'error': str(e)}, status=500)
-
 @api_view(['POST'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -942,7 +916,9 @@ def create_employer_profile(request):
         if not employer:
             return Response({'error': 'Invalid authentication token'}, status=status.HTTP_401_UNAUTHORIZED)
         
-        if hasattr(employer, 'profile'):
+        # FIX: Use the SAME check as get_employer_profile
+        existing_profile = EmployerProfile.objects.filter(employer=employer).first()
+        if existing_profile:
             return Response({'error': 'Profile already exists. Use update instead.'}, status=status.HTTP_400_BAD_REQUEST)
         
         serializer = EmployerProfileCreateSerializer(data=request.data, context={'employer': employer})
@@ -958,6 +934,27 @@ def create_employer_profile(request):
         return Response({'error': 'Validation failed', 'details': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
         return Response({'error': f'Server error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+@api_view(['GET'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def get_employer_profile(request):
+    try:
+        employer = request.user 
+        
+        # FIX: Use hasattr like create_employer_profile does
+        if not hasattr(employer, 'profile'):
+            return Response({
+                'exists': False,
+                'full_name': employer.username,
+                'is_profile_complete': False
+            }, status=200)
+
+        profile = employer.profile  # Access via related field
+        serializer = EmployerProfileSerializer(profile)
+        return Response(serializer.data, status=200)
+
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)    
 
 @api_view(['PUT', 'PATCH'])
 @authentication_classes([EmployerTokenAuthentication])
