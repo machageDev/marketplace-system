@@ -2354,71 +2354,41 @@ Future<Map<String, dynamic>> getSubmissionStats() async {
     rethrow;
   }
 }
-
-
-
-// In ApiService.dart - ADD THESE TWO METHODS:
-
-// 1. For EMPLOYERS rating freelancers (NO contract field)
 Future<Map<String, dynamic>> submitEmployerRating({
   required int taskId,
   required int freelancerId,
   required int score,
   String review = '',
-  Map<String, dynamic>? extendedData, // Add this parameter
+  Map<String, dynamic>? extendedData,
 }) async {
-  try {
-    final String? token = await _getUserToken();
-    
-    if (token == null) {
-      throw Exception('No authentication token found');
-    }
+  final String? token = await _getUserToken();
+  
+  final Map<String, dynamic> requestBody = {
+    'task': taskId,
+    'rated_user': freelancerId,
+    'score': score,
+    'review': review,
+  };
 
-    debugPrint('🚀 Employer Submit Rating:');
-    debugPrint('   Task: $taskId, Freelancer: $freelancerId, Score: $score');
-    if (extendedData != null) {
-      debugPrint('   Extended Data: $extendedData');
-    }
+  if (extendedData != null) {
+    requestBody['extended_data'] = jsonEncode(extendedData);
+  }
 
-    // Prepare the request body
-    final Map<String, dynamic> requestBody = {
-      'task': taskId,
-      'rated_user': freelancerId,
-      'score': score,
-      'review': review,
-    };
-    
-    // Add extended_data if provided
-    if (extendedData != null && extendedData.isNotEmpty) {
-      requestBody['extended_data'] = jsonEncode(extendedData);
-    }
+  // NOTE: Ensure this URL matches your urls.py path exactly
+  final response = await http.post(
+    Uri.parse('$baseUrl/create-employer-rating/'), 
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer $token",
+    },
+    body: jsonEncode(requestBody),
+  );
 
-    final response = await http.post(
-      Uri.parse('$baseUrl/ratings/'),
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer $token",
-      },
-      body: jsonEncode(requestBody),
-    );
-
-    debugPrint('📡 Employer Rating Response: ${response.statusCode}');
-    debugPrint('📡 Response Body: ${response.body}');
-
-    if (response.statusCode == 201) {
-      final responseData = jsonDecode(response.body);
-      return {
-        'success': true,
-        'message': 'Rating submitted successfully',
-        'rating_id': responseData['rating_id'],
-      };
-    } else {
-      final errorData = jsonDecode(response.body);
-      throw Exception(errorData['error'] ?? 'Failed to submit rating');
-    }
-  } catch (e) {
-    debugPrint('❌ Error in submitEmployerRating: $e');
-    rethrow;
+  if (response.statusCode == 201 || response.statusCode == 200) {
+    return jsonDecode(response.body);
+  } else {
+    final error = jsonDecode(response.body);
+    throw Exception(error['error'] ?? 'Server Error');
   }
 }
 

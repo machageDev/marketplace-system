@@ -939,22 +939,29 @@ def create_employer_profile(request):
 @permission_classes([IsAuthenticated])
 def get_employer_profile(request):
     try:
-        employer = request.user 
-        
-        # FIX: Use hasattr like create_employer_profile does
+        employer = request.user
+
         if not hasattr(employer, 'profile'):
             return Response({
-                'exists': False,
+                'success': False,
+                'data': None,
+                'message': 'Profile not found',
                 'full_name': employer.username,
                 'is_profile_complete': False
-            }, status=200)
+            }, status=status.HTTP_200_OK)
 
-        profile = employer.profile  # Access via related field
+        profile = employer.profile
         serializer = EmployerProfileSerializer(profile)
-        return Response(serializer.data, status=200)
+        return Response({
+            'success': True,
+            'data': serializer.data
+        }, status=status.HTTP_200_OK)
 
     except Exception as e:
-        return Response({'error': str(e)}, status=500)    
+        return Response(
+            {'success': False, 'error': f'Server error: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 @api_view(['PUT', 'PATCH'])
 @authentication_classes([EmployerTokenAuthentication])
@@ -1412,134 +1419,78 @@ def get_assigned_tasks(request):
 @permission_classes([IsAuthenticated])
 def create_employer_rating(request):
     """
-    Create rating from employer to freelancer using rater_employer field
+    Handles rating from Employer to Freelancer.
+    Differentiates Onsite/Remote based on Task model or Extended Data.
     """
     try:
-        print(f"\n=== CREATE EMPLOYER RATING ===")
-        print(f"Employer: {request.user.username}")
-        print(f"Request data: {request.data}")
-        
         employer = request.user
         data = request.data
+        
         task_id = data.get('task')
         freelancer_id = data.get('rated_user')
         score = data.get('score')
         review = data.get('review', '')
-        
-        # Validate required fields
-        if not task_id:
-            return Response({"success": False, "error": "task is required"}, status=400)
-        if not freelancer_id:
-            return Response({"success": False, "error": "rated_user is required"}, status=400)
-        if not score:
-            return Response({"success": False, "error": "score is required (1-5)"}, status=400)
-        
-        # Convert score
+        # This matches the jsonEncode from your Flutter ApiService
+        extended_data_raw = data.get('extended_data') 
+
+        # 1. Validation
+        if not all([task_id, freelancer_id, score]):
+            return Response({"success": False, "error": "Missing required fields"}, status=400)
+
+        # 2. Fetch Models
         try:
-            score = int(score)
-            if score < 1 or score > 5:
-                return Response({"success": False, "error": "Score must be between 1 and 5"}, status=400)
-        except ValueError:
-            return Response({"success": False, "error": "Score must be a valid number"}, status=400)
-        
-        # Get task
-        try:
-            task = Task.objects.get(task_id=task_id, employer=employer)
-            print(f"Task found: {task.title}, status: {task.status}")
-        except Task.DoesNotExist:
-            return Response({"success": False, "error": "Task not found or you don't own this task"}, status=404)
-        
-        # ✅ FIXED: Allow both 'submitted' and 'completed' status
-        allowed_statuses = ['submitted', 'completed']
-        if task.status not in allowed_statuses:
-            return Response({
-                "success": False,
-                "error": f"Task must be in 'submitted' or 'completed' status. Current status: {task.status}",
-                "current_status": task.status
-            }, status=400)
-        
-        # Get freelancer
-        try:
-            freelancer = User.objects.get(user_id=freelancer_id)
-            print(f"Freelancer found: {freelancer.name}")
-        except User.DoesNotExist:
-            return Response({"success": False, "error": "Freelancer not found"}, status=404)
-        
-        # Get contract
-        try:
-            contract = Contract.objects.get(
-                task=task,
-                freelancer=freelancer,
-                is_active=True
-            )
-            print(f"Contract found: {contract.contract_id}")
-        except Contract.DoesNotExist:
+            task = Task.objects.get(id=task_id, employer=employer)
+            freelancer = User.objects.get(id=freelancer_id)
+        except (Task.DoesNotExist, User.DoesNotExist):
+            return Response({"success": False, "error": "Task or User not found"}, status=404)
+
+        # 3. Work Type Differentiation Logic
+        work_type = getattr(task, 'work_type', 'unknown') # onsite vs remote
+        print(f"Rating a {work_type} task for {freelancer.username}")
+
+        # 4. Process Extended Data
+        # If your Rating model doesn't have a JSONField for extended_data, 
+        # we append it to the review text so information isn't lost.
+        if extended_data_raw:
+            review += f"\n\n[System Data]: {extended_data_raw}"
+
+        # 5. Check Active Contract
+        contract = Contract.objects.filter(task=task, freelancer=freelancer, is_active=True).first()
+        if not contract:
             return Response({"success": False, "error": "No active contract found"}, status=400)
-        
-        # Get submission if exists
-        submission = Submission.objects.filter(
-            task=task,
-            freelancer=freelancer
-        ).first()
-        
-        # Check if rating already exists
-        if Rating.objects.filter(
-            task=task, 
-            rater_employer=employer, 
-            rated_user=freelancer
-        ).exists():
-            return Response({"success": False, "error": "Already rated this freelancer"}, status=400)
-        
-        # Create rating
+
+        # 6. Create Rating
+        submission = Submission.objects.filter(task=task, freelancer=freelancer).first()
         rating = Rating.objects.create(
             task=task,
             contract=contract,
             submission=submission,
             rater_employer=employer,
             rated_user=freelancer,
-            score=score,
+            score=int(score),
             review=review,
         )
-        
-        print(f"Rating created: {rating.rating_id}")
-        
-        # Update task status to 'completed' if not already
-        if task.status != 'completed':
-            task.status = 'completed'
-            task.save()
-            print(f"Task status updated to: {task.status}")
-        
-        # Update submission status if exists
-        if submission and submission.status != 'accepted':
+
+        # 7. Finalize Project Chain Reaction
+        task.status = 'completed'
+        task.save()
+
+        if submission:
             submission.status = 'accepted'
             submission.save()
-            print(f"Submission status updated to: {submission.status}")
-        
-        # Update contract
-        if contract.status != 'completed':
-            contract.status = 'completed'
-            contract.is_completed = True
-            contract.completed_date = timezone.now()
-            contract.save()
-            print(f"Contract marked as completed")
-        
+
+        contract.status = 'completed'
+        contract.is_completed = True
+        contract.completed_date = timezone.now()
+        contract.save()
+
         return Response({
             "success": True,
-            "message": "Rating submitted successfully",
-            "rating_id": rating.rating_id,
-            "data": {
-                "task_status": task.status,
-                "submission_status": submission.status if submission else None,
-                "contract_status": contract.status,
-                "score": rating.score,
-                "review": rating.review,
-                "rating_type": rating.rating_type,
-                "freelancer_rated": freelancer.name
-            }
+            "message": f"Successfully rated {work_type} task",
+            "rating_id": rating.id
         }, status=201)
-            
+
     except Exception as e:
-        print(f"Error: {e}")
         import traceback
         traceback.print_exc()
         return Response({"success": False, "error": str(e)}, status=500)

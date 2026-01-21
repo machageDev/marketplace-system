@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 
 class ClientProfileScreen extends StatefulWidget {
-  const ClientProfileScreen({super.key, required int profile});
+  const ClientProfileScreen({super.key, required int profile}); // FIXED: Removed required parameter
 
   @override
   State<ClientProfileScreen> createState() => _ClientProfileScreenState();
@@ -353,7 +353,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
         iconTheme: const IconThemeData(color: Colors.black),
         actions: [
           // CREATE PROFILE BUTTON - SHOWS WHEN NO PROFILE EXISTS
-          if (!provider.isLoading && provider.profile == null && !provider.hasError)
+          if (!provider.isLoading && !provider.profileExists && !provider.hasError)
             Padding(
               padding: const EdgeInsets.only(right: 8.0),
               child: ElevatedButton.icon(
@@ -372,7 +372,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
             ),
           
           // EDIT BUTTON - SHOWS WHEN PROFILE EXISTS
-          if (!provider.isLoading && provider.profile != null)
+          if (!provider.isLoading && provider.profileExists && provider.profile != null)
             IconButton(
               icon: const Icon(Icons.edit, size: 22),
               onPressed: () => _navigateToEditScreen(context, false),
@@ -387,7 +387,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                     height: 20,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF1976D2)),
+                      valueColor: AlwaysStoppedAnimation<Color>(themeBlue),
                     ),
                   )
                 : const Icon(Icons.refresh, size: 22, color: Colors.black),
@@ -398,7 +398,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
       ),
       // FLOATING ACTION BUTTON FOR CREATE PROFILE
       floatingActionButton: !provider.isLoading && 
-                          provider.profile == null && 
+                          !provider.profileExists && 
                           !provider.hasError
           ? FloatingActionButton.extended(
               onPressed: () => _navigateToEditScreen(context, true),
@@ -415,7 +415,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
 
   Widget _buildBody(
       ClientProfileProvider provider, Color themeBlue, Color themeWhite) {
-    if (provider.isLoading && provider.profile == null && !provider.hasError) {
+    if (provider.isLoading && !provider.hasError) {
       return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -465,23 +465,25 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                 ),
               ),
               const SizedBox(height: 10),
-              // ADDED: Create Profile button in error state
-              ElevatedButton.icon(
-                icon: const Icon(Icons.person_add),
-                label: const Text('Create New Profile'),
-                onPressed: () => _navigateToEditScreen(context, true),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: themeWhite,
+              // ADDED: Update Existing Profile button when CREATE says "already exists"
+              if (provider.errorMessage!.contains('already exists'))
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.edit),
+                  label: const Text('Update Existing Profile'),
+                  onPressed: () => _navigateToEditScreen(context, false),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: themeWhite,
+                  ),
                 ),
-              ),
             ],
           ),
         ),
       );
     }
 
-    if (provider.profile == null) {
+    // Check if we have valid profile data
+    if (!provider.profileExists || provider.profile == null) {
       return _buildCreateProfileUI(themeBlue, themeWhite);
     }
 
@@ -495,8 +497,8 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
       color: themeBlue,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        child: SizedBox(
-          height: MediaQuery.of(context).size.height * 0.8,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 40.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -625,8 +627,10 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                     context: context,
                     builder: (context) => AlertDialog(
                       title: const Text('Why Create a Profile?'),
-                      content: const Text(
-                        'A complete profile helps freelancers understand your business needs better. It increases trust and helps you find the right talent for your projects.\n\n• Post unlimited projects\n• Access top freelancers\n• Build your business reputation\n• Secure payment system',
+                      content: const SingleChildScrollView(
+                        child: Text(
+                          'A complete profile helps freelancers understand your business needs better. It increases trust and helps you find the right talent for your projects.\n\n• Post unlimited projects\n• Access top freelancers\n• Build your business reputation\n• Secure payment system',
+                        ),
                       ),
                       actions: [
                         TextButton(
@@ -711,7 +715,20 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
 
   Widget _buildProfileUI(ClientProfileProvider provider, Color themeBlue, Color themeWhite) {
     final profile = provider.profile!;
+    final emailVerified = profile['email_verified'] ?? false;
+    final phoneVerified = profile['phone_verified'] ?? false;
+    final idVerified = profile['id_verified'] ?? false;
+    final verificationStatus = profile['verification_status'] ?? 'unverified';
+    final idNumber = profile['id_number'] ?? '';
     
+    // Calculate progress based on verification status
+    int total = 3; // email, phone, id
+    int verified = 0;
+    if (emailVerified) verified++;
+    if (phoneVerified) verified++;
+    if (idVerified) verified++;
+    int progress = ((verified / total) * 100).round();
+
     return RefreshIndicator(
       onRefresh: _refreshProfile,
       backgroundColor: themeWhite,
@@ -857,8 +874,119 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
             
             Container(height: 8, color: Colors.grey[100]),
             
-            // VERIFICATION STATUS SECTION
-            _buildVerificationStatus(profile),
+            // VERIFICATION STATUS SECTION - FIXED
+            Container(
+              padding: const EdgeInsets.all(16),
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey[200]!),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Text(
+                        'Verification Status',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const Spacer(),
+                      Chip(
+                        label: Text(
+                          verificationStatus.toUpperCase(),
+                          style: const TextStyle(fontSize: 10),
+                        ),
+                        backgroundColor: verificationStatus == 'verified'
+                            ? Colors.green
+                            : verificationStatus == 'pending'
+                                ? Colors.orange
+                                : Colors.grey,
+                        labelStyle: const TextStyle(color: Colors.white),
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // Progress Bar
+                  LinearProgressIndicator(
+                    value: progress / 100,
+                    backgroundColor: Colors.grey[200],
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      progress == 100 ? Colors.green : themeBlue,
+                    ),
+                    minHeight: 6,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Verification Progress',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      Text(
+                        '$progress%',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: progress == 100 ? Colors.green : themeBlue,
+                        ),
+                      ),
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  Column(
+                    children: [
+                      _buildVerificationItem(
+                        icon: Icons.email_outlined,
+                        label: 'Email Verification',
+                        isVerified: emailVerified,
+                        onVerify: emailVerified ? null : () {
+                          _showEmailVerificationDialog(context);
+                        },
+                      ),
+                      
+                      const SizedBox(height: 12),
+                      
+                      _buildVerificationItem(
+                        icon: Icons.phone_outlined,
+                        label: 'Phone Verification',
+                        isVerified: phoneVerified,
+                        onVerify: phoneVerified ? null : () {
+                          _showPhoneVerificationDialog(context);
+                        },
+                      ),
+                      
+                      const SizedBox(height: 12),
+                      
+                      _buildVerificationItem(
+                        icon: Icons.badge_outlined,
+                        label: 'ID Number Verification',
+                        isVerified: idVerified,
+                        value: idNumber,
+                        onVerify: idVerified ? null : () {
+                          _showIdNumberDialog(context);
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
             
             Padding(
               padding: const EdgeInsets.all(16),
@@ -906,7 +1034,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                     icon: Icons.email_outlined,
                     title: 'Email',
                     value: provider.contactEmail,
-                    isVerified: profile['email_verified'] ?? false,
+                    isVerified: emailVerified,
                   ),
                   const SizedBox(height: 12),
                   
@@ -915,7 +1043,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                     icon: Icons.phone_outlined,
                     title: 'Phone',
                     value: provider.phoneNumber,
-                    isVerified: profile['phone_verified'] ?? false,
+                    isVerified: phoneVerified,
                   ),
                   
                   // ALTERNATE PHONE - Only show if exists
@@ -974,7 +1102,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                     ),
                   
                   // ID NUMBER - Show only if exists
-                  if (profile['id_number'] != null && profile['id_number'].isNotEmpty)
+                  if (idNumber.isNotEmpty)
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -992,13 +1120,13 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                         _buildContactCard(
                           icon: Icons.badge_outlined,
                           title: 'ID Number',
-                          value: profile['id_number'],
-                          isVerified: profile['id_verified'] ?? false,
+                          value: idNumber,
+                          isVerified: idVerified,
                         ),
                       ],
                     ),
                   
-                  // STATS SECTION - FIXED: Using provider getters
+                  // STATS SECTION
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1013,12 +1141,12 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                       ),
                       const SizedBox(height: 16),
                       
-                      // Stats Grid - FIXED OVERFLOW
+                      // Stats Grid
                       GridView.count(
                         crossAxisCount: 3,
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
-                        childAspectRatio: 1.4, // Adjusted for better fit
+                        childAspectRatio: 1.4,
                         crossAxisSpacing: 8,
                         mainAxisSpacing: 8,
                         children: [
@@ -1063,126 +1191,6 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
         ),
       ),
     );
-  }
-
-  Widget _buildVerificationStatus(Map<String, dynamic> profile) {
-    final emailVerified = profile['email_verified'] ?? false;
-    final phoneVerified = profile['phone_verified'] ?? false;
-    final idVerified = profile['id_verified'] ?? false;
-    final verificationStatus = profile['verification_status'] ?? 'unverified';
-    final idNumber = profile['id_number'];
-    
-    // Calculate progress based on verification status
-    int total = 3; // email, phone, id
-    int verified = 0;
-    if (emailVerified) verified++;
-    if (phoneVerified) verified++;
-    if (idVerified) verified++;
-    int progress = ((verified / total) * 100).round();
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Text(
-                'Verification Status',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.black87,
-                ),
-              ),
-              const Spacer(),
-              Chip(
-                label: Text(verificationStatus.toUpperCase()),
-                backgroundColor: verificationStatus == 'verified'
-                    ? Colors.green
-                    : verificationStatus == 'pending'
-                        ? Colors.orange
-                        : Colors.grey,
-                labelStyle: const TextStyle(color: Colors.white, fontSize: 10),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          
-          // Progress Bar
-          LinearProgressIndicator(
-            value: progress / 100,
-            backgroundColor: Colors.grey[200],
-            valueColor: AlwaysStoppedAnimation<Color>(
-              progress == 100 ? Colors.green : const Color(0xFF1976D2),
-            ),
-            minHeight: 6,
-            borderRadius: BorderRadius.circular(3),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Verification Progress',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
-              ),
-              Text(
-                '$progress%',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: progress == 100 ? Colors.green : const Color(0xFF1976D2),
-                ),
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 16),
-          
-          _buildVerificationItem(
-            icon: Icons.email_outlined,
-            label: 'Email Verification',
-            isVerified: emailVerified,
-            onVerify: emailVerified ? null : () {
-              _showEmailVerificationDialog(context);
-            },
-          ),
-          
-          const SizedBox(height: 12),
-          
-          _buildVerificationItem(
-            icon: Icons.phone_outlined,
-            label: 'Phone Verification',
-            isVerified: phoneVerified,
-            onVerify: phoneVerified ? null : () {
-              _showPhoneVerificationDialog(context);
-            },
-          ),
-          
-          const SizedBox(height: 12),
-          
-          _buildVerificationItem(
-            icon: Icons.badge_outlined,
-            label: 'ID Number Verification',
-            isVerified: idVerified,
-            value: idNumber,
-            onVerify: idVerified ? null : () {
-              _showIdNumberDialog(context);
-            },
-          ),
-        ],
-      ),    );
-      
   }
 
   Widget _buildVerificationItem({
@@ -1256,7 +1264,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.check, color: Colors.green, size: 14),
+                    const Icon(Icons.check, color: Colors.green, size: 14),
                     const SizedBox(width: 4),
                     Text(
                       'Verified',
@@ -1322,7 +1330,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                       Row(
                         children: [
                           const SizedBox(width: 8),
-                          Icon(Icons.verified, color: Colors.green, size: 14),
+                          const Icon(Icons.verified, color: Colors.green, size: 14),
                         ],
                       ),
                   ],
@@ -1363,14 +1371,14 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
           Icon(
             icon,
             color: const Color(0xFF1976D2),
-            size: 22, // Reduced from 24
+            size: 22,
           ),
           const SizedBox(height: 6),
           Flexible(
             child: Text(
               value,
               style: const TextStyle(
-                fontSize: 14, // Reduced from 16
+                fontSize: 14,
                 fontWeight: FontWeight.w700,
                 color: Colors.black87,
               ),
@@ -1384,7 +1392,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
             child: Text(
               title,
               style: TextStyle(
-                fontSize: 11, // Reduced from 12
+                fontSize: 11,
                 color: Colors.grey[600],
               ),
               textAlign: TextAlign.center,

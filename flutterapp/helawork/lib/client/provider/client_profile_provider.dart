@@ -41,12 +41,36 @@ class ClientProfileProvider with ChangeNotifier {
       
       final result = await _apiService.checkProfileExists();
       
-      _profileExists = result['exists'] ?? false;
+      print('DEBUG: checkProfileExists raw response: $result');
       
-      if (_profileExists && result.containsKey('profile')) {
-        _profile = result['profile'];
+      // Handle Django response
+      if (result.containsKey('exists')) {
+        _profileExists = result['exists'] ?? false;
+        print('DEBUG: Profile exists? $_profileExists');
+        
+        if (_profileExists && result.containsKey('profile')) {
+          _profile = result['profile'];
+          print('DEBUG: Profile data loaded from check');
+        } else if (_profileExists && result.containsKey('id')) {
+          // If result is the profile itself
+          _profile = result;
+        } else {
+          _profile = null;
+        }
+      } else if (result.containsKey('id')) {
+        // Direct profile object
+        _profileExists = true;
+        _profile = result;
+        print('DEBUG: Direct profile object received');
+      } else if (result.containsKey('error')) {
+        print('DEBUG: Error in check: ${result['error']}');
+        _profileExists = false;
+        _profile = null;
       } else {
-        _profile = null; // Clear profile if doesn't exist
+        // Unknown response format
+        print('DEBUG: Unknown response format in checkProfileExists: $result');
+        _profileExists = false;
+        _profile = null;
       }
       
       _isLoading = false;
@@ -102,7 +126,7 @@ class ClientProfileProvider with ChangeNotifier {
       if (_profileExists && result.containsKey('profile')) {
         _profile = result['profile'];
       } else {
-        _profile = null; // Clear profile if doesn't exist
+        _profile = null;
       }
     } catch (e) {
       print('Silent check failed: $e');
@@ -118,38 +142,130 @@ class ClientProfileProvider with ChangeNotifier {
     notifyListeners();
 
     try {
+      print('DEBUG: Fetching employer profile...');
       final result = await _apiService.getEmployerProfile();
       
-      if (result['success'] == true) {
+      print('DEBUG: Fetch profile raw response: $result');
+      
+      // Handle different Django response formats
+      if (result.containsKey('id')) {
+        // Direct profile object from Django (most common)
+        _profile = result;
+        _hasError = false;
+        _profileExists = true;
+        print('DEBUG: Profile loaded successfully (direct object)');
+      } else if (result.containsKey('data') && result['data'] != null) {
+        // Response with 'data' field
         _profile = result['data'];
         _hasError = false;
         _profileExists = true;
-      } else {
-        // If profile doesn't exist, ensure state is clear
+        print('DEBUG: Profile loaded successfully (data field)');
+      } else if (result.containsKey('success') && result['success'] == true) {
+        // Success response
+        if (result.containsKey('data')) {
+          _profile = result['data'];
+        } else {
+          _profile = result;
+        }
+        _hasError = false;
+        _profileExists = true;
+        print('DEBUG: Profile loaded successfully (success: true)');
+      } else if (result.containsKey('exists') && result['exists'] == false) {
+        // Profile doesn't exist
         _profile = null;
         _profileExists = false;
         _hasError = false;
         _errorMessage = null;
+        print('DEBUG: No profile found (exists: false)');
+      } else if (result.containsKey('error')) {
+        // Error response
+        final errorMsg = result['error'];
+        print('DEBUG: Server returned error: $errorMsg');
+        
+        if (errorMsg.toString().contains('Profile not found') || 
+            errorMsg.toString().contains('Create one first') ||
+            errorMsg.toString().contains('404')) {
+          _profile = null;
+          _profileExists = false;
+          _hasError = false;
+          _errorMessage = null;
+          print('DEBUG: Profile not found (normal case)');
+        } else {
+          _errorMessage = errorMsg.toString();
+          _profile = null;
+          _hasError = true;
+          _profileExists = false;
+          print('DEBUG: Server error: $errorMsg');
+        }
+      } else {
+        // Unexpected response format
+        print('DEBUG: Unexpected response format, trying to use as profile: $result');
+        _profile = result; // Try to use whatever we got
+        _hasError = false;
+        _profileExists = true;
+        print('DEBUG: Using raw response as profile');
       }
     } catch (e) {
-      if (e.toString().contains("Profile not found") || 
-          e.toString().contains("Create one first") ||
-          e.toString().contains("404")) {
+      print('DEBUG: fetchProfile error: $e');
+      
+      final errorStr = e.toString();
+      
+      // Check specific error types
+      if (errorStr.contains("Profile not found") || 
+          errorStr.contains("Create one first") ||
+          errorStr.contains("404")) {
         _profile = null;
         _profileExists = false;
         _hasError = false;
         _errorMessage = null;
-      } else if (e.toString().contains("Unauthorized") ||
-                 e.toString().contains("401")) {
+        print('DEBUG: Profile not found (404)');
+      } else if (errorStr.contains("Unauthorized") ||
+                 errorStr.contains("401")) {
         _errorMessage = "Session expired. Please login again.";
         _profile = null;
         _hasError = true;
         _profileExists = false;
+        print('DEBUG: Unauthorized (401)');
+      } else if (errorStr.contains("500") || 
+                 errorStr.contains("Server error")) {
+        // 500 error - server issue
+        print('DEBUG: Server error 500, trying fallback check...');
+        try {
+          final existsResult = await _apiService.checkProfileExists();
+          print('DEBUG: Fallback check result: $existsResult');
+          
+          if (existsResult.containsKey('exists') && existsResult['exists'] == true) {
+            if (existsResult.containsKey('profile')) {
+              _profile = existsResult['profile'];
+              _profileExists = true;
+              _hasError = false;
+              print('DEBUG: Fallback check found profile');
+            } else {
+              _profile = null;
+              _profileExists = false;
+              _hasError = true;
+              _errorMessage = "Profile exists but data incomplete.";
+              print('DEBUG: Fallback found exists but no profile data');
+            }
+          } else {
+            _profile = null;
+            _profileExists = false;
+            _hasError = false;
+            print('DEBUG: Fallback check says no profile');
+          }
+        } catch (fallbackError) {
+          print('DEBUG: Fallback check also failed: $fallbackError');
+          _errorMessage = "Server error. Please try again.";
+          _profile = null;
+          _hasError = true;
+          _profileExists = false;
+        }
       } else {
-        _errorMessage = e.toString();
+        _errorMessage = "Failed to load profile: ${e.toString()}";
         _profile = null;
         _hasError = true;
         _profileExists = false;
+        print('DEBUG: Unknown error: $e');
       }
     }
 
@@ -171,7 +287,10 @@ class ClientProfileProvider with ChangeNotifier {
     notifyListeners();
 
     try {
+      print('DEBUG: Updating profile with data: $data');
       final result = await _apiService.updateEmployerProfile(data);
+      
+      print('DEBUG: Update response: $result');
       
       if (result['success'] == true) {
         _profile = result['data'];
@@ -202,7 +321,10 @@ class ClientProfileProvider with ChangeNotifier {
     notifyListeners();
 
     try {
+      print('DEBUG: Creating profile with data: $data');
       final result = await _apiService.createEmployerProfile(data);
+      
+      print('DEBUG: Create response: $result');
       
       if (result['success'] == true) {
         _profile = result['data'];
@@ -226,69 +348,65 @@ class ClientProfileProvider with ChangeNotifier {
     }
   }
 
-Future<bool> saveProfile(Map<String, dynamic> data) async {
-  print('DEBUG: saveProfile called with data: $data');
-  
-  // First, ALWAYS check if profile exists on the server
-  try {
-    print('DEBUG: Checking if profile exists on server...');
-    final existsResult = await _apiService.checkProfileExists();
-    final serverSaysExists = existsResult['exists'] ?? false;
+  Future<bool> saveProfile(Map<String, dynamic> data) async {
+    print('DEBUG: saveProfile called with data: $data');
     
-    print('DEBUG: Server response: $existsResult');
-    print('DEBUG: Server says profile exists? $serverSaysExists');
-    
-    // Update our local state to match server
-    _profileExists = serverSaysExists;
-    
-    if (serverSaysExists && existsResult.containsKey('profile')) {
-      _profile = existsResult['profile'];
-      print('DEBUG: Updated _profile from server: $_profile');
-    } else {
-      _profile = null;
-      print('DEBUG: Cleared _profile - server says no profile');
-    }
-    
-    notifyListeners();
-    
-    // Now decide based on SERVER response (most reliable)
-    if (!serverSaysExists) {
-      print('DEBUG: Server confirms no profile - creating new');
-      return await createProfile(data);
-    } else {
-      print('DEBUG: Server confirms profile exists - updating');
-      return await updateProfile(data);
-    }
-  } catch (e) {
-    print('DEBUG: Error checking profile existence: $e');
-    // Fallback to local state if server check fails
-    if (_profile == null || !_profileExists) {
-      print('DEBUG: Falling back to create (local state says no profile)');
-      return await createProfile(data);
-    } else {
-      print('DEBUG: Falling back to update (local state says profile exists)');
-      return await updateProfile(data);
-    }
-  }
-}
-  // Alternative: Force check with server first
-  Future<bool> saveProfileWithCheck(Map<String, dynamic> data) async {
-    print('DEBUG: saveProfileWithCheck called');
-    
-    // First check if profile exists on server
     try {
-      final exists = await checkProfileExists();
+      print('DEBUG: Checking if profile exists on server...');
+      final existsResult = await _apiService.checkProfileExists();
+      final serverSaysExists = existsResult['exists'] ?? false;
       
-      if (!exists) {
-        print('DEBUG: Server says no profile exists - creating new');
+      print('DEBUG: Server response: $existsResult');
+      print('DEBUG: Server says profile exists? $serverSaysExists');
+      
+      // Update our local state to match server
+      _profileExists = serverSaysExists;
+      
+      if (serverSaysExists && existsResult.containsKey('profile')) {
+        _profile = existsResult['profile'];
+        print('DEBUG: Updated _profile from server: $_profile');
+      } else {
+        _profile = null;
+        print('DEBUG: Cleared _profile - server says no profile');
+      }
+      
+      notifyListeners();
+      
+      // Now decide based on SERVER response
+      if (!serverSaysExists) {
+        print('DEBUG: Server confirms no profile - creating new');
         return await createProfile(data);
       } else {
-        print('DEBUG: Server says profile exists - updating');
+        print('DEBUG: Server confirms profile exists - updating');
         return await updateProfile(data);
       }
     } catch (e) {
-      print('DEBUG: Error checking profile existence, defaulting to create: $e');
-      return await createProfile(data);
+      print('DEBUG: Error checking profile existence: $e');
+      
+      // If server check fails, try to fetch profile directly
+      try {
+        await fetchProfile();
+        if (_profileExists) {
+          print('DEBUG: Profile exists according to fetchProfile - updating');
+          return await updateProfile(data);
+        } else {
+          print('DEBUG: Profile doesn\'t exist according to fetchProfile - creating');
+          return await createProfile(data);
+        }
+      } catch (fetchError) {
+        print('DEBUG: fetchProfile also failed: $fetchError');
+        
+        // Last resort: try create, if fails with "already exists", try update
+        try {
+          return await createProfile(data);
+        } catch (createError) {
+          if (createError.toString().contains('already exists')) {
+            print('DEBUG: Create says already exists - trying update');
+            return await updateProfile(data);
+          }
+          rethrow;
+        }
+      }
     }
   }
 
