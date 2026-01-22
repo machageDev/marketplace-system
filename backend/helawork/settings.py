@@ -104,13 +104,13 @@ import dj_database_url
     }'''
 
 
-'''DATABASES = {
+DATABASES = {
     'default': dj_database_url.parse(
         "postgresql://helawork_db_user:Xgfo1L6B59XyVQ3AnpDoJxCmp0hU4r2M@dpg-d5ob3mpr0fns73d4u8eg-a.oregon-postgres.render.com/helawork_db",
         conn_max_age=600,
         ssl_require=True
     )
-}'''
+}
 
 #postgresql://helawork_user:pxDchEMaIRzIxmtv7Bh1qfySQ0QhgHs1@dpg-d4n7dv24d50c73f8jm80-a.oregon-postgres.render.com/helawork
  
