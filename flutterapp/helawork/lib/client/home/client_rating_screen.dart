@@ -16,7 +16,16 @@ enum FreelancerPerformanceTag {
   detailOriented,          // Meticulous attention to specifics
   reliableProfessional,    // Consistent, dependable performance
   quickLearner,           // Rapidly adapted to requirements
-  costEffective           // Exceptional value for investment
+  costEffective,          // Exceptional value for investment
+  
+  // ONSITE-SPECIFIC TAGS
+  punctualArrival,         // Arrived on time or early
+  professionalAppearance,  // Appropriate attire and grooming
+  excellentClientInteraction, // Professional interaction with client/staff
+  properEquipment,         // Brought necessary tools/equipment
+  siteCleanup,            // Cleaned up work area after completion
+  safetyCompliance,        // Followed all safety protocols
+  locationFlexibility,     // Adapted well to onsite environment
 }
 
 // Rating Categories
@@ -27,26 +36,40 @@ enum RatingCategory {
   professionalConduct,  // Professional Conduct
   technicalExpertise,   // Technical Expertise
   problemSolving,       // Problem-Solving Agility
-  valueProposition      // Value Proposition
+  valueProposition,     // Value Proposition
+  
+  // ONSITE-SPECIFIC CATEGORIES
+  punctuality,          // Onsite: Punctuality & Arrival Time
+  onsiteProfessionalism, // Onsite: Professionalism at location
+  siteCoordination,     // Onsite: Coordination with onsite requirements
+  safetyProtocols,      // Onsite: Safety compliance
 }
 
 extension RatingCategoryExtension on RatingCategory {
   String get displayName {
     switch (this) {
       case RatingCategory.workQuality:
-        return 'Work Quality & Craftsmanship';
+        return 'Work Quality';
       case RatingCategory.communication:
-        return 'Communication Proficiency';
+        return 'Communication';
       case RatingCategory.deadlineAdherence:
-        return 'Deadline Adherence & Time Management';
+        return 'Deadline Adherence';
       case RatingCategory.professionalConduct:
         return 'Professional Conduct';
       case RatingCategory.technicalExpertise:
         return 'Technical Expertise';
       case RatingCategory.problemSolving:
-        return 'Problem-Solving Agility';
+        return 'Problem-Solving';
       case RatingCategory.valueProposition:
         return 'Value Proposition';
+      case RatingCategory.punctuality:
+        return 'Punctuality';
+      case RatingCategory.onsiteProfessionalism:
+        return 'Onsite Professionalism';
+      case RatingCategory.siteCoordination:
+        return 'Site Coordination';
+      case RatingCategory.safetyProtocols:
+        return 'Safety Compliance';
     }
   }
 
@@ -66,6 +89,14 @@ extension RatingCategoryExtension on RatingCategory {
         return 'Solution orientation, adaptability, creativity';
       case RatingCategory.valueProposition:
         return 'Cost-effectiveness, ROI, efficiency';
+      case RatingCategory.punctuality:
+        return 'Arrival time, schedule adherence';
+      case RatingCategory.onsiteProfessionalism:
+        return 'Appearance, behavior at location';
+      case RatingCategory.siteCoordination:
+        return 'Adaptation to onsite environment';
+      case RatingCategory.safetyProtocols:
+        return 'Following safety rules and protocols';
     }
   }
 
@@ -114,7 +145,33 @@ extension PerformanceTagExtension on FreelancerPerformanceTag {
         return 'Quick Learner';
       case FreelancerPerformanceTag.costEffective:
         return 'Cost Effective';
+      case FreelancerPerformanceTag.punctualArrival:
+        return 'Punctual Arrival';
+      case FreelancerPerformanceTag.professionalAppearance:
+        return 'Professional Appearance';
+      case FreelancerPerformanceTag.excellentClientInteraction:
+        return 'Excellent Client Interaction';
+      case FreelancerPerformanceTag.properEquipment:
+        return 'Proper Equipment';
+      case FreelancerPerformanceTag.siteCleanup:
+        return 'Site Cleanup';
+      case FreelancerPerformanceTag.safetyCompliance:
+        return 'Safety Compliance';
+      case FreelancerPerformanceTag.locationFlexibility:
+        return 'Location Flexibility';
     }
+  }
+  
+  bool get isOnsiteSpecific {
+    return [
+      FreelancerPerformanceTag.punctualArrival,
+      FreelancerPerformanceTag.professionalAppearance,
+      FreelancerPerformanceTag.excellentClientInteraction,
+      FreelancerPerformanceTag.properEquipment,
+      FreelancerPerformanceTag.siteCleanup,
+      FreelancerPerformanceTag.safetyCompliance,
+      FreelancerPerformanceTag.locationFlexibility,
+    ].contains(this);
   }
 }
 
@@ -141,15 +198,18 @@ class _ClientRatingScreenState extends State<ClientRatingScreen> {
 
   void _showRatingDialog(BuildContext context, dynamic task) {
     final ratingProvider = Provider.of<ClientRatingProvider>(context, listen: false);
+    final isOnsite = ratingProvider.isOnsiteTask(task);
     
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (ctx) {
         return _RatingDialogContent(
           task: task,
           employerId: widget.employerId,
           ratingProvider: ratingProvider,
           blue: blue,
+          isOnsite: isOnsite,
         );
       },
     );
@@ -201,7 +261,6 @@ class _ClientRatingScreenState extends State<ClientRatingScreen> {
 
     return SizedBox(
       height: 400,
-      width: 400,
       child: Column(
         children: [
           Card(
@@ -248,6 +307,9 @@ class _ClientRatingScreenState extends State<ClientRatingScreen> {
               itemCount: ratings.length,
               itemBuilder: (context, index) {
                 final rating = ratings[index];
+                final extendedData = _extractExtendedData(rating['review'] ?? '');
+                final isOnsiteRating = extendedData['work_type'] == 'onsite';
+                
                 return Card(
                   color: white,
                   shape: RoundedRectangleBorder(
@@ -262,6 +324,9 @@ class _ClientRatingScreenState extends State<ClientRatingScreen> {
                       children: [
                         Row(
                           children: [
+                            if (isOnsiteRating)
+                              Icon(Icons.location_on, size: 14, color: Colors.green),
+                            const SizedBox(width: 4),
                             ...List.generate(5, (starIndex) => Icon(
                               Icons.star,
                               size: 16,
@@ -287,8 +352,10 @@ class _ClientRatingScreenState extends State<ClientRatingScreen> {
                         if (rating['review'] != null && rating['review'].isNotEmpty) ...[
                           const SizedBox(height: 8),
                           Text(
-                            rating['review'],
+                            _cleanReviewText(rating['review']),
                             style: const TextStyle(fontSize: 14),
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ],
@@ -301,6 +368,27 @@ class _ClientRatingScreenState extends State<ClientRatingScreen> {
         ],
       ),
     );
+  }
+  
+  String _cleanReviewText(String review) {
+    final extendedDataMatch = RegExp(r'__EXTENDED_DATA__:\{.*\}').firstMatch(review);
+    if (extendedDataMatch != null) {
+      return review.substring(0, extendedDataMatch.start).trim();
+    }
+    return review;
+  }
+  
+  Map<String, dynamic> _extractExtendedData(String review) {
+    try {
+      final match = RegExp(r'__EXTENDED_DATA__:(.*)').firstMatch(review);
+      if (match != null) {
+        final jsonString = match.group(1);
+        return jsonDecode(jsonString!) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      print('Error extracting extended data: $e');
+    }
+    return {};
   }
 
   @override
@@ -438,7 +526,7 @@ class _ClientRatingScreenState extends State<ClientRatingScreen> {
                       return _buildErrorCard("Task data is null at index $index");
                     }
                     
-                    return _buildTaskCard(task);
+                    return _buildTaskCard(task, provider);
                   },
                 ),
               ),
@@ -449,11 +537,13 @@ class _ClientRatingScreenState extends State<ClientRatingScreen> {
     );
   }
 
-  Widget _buildTaskCard(dynamic task) {
+  Widget _buildTaskCard(dynamic task, ClientRatingProvider provider) {
     final freelancerName = task['freelancer']?['username'] ?? 
                           task['assigned_user']?['username'] ?? 
                           task['contract']?['freelancer']?['username'] ?? 
                           'Unknown Freelancer';
+    
+    final isOnsite = provider.isOnsiteTask(task);
     
     return Card(
       color: white,
@@ -468,6 +558,57 @@ class _ClientRatingScreenState extends State<ClientRatingScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Row(
+              children: [
+                if (isOnsite)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.green),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.location_on, size: 12, color: Colors.green),
+                        const SizedBox(width: 4),
+                        Text(
+                          "ONSITE",
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (!isOnsite)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: blue.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: blue),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.computer, size: 12, color: blue),
+                        const SizedBox(width: 4),
+                        Text(
+                          "REMOTE",
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: blue,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
             Text(
               task['title'] ?? 'Untitled Task',
               style: TextStyle(
@@ -511,9 +652,9 @@ class _ClientRatingScreenState extends State<ClientRatingScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   ),
                   onPressed: () => _showRatingDialog(context, task),
-                  child: const Text(
-                    "Rate Work",
-                    style: TextStyle(color: Colors.white, fontSize: 12),
+                  child: Text(
+                    isOnsite ? "Rate Onsite" : "Rate Work",
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -566,12 +707,14 @@ class _RatingDialogContent extends StatefulWidget {
   final int employerId;
   final ClientRatingProvider ratingProvider;
   final Color blue;
+  final bool isOnsite;
 
   const _RatingDialogContent({
     required this.task,
     required this.employerId,
     required this.ratingProvider,
     required this.blue,
+    required this.isOnsite,
   });
 
   @override
@@ -592,49 +735,71 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
   // ONSITE-SPECIFIC FIELDS
   int punctualityScore = 3;
   int onSiteProfessionalismScore = 3;
+  int safetyComplianceScore = 3;
+  int siteCoordinationScore = 3;
   
-  // Check if task is onsite
-  bool get isOnsiteTask {
-    final workType = widget.task['work_type']?.toString().toLowerCase();
-    return workType == 'onsite' || workType == 'on-site' || workType == 'physical';
-  }
-  
-  double get calculatedCompositeScore {
-    if (isOnsiteTask) {
-      // For onsite tasks, calculate based on specific scores
-      final scores = [punctualityScore, onSiteProfessionalismScore];
-      final sum = scores.fold(0, (a, b) => a + b);
-      return sum / scores.length;
-    } else {
-      // For remote tasks, use the existing logic
-      final ratedScores = categoryScores.values.where((s) => s > 0).toList();
-      if (ratedScores.isEmpty) return selectedRating.toDouble();
-      final sum = ratedScores.fold(0, (a, b) => a + b);
-      return sum / ratedScores.length;
-    }
-  }
-
-  int get primaryRating {
-    if (isOnsiteTask) {
-      // For onsite tasks, use the calculated composite
-      return calculatedCompositeScore.round();
-    }
-    
-    // For remote tasks, use existing logic
-    final hasCategoryRatings = categoryScores.values.any((s) => s > 0);
-    if (hasCategoryRatings) {
-      return calculatedCompositeScore.round();
-    }
-    return selectedRating;
-  }
-
   @override
   void initState() {
     super.initState();
+    // Initialize all categories
     for (var category in RatingCategory.values) {
       categoryScores[category] = 0;
     }
+    
+    // For remote tasks, initialize with selected rating
+    if (!widget.isOnsite) {
+      categoryScores[RatingCategory.workQuality] = selectedRating;
+      categoryScores[RatingCategory.communication] = selectedRating;
+      categoryScores[RatingCategory.deadlineAdherence] = selectedRating;
+      categoryScores[RatingCategory.professionalConduct] = selectedRating;
+    }
   }
+
+  List<RatingCategory> get _applicableCategories {
+    if (widget.isOnsite) {
+      return [
+        RatingCategory.punctuality,
+        RatingCategory.onsiteProfessionalism,
+        RatingCategory.safetyProtocols,
+        RatingCategory.siteCoordination,
+        RatingCategory.workQuality,
+        RatingCategory.communication,
+        RatingCategory.professionalConduct,
+      ];
+    } else {
+      return RatingCategory.values.where((cat) => ![
+        RatingCategory.punctuality,
+        RatingCategory.onsiteProfessionalism,
+        RatingCategory.safetyProtocols,
+        RatingCategory.siteCoordination,
+      ].contains(cat)).toList();
+    }
+  }
+
+  List<FreelancerPerformanceTag> get _applicableTags {
+    if (widget.isOnsite) {
+      return FreelancerPerformanceTag.values;
+    } else {
+      return FreelancerPerformanceTag.values
+          .where((tag) => !tag.isOnsiteSpecific)
+          .toList();
+    }
+  }
+
+  double get calculatedCompositeScore {
+    final applicableCategories = _applicableCategories;
+    final ratedScores = categoryScores.entries
+        .where((entry) => applicableCategories.contains(entry.key) && entry.value > 0)
+        .map((entry) => entry.value)
+        .toList();
+    
+    if (ratedScores.isEmpty) return selectedRating.toDouble();
+    
+    final sum = ratedScores.fold(0, (a, b) => a + b);
+    return sum / ratedScores.length;
+  }
+
+  int get primaryRating => calculatedCompositeScore.round();
 
   @override
   Widget build(BuildContext context) {
@@ -645,19 +810,17 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
     final freelancerId = widget.task['freelancer']?['id'] ?? 
                         widget.task['assigned_user']?['id'] ?? 
                         widget.task['contract']?['freelancer']?['id'];
-    final taskId = widget.task['id'] ?? widget.task['task_id'];
     
-    final stepTitles = isOnsiteTask
+    final stepTitles = widget.isOnsite
         ? [
-            "Overall Impression",
-            "Onsite Assessment",
-            "Final Review"
+            "Onsite Service Rating",
+            "Detailed Assessment",
+            "Review & Submit"
           ]
         : [
-            "Initial Impression",
-            "Detailed Assessment",
-            "Qualitative Recognition",
-            "Strategic Evaluation",
+            "Overall Satisfaction",
+            "Detailed Performance",
+            "Strengths & Recommendations",
             "Review & Submit"
           ];
     
@@ -665,7 +828,7 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
       backgroundColor: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Container(
-        constraints: const BoxConstraints(maxWidth: 600, maxHeight: 700),
+        constraints: const BoxConstraints(maxWidth: 800, maxHeight: 700),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -681,12 +844,13 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
               child: Column(
                 children: [
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      if (isOnsiteTask)
+                      if (widget.isOnsite)
                         Icon(Icons.location_on, color: Colors.white, size: 18),
                       const SizedBox(width: 8),
                       Text(
-                        isOnsiteTask ? "ONSITE TASK RATING" : "REMOTE TASK RATING",
+                        widget.isOnsite ? "ONSITE SERVICE RATING" : "REMOTE WORK RATING",
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
@@ -739,11 +903,16 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(20),
-                child: _buildStepContent(freelancerName),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    minWidth: double.infinity,
+                  ),
+                  child: _buildStepContent(freelancerName),
+                ),
               ),
             ),
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
               decoration: const BoxDecoration(
                 border: Border(top: BorderSide(color: Colors.grey)),
               ),
@@ -761,13 +930,14 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
                     child: Text(currentStep == 0 ? "Cancel" : "Back"),
                   ),
                   
-                  if ((isOnsiteTask && currentStep == 2) || (!isOnsiteTask && currentStep == 4))
+                  if (currentStep == stepTitles.length - 1)
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: widget.blue,
                         foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                       ),
-                      onPressed: isSubmitting ? null : () => _submitRating(freelancerId, taskId),
+                      onPressed: isSubmitting ? null : () => _submitRating(freelancerId),
                       child: Text(
                         isSubmitting ? "Submitting..." : "Submit Rating",
                       ),
@@ -777,6 +947,7 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: widget.blue,
                         foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                       ),
                       onPressed: isSubmitting ? null : () {
                         if (_canProceedToNextStep()) {
@@ -795,60 +966,54 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
   }
   
   Widget _buildStepContent(String freelancerName) {
-    if (isOnsiteTask) {
+    if (widget.isOnsite) {
       switch (currentStep) {
         case 0:
-          return _buildOnsiteInitialImpressionStep();
+          return _buildOnsiteInitialStep();
         case 1:
-          return _buildOnsiteAssessmentStep();
+          return _buildOnsiteDetailedStep();
         case 2:
-          return _buildOnsiteReviewStep();
-        default:
-          return _buildOnsiteInitialImpressionStep();
-      }
-    } else {
-      // Existing remote task steps
-      switch (currentStep) {
-        case 0:
-          return _buildInitialImpressionStep();
-        case 1:
-          return _buildCategoryRatingsStep();
-        case 2:
-          return _buildTagSelectionStep();
-        case 3:
-          return _buildStrategicEvaluationStep();
-        case 4:
           return _buildReviewStep();
         default:
-          return _buildInitialImpressionStep();
+          return _buildOnsiteInitialStep();
+      }
+    } else {
+      switch (currentStep) {
+        case 0:
+          return _buildRemoteInitialStep();
+        case 1:
+          return _buildRemoteDetailedStep();
+        case 2:
+          return _buildRemoteTagsStep();
+        case 3:
+          return _buildReviewStep();
+        default:
+          return _buildRemoteInitialStep();
       }
     }
   }
   
   bool _canProceedToNextStep() {
-    if (isOnsiteTask) {
+    if (widget.isOnsite) {
       switch (currentStep) {
         case 0:
           return selectedRating > 0;
         case 1:
-          return punctualityScore > 0 && onSiteProfessionalismScore > 0;
+          return true;
         case 2:
           return true;
         default:
           return false;
       }
     } else {
-      // Existing remote task logic
       switch (currentStep) {
         case 0:
           return selectedRating > 0;
         case 1:
           return true;
         case 2:
-          return true;
-        case 3:
           return wouldRecommend != null && wouldRehire != null;
-        case 4:
+        case 3:
           return true;
         default:
           return false;
@@ -856,19 +1021,19 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
     }
   }
   
-  // ONSITE SPECIFIC STEP WIDGETS
+  // ONSITE STEP WIDGETS
   
-  Widget _buildOnsiteInitialImpressionStep() {
+  Widget _buildOnsiteInitialStep() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          "How satisfied are you with the onsite service?",
+          "Rate the Onsite Service",
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
         Text(
-          "Provide an overall rating of the freelancer's onsite service. Next, you'll rate specific onsite aspects.",
+          "How satisfied are you with the freelancer's onsite service?",
           style: TextStyle(fontSize: 13, color: Colors.grey[600]),
         ),
         const SizedBox(height: 24),
@@ -884,6 +1049,10 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
               onPressed: isSubmitting ? null : () {
                 setState(() {
                   selectedRating = index + 1;
+                  punctualityScore = selectedRating;
+                  onSiteProfessionalismScore = selectedRating;
+                  categoryScores[RatingCategory.punctuality] = selectedRating;
+                  categoryScores[RatingCategory.onsiteProfessionalism] = selectedRating;
                 });
               },
             );
@@ -905,18 +1074,18 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
           color: Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: widget.blue),
+            side: const BorderSide(color: Colors.green),
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
+          child: const Padding(
+            padding: EdgeInsets.all(12),
             child: Row(
               children: [
-                Icon(Icons.location_on, color: widget.blue, size: 20),
-                const SizedBox(width: 12),
+                Icon(Icons.location_on, color: Colors.green, size: 20),
+                SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    "Next, you'll rate punctuality and onsite professionalism.",
-                    style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                    "Next, you'll rate specific onsite performance aspects including punctuality, professionalism, and safety compliance.",
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                 ),
               ],
@@ -927,12 +1096,12 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
     );
   }
   
-  Widget _buildOnsiteAssessmentStep() {
+  Widget _buildOnsiteDetailedStep() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          "Onsite Performance Assessment",
+          "Onsite Performance Details",
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
@@ -942,484 +1111,107 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
         ),
         const SizedBox(height: 24),
         
-        // Punctuality Rating
-        _buildOnsiteRatingCard(
-          title: "Punctuality & Arrival Time",
-          description: "Did the freelancer arrive on time as scheduled?",
-          currentScore: punctualityScore,
-          onScoreChanged: (score) {
-            setState(() {
-              punctualityScore = score;
-            });
-          },
-        ),
-        
-        const SizedBox(height: 20),
-        
-        // Onsite Professionalism Rating
-        _buildOnsiteRatingCard(
-          title: "Onsite Professionalism & Conduct",
-          description: "Professional behavior, appearance, and interaction at your location",
-          currentScore: onSiteProfessionalismScore,
-          onScoreChanged: (score) {
-            setState(() {
-              onSiteProfessionalismScore = score;
-            });
-          },
-        ),
+        // Onsite-specific categories
+        ..._applicableCategories.map((category) {
+          if (category == RatingCategory.punctuality ||
+              category == RatingCategory.onsiteProfessionalism ||
+              category == RatingCategory.safetyProtocols ||
+              category == RatingCategory.siteCoordination) {
+            return _buildOnsiteCategoryCard(category);
+          }
+          return _buildCategoryRatingCard(category);
+        }).toList(),
         
         const SizedBox(height: 16),
-        Card(
-          color: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: widget.blue),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Icon(Icons.info_outline, color: widget.blue, size: 20),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    "Your ratings will help ensure quality service for future onsite tasks.",
-                    style: TextStyle(fontSize: 12, color: Colors.grey[700]),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-  
-  Widget _buildOnsiteRatingCard({
-    required String title,
-    required String description,
-    required int currentScore,
-    required Function(int) onScoreChanged,
-  }) {
-    return Card(
-      color: Colors.white,
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey[300]!),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              description,
-              style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: List.generate(5, (index) {
-                final rating = index + 1;
-                return Expanded(
-                  child: InkWell(
-                    onTap: isSubmitting ? null : () => onScoreChanged(rating),
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 2),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      decoration: BoxDecoration(
-                        color: currentScore == rating 
-                            ? widget.blue.withOpacity(0.2)
-                            : Colors.white,
-                        border: Border.all(
-                          color: currentScore == rating 
-                              ? widget.blue 
-                              : Colors.grey[300]!,
-                          width: currentScore == rating ? 2 : 1,
-                        ),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.star,
-                            size: 24,
-                            color: currentScore == rating 
-                                ? Colors.amber 
-                                : Colors.grey[300],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _getOnsiteRatingLabel(rating),
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: currentScore == rating 
-                                  ? widget.blue 
-                                  : Colors.grey[600],
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              }),
-            ),
-            if (currentScore > 0) ...[
-              const SizedBox(height: 16),
-              Text(
-                _getOnsiteRatingDescription(title, currentScore),
-                style: TextStyle(
-                  fontSize: 12,
-                  fontStyle: FontStyle.italic,
-                  color: Colors.grey[600],
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-  
-  String _getOnsiteRatingLabel(int rating) {
-    switch (rating) {
-      case 1: return "Very Poor";
-      case 2: return "Below Avg";
-      case 3: return "Average";
-      case 4: return "Good";
-      case 5: return "Excellent";
-      default: return "";
-    }
-  }
-  
-  String _getOnsiteRatingDescription(String category, int rating) {
-    if (category.contains("Punctuality")) {
-      switch (rating) {
-        case 1: return "Arrived significantly late or not at all";
-        case 2: return "Arrived somewhat late";
-        case 3: return "Arrived on time";
-        case 4: return "Arrived slightly early or exactly on time";
-        case 5: return "Arrived early and well-prepared";
-        default: return "";
-      }
-    } else {
-      switch (rating) {
-        case 1: return "Unprofessional conduct";
-        case 2: return "Some professionalism issues";
-        case 3: return "Acceptable professional conduct";
-        case 4: return "Professional and courteous";
-        case 5: return "Exceptionally professional in all aspects";
-        default: return "";
-      }
-    }
-  }
-  
-  Widget _buildOnsiteReviewStep() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
         const Text(
-          "Review Your Onsite Assessment",
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          "Performance Highlights",
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
         Text(
-          "Review your ratings before submitting.",
-          style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-        ),
-        const SizedBox(height: 24),
-        Card(
-          color: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: widget.blue),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              children: [
-                const Text(
-                  "Onsite Performance Score",
-                  style: TextStyle(fontSize: 14, color: Colors.grey),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  calculatedCompositeScore.toStringAsFixed(1),
-                  style: TextStyle(
-                    fontSize: 48,
-                    fontWeight: FontWeight.bold,
-                    color: widget.blue,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(5, (index) {
-                    return Icon(
-                      Icons.star,
-                      size: 24,
-                      color: index < primaryRating 
-                          ? Colors.amber 
-                          : Colors.grey[300],
-                    );
-                  }),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Card(
-          color: Colors.white,
-          elevation: 2,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: Colors.grey[300]!),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                _buildOnsiteReviewItem(
-                  "Punctuality & Arrival Time",
-                  punctualityScore,
-                  _getOnsiteRatingDescription("Punctuality", punctualityScore),
-                ),
-                const SizedBox(height: 12),
-                _buildOnsiteReviewItem(
-                  "Onsite Professionalism",
-                  onSiteProfessionalismScore,
-                  _getOnsiteRatingDescription("Professionalism", onSiteProfessionalismScore),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        const Text(
-          "Additional Comments (Optional):",
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: reviewController,
-          maxLines: 4,
-          decoration: InputDecoration(
-            hintText: "Add any additional comments about the onsite service...",
-            border: const OutlineInputBorder(),
-            contentPadding: const EdgeInsets.all(12),
-            fillColor: Colors.white,
-            filled: true,
-          ),
-          enabled: !isSubmitting,
-        ),
-        const SizedBox(height: 16),
-        Card(
-          color: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: Colors.orange),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Icon(Icons.info_outline, color: Colors.orange, size: 20),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    "Submitting this rating will confirm service completion and release payment to the freelancer.",
-                    style: TextStyle(fontSize: 12, color: Colors.orange[700]),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-  
-  Widget _buildOnsiteReviewItem(String title, int score, String description) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                description,
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-              ),
-            ],
-          ),
-        ),
-        Row(
-          children: [
-            ...List.generate(5, (index) {
-              return Icon(
-                Icons.star,
-                size: 16,
-                color: index < score 
-                    ? Colors.amber 
-                    : Colors.grey[300],
-              );
-            }),
-            const SizedBox(width: 8),
-            Text(
-              "$score/5",
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  // REMOTE TASK STEP WIDGETS
-  
-  Widget _buildInitialImpressionStep() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          "How would you rate your overall satisfaction?",
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          "Provide a quick overall rating. You'll have the opportunity to provide detailed feedback in the next steps.",
-          style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-        ),
-        const SizedBox(height: 24),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(5, (index) {
-            return IconButton(
-              icon: Icon(
-                Icons.star,
-                size: 48,
-                color: index < selectedRating ? Colors.amber : Colors.grey[300],
-              ),
-              onPressed: isSubmitting ? null : () {
-                setState(() {
-                  selectedRating = index + 1;
-                });
-              },
-            );
-          }),
+          "Select what this freelancer did well during onsite service:",
+          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
         ),
         const SizedBox(height: 12),
-        Center(
-          child: Text(
-            "$selectedRating / 5 Stars",
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: widget.blue,
-            ),
-          ),
-        ),
-        const SizedBox(height: 24),
-        Card(
-          color: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: widget.blue),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Icon(Icons.info_outline, color: widget.blue, size: 20),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    "Next, you'll be able to provide detailed ratings across 7 performance dimensions.",
-                    style: TextStyle(fontSize: 12, color: Colors.grey[700]),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCategoryRatingsStep() {
-    final categories = RatingCategory.values;
-    
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          "Detailed Performance Assessment",
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          "Rate the freelancer across 7 key dimensions. This step is optional - you can skip to continue with the overall rating.",
-          style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-        ),
-        const SizedBox(height: 16),
-        if (categoryScores.values.any((s) => s > 0))
-          _buildImpactProjection(),
-        const SizedBox(height: 16),
-        ...categories.map((category) => _buildCategoryRatingCard(category)),
-        const SizedBox(height: 16),
-        Card(
-          color: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: widget.blue),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Icon(Icons.info_outline, color: widget.blue, size: 20),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    "${categoryScores.values.where((s) => s > 0).length}/7 categories rated. Detailed ratings help freelancers improve.",
-                    style: TextStyle(fontSize: 12, color: widget.blue),
-                  ),
-                ),
-              ],
-            ),
-          ),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: _applicableTags.map((tag) {
+            final isSelected = selectedTags.contains(tag);
+            return FilterChip(
+              selected: isSelected,
+              label: Text(
+                tag.displayName,
+                style: const TextStyle(fontSize: 12),
+              ),
+              onSelected: isSubmitting ? null : (selected) {
+                setState(() {
+                  if (selected) {
+                    selectedTags.add(tag);
+                  } else {
+                    selectedTags.remove(tag);
+                  }
+                });
+              },
+              selectedColor: widget.blue.withOpacity(0.2),
+              checkmarkColor: widget.blue,
+              side: BorderSide(
+                color: isSelected ? widget.blue : Colors.grey[300]!,
+                width: isSelected ? 1.5 : 1,
+              ),
+              backgroundColor: Colors.white,
+            );
+          }).toList(),
         ),
       ],
     );
   }
   
-  Widget _buildCategoryRatingCard(RatingCategory category) {
-    final score = categoryScores[category] ?? 0;
+  Widget _buildOnsiteCategoryCard(RatingCategory category) {
+    final score = categoryScores[category] ?? 3;
+    
+    String getDescription(int rating) {
+      switch (category) {
+        case RatingCategory.punctuality:
+          switch (rating) {
+            case 1: return "Arrived significantly late or not at all";
+            case 2: return "Arrived somewhat late";
+            case 3: return "Arrived on time as scheduled";
+            case 4: return "Arrived slightly early";
+            case 5: return "Arrived early and well-prepared";
+            default: return "";
+          }
+        case RatingCategory.onsiteProfessionalism:
+          switch (rating) {
+            case 1: return "Unprofessional appearance or conduct";
+            case 2: return "Some professionalism issues";
+            case 3: return "Acceptable professional conduct";
+            case 4: return "Professional and courteous throughout";
+            case 5: return "Exceptionally professional in all aspects";
+            default: return "";
+          }
+        case RatingCategory.safetyProtocols:
+          switch (rating) {
+            case 1: return "Ignored safety rules";
+            case 2: return "Occasional safety lapses";
+            case 3: return "Followed basic safety rules";
+            case 4: return "Good safety awareness";
+            case 5: return "Excellent safety compliance";
+            default: return "";
+          }
+        case RatingCategory.siteCoordination:
+          switch (rating) {
+            case 1: return "Poor coordination with site requirements";
+            case 2: return "Some coordination issues";
+            case 3: return "Adequate site coordination";
+            case 4: return "Good adaptation to site";
+            case 5: return "Excellent site coordination and adaptation";
+            default: return "";
+          }
+        default:
+          return "";
+      }
+    }
     
     return Card(
       color: Colors.white,
@@ -1436,6 +1228,12 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
           children: [
             Row(
               children: [
+                Icon(
+                  _getOnsiteCategoryIcon(category),
+                  color: Colors.green,
+                  size: 20,
+                ),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1455,72 +1253,85 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
                     ],
                   ),
                 ),
-                Tooltip(
-                  message: category.description,
-                  child: Icon(Icons.info_outline, size: 18, color: Colors.grey[400]),
-                ),
               ],
             ),
             const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: List.generate(5, (index) {
-                final rating = index + 1;
-                return Expanded(
-                  child: InkWell(
-                    onTap: isSubmitting ? null : () {
-                      setState(() {
-                        categoryScores[category] = rating;
-                      });
-                    },
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 2),
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      decoration: BoxDecoration(
-                        color: score == rating 
-                            ? widget.blue.withOpacity(0.2)
-                            : Colors.white,
-                        border: Border.all(
+            
+            // FIXED: Use horizontal scrolling for rating options
+            SizedBox(
+              height: 60,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                shrinkWrap: true,
+                children: List.generate(5, (index) {
+                  final rating = index + 1;
+                  return Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    width: 50,
+                    child: InkWell(
+                      onTap: isSubmitting ? null : () {
+                        setState(() {
+                          categoryScores[category] = rating;
+                          if (category == RatingCategory.punctuality) {
+                            punctualityScore = rating;
+                          } else if (category == RatingCategory.onsiteProfessionalism) {
+                            onSiteProfessionalismScore = rating;
+                          } else if (category == RatingCategory.safetyProtocols) {
+                            safetyComplianceScore = rating;
+                          } else if (category == RatingCategory.siteCoordination) {
+                            siteCoordinationScore = rating;
+                          }
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(
                           color: score == rating 
-                              ? widget.blue 
-                              : Colors.grey[300]!,
-                          width: score == rating ? 2 : 1,
-                        ),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.star,
-                            size: 20,
+                              ? Colors.green.withOpacity(0.2)
+                              : Colors.white,
+                          border: Border.all(
                             color: score == rating 
-                                ? Colors.amber 
-                                : Colors.grey[300],
+                                ? Colors.green 
+                                : Colors.grey[300]!,
+                            width: score == rating ? 2 : 1,
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            rating.toString(),
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: score == rating 
-                                  ? FontWeight.bold 
-                                  : FontWeight.normal,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          children: [
+                            Icon(
+                              Icons.star,
+                              size: 20,
                               color: score == rating 
-                                  ? widget.blue 
-                                  : Colors.grey[600],
+                                  ? Colors.amber 
+                                  : Colors.grey[300],
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 4),
+                            Text(
+                              rating.toString(),
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: score == rating 
+                                    ? FontWeight.bold 
+                                    : FontWeight.normal,
+                                color: score == rating 
+                                    ? Colors.green 
+                                    : Colors.grey[600],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                );
-              }),
+                  );
+                }),
+              ),
             ),
+            
             if (score > 0) ...[
               const SizedBox(height: 8),
               Text(
-                category.getAnchorDescription(score),
+                getDescription(score),
                 style: TextStyle(
                   fontSize: 11,
                   fontStyle: FontStyle.italic,
@@ -1534,58 +1345,123 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
     );
   }
   
-  Widget _buildTagSelectionStep() {
-    final allTags = FreelancerPerformanceTag.values;
-    final maxTags = 5;
-    
+  IconData _getOnsiteCategoryIcon(RatingCategory category) {
+    switch (category) {
+      case RatingCategory.punctuality:
+        return Icons.access_time;
+      case RatingCategory.onsiteProfessionalism:
+        return Icons.business_center;
+      case RatingCategory.safetyProtocols:
+        return Icons.security;
+      case RatingCategory.siteCoordination:
+        return Icons.handshake;
+      default:
+        return Icons.star;
+    }
+  }
+  
+  // REMOTE STEP WIDGETS
+  
+  Widget _buildRemoteInitialStep() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          "Highlight Specific Strengths",
+          "Overall Satisfaction",
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
         Text(
-          "Select up to $maxTags attributes that best describe this freelancer's performance. This helps freelancers understand their strengths.",
+          "How would you rate your overall satisfaction with the remote work?",
           style: TextStyle(fontSize: 13, color: Colors.grey[600]),
         ),
-        const SizedBox(height: 8),
-        if (selectedTags.length >= maxTags)
-          Card(
-            color: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-              side: BorderSide(color: widget.blue),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline, color: widget.blue, size: 16),
-                  const SizedBox(width: 8),
-                  Text(
-                    "Maximum $maxTags tags selected. Deselect a tag to choose another.",
-                    style: TextStyle(fontSize: 11, color: widget.blue),
-                  ),
-                ],
+        const SizedBox(height: 24),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(5, (index) {
+            return IconButton(
+              icon: Icon(
+                Icons.star,
+                size: 48,
+                color: index < selectedRating ? Colors.amber : Colors.grey[300],
               ),
+              onPressed: isSubmitting ? null : () {
+                setState(() {
+                  selectedRating = index + 1;
+                });
+              },
+            );
+          }),
+        ),
+        const SizedBox(height: 12),
+        Center(
+          child: Text(
+            "$selectedRating / 5 Stars",
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: widget.blue,
             ),
           ),
+        ),
+      ],
+    );
+  }
+  
+  Widget _buildRemoteDetailedStep() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "Detailed Performance Assessment",
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          "Rate the freelancer across key performance dimensions.",
+          style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+        ),
         const SizedBox(height: 16),
+        ..._applicableCategories.map((category) => _buildCategoryRatingCard(category)).toList(),
+      ],
+    );
+  }
+  
+  Widget _buildRemoteTagsStep() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "Strengths & Recommendations",
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          "Select what this freelancer did well and provide strategic feedback.",
+          style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+        ),
+        const SizedBox(height: 16),
+        
+        // Tags selection
+        const Text(
+          "Performance Highlights",
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+        ),
+        const SizedBox(height: 8),
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: allTags.map((tag) {
+          children: _applicableTags.map((tag) {
             final isSelected = selectedTags.contains(tag);
-            final canSelect = selectedTags.length < maxTags || isSelected;
-            
             return FilterChip(
               selected: isSelected,
-              label: Text(tag.displayName),
+              label: Text(
+                tag.displayName,
+                style: const TextStyle(fontSize: 12),
+              ),
               onSelected: isSubmitting ? null : (selected) {
                 setState(() {
-                  if (selected && canSelect) {
+                  if (selected) {
                     selectedTags.add(tag);
                   } else {
                     selectedTags.remove(tag);
@@ -1596,86 +1472,18 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
               checkmarkColor: widget.blue,
               side: BorderSide(
                 color: isSelected ? widget.blue : Colors.grey[300]!,
-                width: isSelected ? 2 : 1,
+                width: isSelected ? 1.5 : 1,
               ),
-              disabledColor: Colors.grey[200],
               backgroundColor: Colors.white,
             );
           }).toList(),
         ),
-        if (selectedTags.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          Card(
-            color: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: Colors.green),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.check_circle, color: Colors.green, size: 20),
-                      const SizedBox(width: 8),
-                      Text(
-                        "Selected Strengths (${selectedTags.length}/$maxTags)",
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.green,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: selectedTags.map((tag) {
-                      return Chip(
-                        label: Text(
-                          tag.displayName,
-                          style: const TextStyle(fontSize: 11),
-                        ),
-                        backgroundColor: widget.blue.withOpacity(0.15),
-                        deleteIcon: const Icon(Icons.close, size: 16),
-                        onDeleted: isSubmitting ? null : () {
-                          setState(() {
-                            selectedTags.remove(tag);
-                          });
-                        },
-                      );
-                    }).toList(),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-  
-  Widget _buildStrategicEvaluationStep() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          "Strategic Assessment",
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          "Help us understand the long-term value and recommendation potential of this freelancer.",
-          style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-        ),
+        
         const SizedBox(height: 24),
+        
+        // Recommendation questions
         Card(
           color: Colors.white,
-          elevation: 2,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
             side: BorderSide(color: Colors.grey[300]!),
@@ -1683,34 +1491,12 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Icon(Icons.thumb_up, color: widget.blue, size: 24),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            "Would you recommend this freelancer to colleagues?",
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            "This helps build trust and visibility in our community",
-                            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                const Text(
+                  "Would you recommend this freelancer to others?",
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(
@@ -1721,24 +1507,23 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
                         style: OutlinedButton.styleFrom(
                           side: BorderSide(
                             color: wouldRecommend == true 
-                                ? widget.blue 
+                                ? Colors.green 
                                 : Colors.grey[300]!,
                             width: wouldRecommend == true ? 2 : 1,
                           ),
                           backgroundColor: wouldRecommend == true 
-                              ? widget.blue.withOpacity(0.1)
+                              ? Colors.green.withOpacity(0.1)
                               : Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
                         child: Text(
-                          "Yes, I would recommend",
+                          "Yes",
                           style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
                             color: wouldRecommend == true 
-                                ? widget.blue 
+                                ? Colors.green 
                                 : Colors.grey[700],
-                            fontWeight: wouldRecommend == true 
-                                ? FontWeight.bold 
-                                : FontWeight.normal,
                           ),
                         ),
                       ),
@@ -1759,17 +1544,16 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
                           backgroundColor: wouldRecommend == false 
                               ? Colors.red.withOpacity(0.1)
                               : Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
                         child: Text(
-                          "No, I would not",
+                          "No",
                           style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
                             color: wouldRecommend == false 
                                 ? Colors.red 
                                 : Colors.grey[700],
-                            fontWeight: wouldRecommend == false 
-                                ? FontWeight.bold 
-                                : FontWeight.normal,
                           ),
                         ),
                       ),
@@ -1780,10 +1564,11 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
             ),
           ),
         ),
+        
         const SizedBox(height: 16),
+        
         Card(
           color: Colors.white,
-          elevation: 2,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
             side: BorderSide(color: Colors.grey[300]!),
@@ -1791,34 +1576,12 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Icon(Icons.work_outline, color: widget.blue, size: 24),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            "Would you engage this freelancer for future projects?",
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            "This helps improve future project matching",
-                            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                const Text(
+                  "Would you hire this freelancer again?",
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(
@@ -1829,24 +1592,23 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
                         style: OutlinedButton.styleFrom(
                           side: BorderSide(
                             color: wouldRehire == true 
-                                ? widget.blue 
+                                ? Colors.green 
                                 : Colors.grey[300]!,
                             width: wouldRehire == true ? 2 : 1,
                           ),
                           backgroundColor: wouldRehire == true 
-                              ? widget.blue.withOpacity(0.1)
+                              ? Colors.green.withOpacity(0.1)
                               : Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
                         child: Text(
-                          "Yes, I would rehire",
+                          "Yes",
                           style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
                             color: wouldRehire == true 
-                                ? widget.blue 
+                                ? Colors.green 
                                 : Colors.grey[700],
-                            fontWeight: wouldRehire == true 
-                                ? FontWeight.bold 
-                                : FontWeight.normal,
                           ),
                         ),
                       ),
@@ -1867,17 +1629,16 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
                           backgroundColor: wouldRehire == false 
                               ? Colors.red.withOpacity(0.1)
                               : Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
                         child: Text(
-                          "No, I would not",
+                          "No",
                           style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
                             color: wouldRehire == false 
                                 ? Colors.red 
                                 : Colors.grey[700],
-                            fontWeight: wouldRehire == false 
-                                ? FontWeight.bold 
-                                : FontWeight.normal,
                           ),
                         ),
                       ),
@@ -1888,7 +1649,10 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
             ),
           ),
         ),
+        
         const SizedBox(height: 16),
+        
+        // Anonymous submission option
         Card(
           color: Colors.white,
           shape: RoundedRectangleBorder(
@@ -1915,22 +1679,137 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
     );
   }
   
+  // COMMON STEP WIDGETS
+  
+  Widget _buildCategoryRatingCard(RatingCategory category) {
+    final score = categoryScores[category] ?? 0;
+    
+    return Card(
+      color: Colors.white,
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 1,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey[300]!),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              category.displayName,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              category.description,
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 12),
+            
+            // FIXED: Use horizontal scrolling for rating options
+            SizedBox(
+              height: 60,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                shrinkWrap: true,
+                children: List.generate(5, (index) {
+                  final rating = index + 1;
+                  return Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    width: 50,
+                    child: InkWell(
+                      onTap: isSubmitting ? null : () {
+                        setState(() {
+                          categoryScores[category] = rating;
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(
+                          color: score == rating 
+                              ? widget.blue.withOpacity(0.2)
+                              : Colors.white,
+                          border: Border.all(
+                            color: score == rating 
+                                ? widget.blue 
+                                : Colors.grey[300]!,
+                            width: score == rating ? 2 : 1,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          children: [
+                            Icon(
+                              Icons.star,
+                              size: 20,
+                              color: score == rating 
+                                  ? Colors.amber 
+                                  : Colors.grey[300],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              rating.toString(),
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: score == rating 
+                                    ? FontWeight.bold 
+                                    : FontWeight.normal,
+                                color: score == rating 
+                                    ? widget.blue 
+                                    : Colors.grey[600],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ),
+            ),
+            
+            if (score > 0) ...[
+              const SizedBox(height: 8),
+              Text(
+                category.getAnchorDescription(score),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontStyle: FontStyle.italic,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+  
   Widget _buildReviewStep() {
-    final categoryCount = categoryScores.values.where((s) => s > 0).length;
+    final ratedCategories = categoryScores.entries
+        .where((entry) => entry.value > 0 && _applicableCategories.contains(entry.key))
+        .length;
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          "Review Your Feedback",
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        Text(
+          widget.isOnsite ? "Review Onsite Assessment" : "Review Your Feedback",
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
         Text(
-          "Review your assessment before submitting. You can go back to make changes.",
+          "Review your assessment before submitting.",
           style: TextStyle(fontSize: 13, color: Colors.grey[600]),
         ),
         const SizedBox(height: 24),
+        
+        // Overall score card
         Card(
           color: Colors.white,
           shape: RoundedRectangleBorder(
@@ -1941,9 +1820,9 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
             padding: const EdgeInsets.all(20),
             child: Column(
               children: [
-                const Text(
-                  "Overall Performance Score",
-                  style: TextStyle(fontSize: 14, color: Colors.grey),
+                Text(
+                  widget.isOnsite ? "Onsite Performance Score" : "Overall Performance Score",
+                  style: const TextStyle(fontSize: 14, color: Colors.grey),
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -1969,71 +1848,33 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  "Based on $categoryCount category rating${categoryCount != 1 ? 's' : ''}",
+                  "Based on $ratedCategories category rating${ratedCategories != 1 ? 's' : ''}",
                   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
               ],
             ),
           ),
         ),
+        
         const SizedBox(height: 16),
-        if (categoryScores.values.any((s) => s > 0)) ...[
+        
+        // Category breakdown
+        if (ratedCategories > 0) ...[
           const Text(
             "Category Breakdown",
             style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 12),
-          ...RatingCategory.values.where((cat) => (categoryScores[cat] ?? 0) > 0)
-              .map((category) {
-                final score = categoryScores[category] ?? 0;
-                return Card(
-                  color: Colors.white,
-                  margin: const EdgeInsets.only(bottom: 8),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    side: BorderSide(color: Colors.grey[200]!),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            category.displayName,
-                            style: const TextStyle(fontSize: 13),
-                          ),
-                        ),
-                        Row(
-                          children: [
-                            ...List.generate(5, (index) {
-                              return Icon(
-                                Icons.star,
-                                size: 16,
-                                color: index < score 
-                                    ? Colors.amber 
-                                    : Colors.grey[300],
-                              );
-                            }),
-                            const SizedBox(width: 8),
-                            Text(
-                              "$score/5",
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }),
+          ...categoryScores.entries
+              .where((entry) => entry.value > 0 && _applicableCategories.contains(entry.key))
+              .map((entry) => _buildReviewCategoryItem(entry.key, entry.value)),
           const SizedBox(height: 16),
         ],
+        
+        // Tags display
         if (selectedTags.isNotEmpty) ...[
           const Text(
-            "Selected Strengths",
+            "Performance Highlights",
             style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
@@ -2044,53 +1885,63 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
               return Chip(
                 label: Text(tag.displayName, style: const TextStyle(fontSize: 12)),
                 backgroundColor: widget.blue.withOpacity(0.15),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
               );
             }).toList(),
           ),
           const SizedBox(height: 16),
         ],
-        Card(
-          color: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: Colors.grey[300]!),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  "Strategic Decisions",
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 12),
-                _buildReviewItem(
-                  "Recommend to colleagues",
-                  wouldRecommend == true ? "Yes" : "No",
-                  wouldRecommend == true ? Colors.green : Colors.orange,
-                ),
-                const SizedBox(height: 8),
-                _buildReviewItem(
-                  "Rehire for future projects",
-                  wouldRehire == true ? "Yes" : "No",
-                  wouldRehire == true ? Colors.green : Colors.orange,
-                ),
-                if (submitAnonymously) ...[
-                  const SizedBox(height: 8),
-                  _buildReviewItem(
-                    "Submission type",
-                    "Anonymous",
-                    widget.blue,
+        
+        // Recommendations display
+        if (!widget.isOnsite && (wouldRecommend != null || wouldRehire != null)) ...[
+          Card(
+            color: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: Colors.grey[300]!),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Strategic Decisions",
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                   ),
+                  const SizedBox(height: 12),
+                  if (wouldRecommend != null)
+                    _buildReviewDecisionItem(
+                      "Recommend to colleagues",
+                      wouldRecommend == true ? "Yes" : "No",
+                      wouldRecommend == true ? Colors.green : Colors.orange,
+                    ),
+                  if (wouldRehire != null) ...[
+                    const SizedBox(height: 8),
+                    _buildReviewDecisionItem(
+                      "Rehire for future projects",
+                      wouldRehire == true ? "Yes" : "No",
+                      wouldRehire == true ? Colors.green : Colors.orange,
+                    ),
+                  ],
+                  if (submitAnonymously) ...[
+                    const SizedBox(height: 8),
+                    _buildReviewDecisionItem(
+                      "Submission type",
+                      "Anonymous",
+                      widget.blue,
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 16),
+          const SizedBox(height: 16),
+        ],
+        
+        // Additional comments
         const Text(
-          "Additional Feedback (Optional):",
+          "Additional Comments (Optional):",
           style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
         ),
         const SizedBox(height: 8),
@@ -2098,7 +1949,9 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
           controller: reviewController,
           maxLines: 4,
           decoration: InputDecoration(
-            hintText: "Add any additional comments...",
+            hintText: widget.isOnsite 
+                ? "Add any additional comments about the onsite service..."
+                : "Add any additional comments about the remote work...",
             border: const OutlineInputBorder(),
             contentPadding: const EdgeInsets.all(12),
             fillColor: Colors.white,
@@ -2106,92 +1959,74 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
           ),
           enabled: !isSubmitting,
         ),
-      ],
-    );
-  }
-  
-  Widget _buildReviewItem(String label, String value, Color color) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(label, style: const TextStyle(fontSize: 13)),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+        
+        const SizedBox(height: 16),
+        
+        // Warning/Info card
+        Card(
+          color: Colors.white,
+          shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: color.withOpacity(0.3)),
+            side: const BorderSide(color: Colors.orange),
           ),
-          child: Text(
-            value,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: color,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-  
-  Widget _buildImpactProjection() {
-    final avgScore = calculatedCompositeScore;
-    final ratedCount = categoryScores.values.where((s) => s > 0).length;
-    
-    return Card(
-      color: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: widget.blue),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+          child: const Padding(
+            padding: EdgeInsets.all(12),
+            child: Row(
               children: [
-                Icon(Icons.trending_up, color: widget.blue, size: 20),
-                const SizedBox(width: 8),
-                const Text(
-                  "Current Performance Projection",
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                Icon(Icons.warning, color: Colors.orange, size: 20),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    "Submitting this rating will confirm work completion and release payment to the freelancer.",
+                    style: TextStyle(fontSize: 12, color: Colors.orange),
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+          ),
+        ),
+      ],
+    );
+  }
+  
+  Widget _buildReviewCategoryItem(RatingCategory category, int score) {
+    return Card(
+      color: Colors.white,
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: Colors.grey[200]!),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                category.displayName,
+                style: const TextStyle(fontSize: 13),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      avgScore.toStringAsFixed(1),
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: widget.blue,
-                      ),
-                    ),
-                    Text(
-                      "$ratedCount/7 categories rated",
-                      style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-                    ),
-                  ],
-                ),
-                Row(
-                  children: List.generate(5, (index) {
-                    return Icon(
-                      Icons.star,
-                      size: 20,
-                      color: index < avgScore.round() 
-                          ? Colors.amber 
-                          : Colors.grey[300],
-                    );
-                  }),
+                ...List.generate(5, (index) {
+                  return Icon(
+                    Icons.star,
+                    size: 16,
+                    color: index < score 
+                        ? Colors.amber 
+                        : Colors.grey[300],
+                  );
+                }),
+                const SizedBox(width: 8),
+                Text(
+                  "$score/5",
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
@@ -2200,12 +2035,48 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
       ),
     );
   }
+  
+  Widget _buildReviewDecisionItem(String label, String value, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 13),
+              maxLines: 2,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            constraints: const BoxConstraints(minWidth: 60),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: color.withOpacity(0.3)),
+            ),
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-  Future<void> _submitRating(int? freelancerId, int? taskId) async {
-    if (freelancerId == null || taskId == null) {
+  Future<void> _submitRating(int? freelancerId) async {
+    if (freelancerId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Error: Could not identify freelancer or task"),
+          content: Text("Error: Could not identify freelancer"),
           backgroundColor: Colors.red,
         ),
       );
@@ -2231,39 +2102,38 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
         }
       }
       
-      if (isOnsiteTask) {
-        // Use onsite-specific submission method
-        await widget.ratingProvider.handleOnsiteCompletion(
-          task: widget.task,
-          freelancerId: freelancerId,
-          score: scoreToSubmit,
-          punctuality: punctualityScore,
-          behavior: onSiteProfessionalismScore,
-          review: reviewText,
-        );
-      } else {
-        // Use existing remote submission
-        await widget.ratingProvider.submitEmployerRating(
-          taskId: taskId,
-          freelancerId: freelancerId,
-          score: scoreToSubmit,
-          review: reviewText,
-        );
-      }
+      final success = await widget.ratingProvider.submitEmployerRating(
+        task: widget.task,
+        freelancerId: freelancerId,
+        score: scoreToSubmit,
+        review: reviewText,
+        punctuality: widget.isOnsite ? punctualityScore : null,
+        quality: !widget.isOnsite ? categoryScores[RatingCategory.workQuality] : null,
+        extendedData: extendedData, taskId: 0,
+      );
 
-      if (mounted) {
+      if (success && mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              isOnsiteTask
+              widget.isOnsite
                   ? "Onsite rating submitted successfully! Payment has been released."
-                  : categoryScores.values.any((s) => s > 0)
-                      ? "Detailed performance evaluation submitted successfully!"
-                      : "Rating submitted successfully!",
+                  : "Remote work rating submitted successfully!",
             ),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 3),
+          ),
+        );
+      } else if (!success && mounted) {
+        setState(() {
+          isSubmitting = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Failed to submit rating: ${widget.ratingProvider.error}"),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
           ),
         );
       }
@@ -2286,29 +2156,23 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
   Map<String, dynamic> _buildExtendedDataPayload() {
     final payload = <String, dynamic>{};
     
-    if (isOnsiteTask) {
-      // Onsite specific metadata
-      payload['work_type'] = 'onsite';
-      payload['punctuality'] = punctualityScore;
-      payload['professional_conduct'] = onSiteProfessionalismScore;
-      payload['completed_at_location'] = true;
-    } else {
-      // Remote task metadata (existing logic)
-      final categoryScoresMap = <String, int>{};
-      categoryScores.forEach((category, score) {
-        if (score > 0) {
-          categoryScoresMap[category.name] = score;
-        }
-      });
-      if (categoryScoresMap.isNotEmpty) {
-        payload['category_scores'] = categoryScoresMap;
-        payload['calculated_composite'] = calculatedCompositeScore;
+    payload['work_type'] = widget.isOnsite ? 'onsite' : 'remote';
+    
+    final categoryScoresMap = <String, int>{};
+    categoryScores.forEach((category, score) {
+      if (score > 0 && _applicableCategories.contains(category)) {
+        categoryScoresMap[category.name] = score;
       }
-      
-      if (selectedTags.isNotEmpty) {
-        payload['performance_tags'] = selectedTags.map((tag) => tag.name).toList();
-      }
-      
+    });
+    if (categoryScoresMap.isNotEmpty) {
+      payload['category_scores'] = categoryScoresMap;
+    }
+    
+    if (selectedTags.isNotEmpty) {
+      payload['performance_tags'] = selectedTags.map((tag) => tag.name).toList();
+    }
+    
+    if (!widget.isOnsite) {
       if (wouldRecommend != null) {
         payload['would_recommend'] = wouldRecommend;
       }
@@ -2319,6 +2183,8 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
         payload['anonymous_submission'] = true;
       }
     }
+    
+    payload['calculated_composite'] = calculatedCompositeScore;
     
     return payload;
   }

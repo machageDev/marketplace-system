@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 
 class ClientProfileScreen extends StatefulWidget {
-  const ClientProfileScreen({super.key, required int profile}); // FIXED: Removed required parameter
+  const ClientProfileScreen({super.key, required int profile});
 
   @override
   State<ClientProfileScreen> createState() => _ClientProfileScreenState();
@@ -38,20 +38,14 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
     if (_initialized) return;
     
     final provider = Provider.of<ClientProfileProvider>(context, listen: false);
-    
-    // Just fetch the profile - no need to set employerId
     provider.fetchProfile();
-    
     _initialized = true;
   }
 
   Future<void> _refreshProfile() async {
     setState(() => _isRefreshing = true);
-    
     final provider = Provider.of<ClientProfileProvider>(context, listen: false);
-    
     await provider.fetchProfile();
-    
     setState(() => _isRefreshing = false);
   }
 
@@ -63,8 +57,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
       MaterialPageRoute(
         builder: (context) => EditProfileScreen(
           currentProfile: provider.profile,
-          isNewProfile: isNewProfile,
-          employerId: provider.profile?['id'] ?? 0,
+          isNewProfile: isNewProfile, employerId: 0,
         ),
       ),
     ).then((value) {
@@ -88,7 +81,6 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
       setState(() {
         _selectedProfileImage = File(pickedFile.path);
       });
-      
       await _uploadProfileImage();
     }
   }
@@ -105,7 +97,6 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
       setState(() {
         _selectedProfileImage = File(pickedFile.path);
       });
-      
       await _uploadProfileImage();
     }
   }
@@ -126,7 +117,6 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
             backgroundColor: Colors.green,
           ),
         );
-        
         await _refreshProfile();
         setState(() => _selectedProfileImage = null);
       }
@@ -352,25 +342,6 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
         ),
         iconTheme: const IconThemeData(color: Colors.black),
         actions: [
-          // CREATE PROFILE BUTTON - SHOWS WHEN NO PROFILE EXISTS
-          if (!provider.isLoading && !provider.profileExists && !provider.hasError)
-            Padding(
-              padding: const EdgeInsets.only(right: 8.0),
-              child: ElevatedButton.icon(
-                icon: const Icon(Icons.person_add, size: 18),
-                label: const Text('Create Profile'),
-                onPressed: () => _navigateToEditScreen(context, true),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: themeBlue,
-                  foregroundColor: themeWhite,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                ),
-              ),
-            ),
-          
           // EDIT BUTTON - SHOWS WHEN PROFILE EXISTS
           if (!provider.isLoading && provider.profileExists && provider.profile != null)
             IconButton(
@@ -396,7 +367,7 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
           ),
         ],
       ),
-      // FLOATING ACTION BUTTON FOR CREATE PROFILE
+      // FLOATING ACTION BUTTON - Only show when no profile exists
       floatingActionButton: !provider.isLoading && 
                           !provider.profileExists && 
                           !provider.hasError
@@ -640,7 +611,17 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                         ElevatedButton(
                           onPressed: () {
                             Navigator.pop(context);
-                            _navigateToEditScreen(context, true);
+                            // Handle navigation to edit screen
+                            final provider = context.read<ClientProfileProvider>();
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => EditProfileScreen(
+                                  currentProfile: provider.profile,
+                                  isNewProfile: true, employerId: 0,
+                                ),
+                              ),
+                            );
                           },
                           child: const Text('Create Profile Now'),
                         ),

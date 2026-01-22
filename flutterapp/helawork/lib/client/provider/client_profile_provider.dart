@@ -41,43 +41,26 @@ class ClientProfileProvider with ChangeNotifier {
       
       final result = await _apiService.checkProfileExists();
       
-      print('DEBUG: checkProfileExists raw response: $result');
+      print('🔍 DEBUG: checkProfileExists raw response: $result');
       
-      // Handle Django response
-      if (result.containsKey('exists')) {
-        _profileExists = result['exists'] ?? false;
-        print('DEBUG: Profile exists? $_profileExists');
-        
-        if (_profileExists && result.containsKey('profile')) {
-          _profile = result['profile'];
-          print('DEBUG: Profile data loaded from check');
-        } else if (_profileExists && result.containsKey('id')) {
-          // If result is the profile itself
-          _profile = result;
-        } else {
-          _profile = null;
+      // Handle the response - SIMPLIFIED
+      if (result.containsKey('success') && result['success'] == true) {
+        if (result.containsKey('data')) {
+          final data = result['data'];
+          if (data is Map && data.containsKey('exists')) {
+            _profileExists = data['exists'] ?? false;
+            if (_profileExists && data.containsKey('profile')) {
+              _profile = data['profile'];
+            }
+          }
         }
-      } else if (result.containsKey('id')) {
-        // Direct profile object
-        _profileExists = true;
-        _profile = result;
-        print('DEBUG: Direct profile object received');
-      } else if (result.containsKey('error')) {
-        print('DEBUG: Error in check: ${result['error']}');
-        _profileExists = false;
-        _profile = null;
-      } else {
-        // Unknown response format
-        print('DEBUG: Unknown response format in checkProfileExists: $result');
-        _profileExists = false;
-        _profile = null;
       }
       
       _isLoading = false;
       notifyListeners();
       return _profileExists;
     } catch (e) {
-      print('Error checking profile existence: $e');
+      print('❌ Error checking profile existence: $e');
       _profileExists = false;
       _profile = null;
       _isLoading = false;
@@ -110,7 +93,7 @@ class ClientProfileProvider with ChangeNotifier {
     } catch (e) {
       _errorMessage = "Failed to upload profile picture: ${e.toString()}";
       _hasError = true;
-      print('Error uploading profile picture: $e');
+      print('❌ Error uploading profile picture: $e');
       
       _isLoading = false;
       notifyListeners();
@@ -121,15 +104,19 @@ class ClientProfileProvider with ChangeNotifier {
   Future<void> _checkProfileExistsSilent() async {
     try {
       final result = await _apiService.checkProfileExists();
-      _profileExists = result['exists'] ?? false;
-      
-      if (_profileExists && result.containsKey('profile')) {
-        _profile = result['profile'];
-      } else {
-        _profile = null;
+      if (result.containsKey('success') && result['success'] == true) {
+        if (result.containsKey('data')) {
+          final data = result['data'];
+          if (data is Map && data.containsKey('exists')) {
+            _profileExists = data['exists'] ?? false;
+            if (_profileExists && data.containsKey('profile')) {
+              _profile = data['profile'];
+            }
+          }
+        }
       }
     } catch (e) {
-      print('Silent check failed: $e');
+      print('⚠️ Silent check failed: $e');
       _profileExists = false;
       _profile = null;
     }
@@ -142,131 +129,72 @@ class ClientProfileProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      print('DEBUG: Fetching employer profile...');
+      print('🔄 DEBUG: Fetching employer profile...');
       final result = await _apiService.getEmployerProfile();
       
-      print('DEBUG: Fetch profile raw response: $result');
+      print('📊 DEBUG: Fetch profile raw response: $result');
       
-      // Handle different Django response formats
-      if (result.containsKey('id')) {
-        // Direct profile object from Django (most common)
-        _profile = result;
-        _hasError = false;
-        _profileExists = true;
-        print('DEBUG: Profile loaded successfully (direct object)');
-      } else if (result.containsKey('data') && result['data'] != null) {
-        // Response with 'data' field
-        _profile = result['data'];
-        _hasError = false;
-        _profileExists = true;
-        print('DEBUG: Profile loaded successfully (data field)');
-      } else if (result.containsKey('success') && result['success'] == true) {
-        // Success response
+      // SIMPLIFIED LOGIC - Just extract the profile data
+      if (result.containsKey('success') && result['success'] == true) {
         if (result.containsKey('data')) {
-          _profile = result['data'];
-        } else {
-          _profile = result;
+          final firstLevel = result['data'];
+          
+          if (firstLevel is Map) {
+            if (firstLevel.containsKey('success') && firstLevel['success'] == true) {
+              // Nested success structure
+              if (firstLevel.containsKey('data')) {
+                final profileData = firstLevel['data'];
+                if (profileData is Map && profileData.containsKey('id')) {
+                  _profile = profileData.cast<String, dynamic>();
+                  _profileExists = true;
+                  _hasError = false;
+                  print('✅ DEBUG: Profile loaded from nested success structure');
+                }
+              }
+            } else if (firstLevel.containsKey('id')) {
+              // Direct profile data
+              _profile = firstLevel.cast<String, dynamic>();
+              _profileExists = true;
+              _hasError = false;
+              print('✅ DEBUG: Profile loaded from direct data field');
+            }
+          }
         }
-        _hasError = false;
-        _profileExists = true;
-        print('DEBUG: Profile loaded successfully (success: true)');
-      } else if (result.containsKey('exists') && result['exists'] == false) {
-        // Profile doesn't exist
+      } 
+      else if (result.containsKey('success') && result['success'] == false) {
+        // No profile exists
         _profile = null;
         _profileExists = false;
         _hasError = false;
-        _errorMessage = null;
-        print('DEBUG: No profile found (exists: false)');
-      } else if (result.containsKey('error')) {
-        // Error response
-        final errorMsg = result['error'];
-        print('DEBUG: Server returned error: $errorMsg');
-        
-        if (errorMsg.toString().contains('Profile not found') || 
-            errorMsg.toString().contains('Create one first') ||
-            errorMsg.toString().contains('404')) {
+        print('ℹ️ DEBUG: No profile found (success: false)');
+      }
+      else if (result.containsKey('id')) {
+        // Direct profile object
+        _profile = result;
+        _profileExists = true;
+        _hasError = false;
+        print('✅ DEBUG: Profile loaded directly from response');
+      }
+      else {
+        // Unknown format, but check if it looks like a profile
+        if (result.containsKey('full_name') || result.containsKey('phone_number')) {
+          _profile = result;
+          _profileExists = true;
+          _hasError = false;
+          print('✅ DEBUG: Profile loaded from unknown format');
+        } else {
           _profile = null;
           _profileExists = false;
           _hasError = false;
-          _errorMessage = null;
-          print('DEBUG: Profile not found (normal case)');
-        } else {
-          _errorMessage = errorMsg.toString();
-          _profile = null;
-          _hasError = true;
-          _profileExists = false;
-          print('DEBUG: Server error: $errorMsg');
+          print('⚠️ DEBUG: No profile data found');
         }
-      } else {
-        // Unexpected response format
-        print('DEBUG: Unexpected response format, trying to use as profile: $result');
-        _profile = result; // Try to use whatever we got
-        _hasError = false;
-        _profileExists = true;
-        print('DEBUG: Using raw response as profile');
       }
     } catch (e) {
-      print('DEBUG: fetchProfile error: $e');
-      
-      final errorStr = e.toString();
-      
-      // Check specific error types
-      if (errorStr.contains("Profile not found") || 
-          errorStr.contains("Create one first") ||
-          errorStr.contains("404")) {
-        _profile = null;
-        _profileExists = false;
-        _hasError = false;
-        _errorMessage = null;
-        print('DEBUG: Profile not found (404)');
-      } else if (errorStr.contains("Unauthorized") ||
-                 errorStr.contains("401")) {
-        _errorMessage = "Session expired. Please login again.";
-        _profile = null;
-        _hasError = true;
-        _profileExists = false;
-        print('DEBUG: Unauthorized (401)');
-      } else if (errorStr.contains("500") || 
-                 errorStr.contains("Server error")) {
-        // 500 error - server issue
-        print('DEBUG: Server error 500, trying fallback check...');
-        try {
-          final existsResult = await _apiService.checkProfileExists();
-          print('DEBUG: Fallback check result: $existsResult');
-          
-          if (existsResult.containsKey('exists') && existsResult['exists'] == true) {
-            if (existsResult.containsKey('profile')) {
-              _profile = existsResult['profile'];
-              _profileExists = true;
-              _hasError = false;
-              print('DEBUG: Fallback check found profile');
-            } else {
-              _profile = null;
-              _profileExists = false;
-              _hasError = true;
-              _errorMessage = "Profile exists but data incomplete.";
-              print('DEBUG: Fallback found exists but no profile data');
-            }
-          } else {
-            _profile = null;
-            _profileExists = false;
-            _hasError = false;
-            print('DEBUG: Fallback check says no profile');
-          }
-        } catch (fallbackError) {
-          print('DEBUG: Fallback check also failed: $fallbackError');
-          _errorMessage = "Server error. Please try again.";
-          _profile = null;
-          _hasError = true;
-          _profileExists = false;
-        }
-      } else {
-        _errorMessage = "Failed to load profile: ${e.toString()}";
-        _profile = null;
-        _hasError = true;
-        _profileExists = false;
-        print('DEBUG: Unknown error: $e');
-      }
+      print('❌ DEBUG: fetchProfile error: $e');
+      _errorMessage = "Failed to load profile: ${e.toString()}";
+      _profile = null;
+      _hasError = true;
+      _profileExists = false;
     }
 
     _isLoading = false;
@@ -274,26 +202,18 @@ class ClientProfileProvider with ChangeNotifier {
   }
 
   Future<bool> updateProfile(Map<String, dynamic> data) async {
-    if (data.isEmpty) {
-      _errorMessage = "No data provided for update";
-      _hasError = true;
-      notifyListeners();
-      return false;
-    }
-
     _isLoading = true;
     _hasError = false;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      print('DEBUG: Updating profile with data: $data');
       final result = await _apiService.updateEmployerProfile(data);
       
-      print('DEBUG: Update response: $result');
-      
       if (result['success'] == true) {
-        _profile = result['data'];
+        if (result.containsKey('data')) {
+          _profile = result['data'];
+        }
         _hasError = false;
         _profileExists = true;
         
@@ -306,7 +226,6 @@ class ClientProfileProvider with ChangeNotifier {
     } catch (e) {
       _errorMessage = e.toString();
       _hasError = true;
-      print('Error updating profile: $e');
       
       _isLoading = false;
       notifyListeners();
@@ -321,13 +240,12 @@ class ClientProfileProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      print('DEBUG: Creating profile with data: $data');
       final result = await _apiService.createEmployerProfile(data);
       
-      print('DEBUG: Create response: $result');
-      
       if (result['success'] == true) {
-        _profile = result['data'];
+        if (result.containsKey('data')) {
+          _profile = result['data'];
+        }
         _hasError = false;
         _profileExists = true;
         
@@ -340,7 +258,6 @@ class ClientProfileProvider with ChangeNotifier {
     } catch (e) {
       _errorMessage = e.toString();
       _hasError = true;
-      print('Error creating profile: $e');
       
       _isLoading = false;
       notifyListeners();
@@ -349,75 +266,20 @@ class ClientProfileProvider with ChangeNotifier {
   }
 
   Future<bool> saveProfile(Map<String, dynamic> data) async {
-    print('DEBUG: saveProfile called with data: $data');
-    
     try {
-      print('DEBUG: Checking if profile exists on server...');
-      final existsResult = await _apiService.checkProfileExists();
-      final serverSaysExists = existsResult['exists'] ?? false;
+      await fetchProfile();
       
-      print('DEBUG: Server response: $existsResult');
-      print('DEBUG: Server says profile exists? $serverSaysExists');
-      
-      // Update our local state to match server
-      _profileExists = serverSaysExists;
-      
-      if (serverSaysExists && existsResult.containsKey('profile')) {
-        _profile = existsResult['profile'];
-        print('DEBUG: Updated _profile from server: $_profile');
-      } else {
-        _profile = null;
-        print('DEBUG: Cleared _profile - server says no profile');
-      }
-      
-      notifyListeners();
-      
-      // Now decide based on SERVER response
-      if (!serverSaysExists) {
-        print('DEBUG: Server confirms no profile - creating new');
-        return await createProfile(data);
-      } else {
-        print('DEBUG: Server confirms profile exists - updating');
+      if (_profileExists) {
         return await updateProfile(data);
+      } else {
+        return await createProfile(data);
       }
     } catch (e) {
-      print('DEBUG: Error checking profile existence: $e');
-      
-      // If server check fails, try to fetch profile directly
-      try {
-        await fetchProfile();
-        if (_profileExists) {
-          print('DEBUG: Profile exists according to fetchProfile - updating');
-          return await updateProfile(data);
-        } else {
-          print('DEBUG: Profile doesn\'t exist according to fetchProfile - creating');
-          return await createProfile(data);
-        }
-      } catch (fetchError) {
-        print('DEBUG: fetchProfile also failed: $fetchError');
-        
-        // Last resort: try create, if fails with "already exists", try update
-        try {
-          return await createProfile(data);
-        } catch (createError) {
-          if (createError.toString().contains('already exists')) {
-            print('DEBUG: Create says already exists - trying update');
-            return await updateProfile(data);
-          }
-          rethrow;
-        }
-      }
+      return await createProfile(data);
     }
   }
 
   Future<bool> updateIdNumber(String idNumber) async {
-    if (idNumber.isEmpty) {
-      _errorMessage = "ID number cannot be empty";
-      _hasError = true;
-      notifyListeners();
-      return false;
-    }
-
     _isLoading = true;
     _hasError = false;
     _errorMessage = null;
@@ -431,9 +293,11 @@ class ClientProfileProvider with ChangeNotifier {
         
         if (result.containsKey('data')) {
           final data = result['data'];
-          _profile?['id_number'] = data['id_number'];
-          _profile?['verification_status'] = data['verification_status'];
-          _profile?['id_verified'] = data['id_verified'];
+          if (_profile != null) {
+            _profile!['id_number'] = data['id_number'] ?? idNumber;
+            _profile!['verification_status'] = data['verification_status'] ?? 'pending';
+            _profile!['id_verified'] = data['id_verified'] ?? false;
+          }
         }
         
         _isLoading = false;
@@ -445,7 +309,6 @@ class ClientProfileProvider with ChangeNotifier {
     } catch (e) {
       _errorMessage = e.toString();
       _hasError = true;
-      print('Error updating ID number: $e');
       
       _isLoading = false;
       notifyListeners();
@@ -466,9 +329,13 @@ class ClientProfileProvider with ChangeNotifier {
         _hasError = false;
         
         if (result.containsKey('data')) {
-          _profile = result['data'];
-        } else if (result.containsKey('profile')) {
-          _profile = result['profile'];
+          final data = result['data'];
+          if (_profile != null && data != null) {
+            _profile!['email_verified'] = true;
+            if (data is Map<String, dynamic>) {
+              _profile!.addAll(data);
+            }
+          }
         }
         
         _isLoading = false;
@@ -480,7 +347,6 @@ class ClientProfileProvider with ChangeNotifier {
     } catch (e) {
       _errorMessage = e.toString();
       _hasError = true;
-      print('Error verifying email: $e');
       
       _isLoading = false;
       notifyListeners();
@@ -501,9 +367,13 @@ class ClientProfileProvider with ChangeNotifier {
         _hasError = false;
         
         if (result.containsKey('data')) {
-          _profile = result['data'];
-        } else if (result.containsKey('profile')) {
-          _profile = result['profile'];
+          final data = result['data'];
+          if (_profile != null && data != null) {
+            _profile!['phone_verified'] = true;
+            if (data is Map<String, dynamic>) {
+              _profile!.addAll(data);
+            }
+          }
         }
         
         _isLoading = false;
@@ -515,7 +385,6 @@ class ClientProfileProvider with ChangeNotifier {
     } catch (e) {
       _errorMessage = e.toString();
       _hasError = true;
-      print('Error verifying phone: $e');
       
       _isLoading = false;
       notifyListeners();
@@ -534,7 +403,7 @@ class ClientProfileProvider with ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('user_token');
     } catch (e) {
-      print('Error clearing storage: $e');
+      print('⚠️ Error clearing storage: $e');
     }
     
     notifyListeners();
@@ -560,10 +429,14 @@ class ClientProfileProvider with ChangeNotifier {
   }
 
   String get displayName {
-    if (_profile == null) return 'Unknown';
+    if (_profile == null) return 'User';
     
     final fullName = getProfileField('full_name');
-    return fullName ?? 'User';
+    if (fullName != null && fullName.isNotEmpty) {
+      return fullName;
+    }
+    
+    return 'User';
   }
   
   String? get profilePictureUrl {
@@ -571,14 +444,19 @@ class ClientProfileProvider with ChangeNotifier {
     
     final picture = getProfileField('profile_picture');
     
-    if (picture != null && picture is String && picture.startsWith('/')) {
-      return '${ApiService.baseUrl}$picture';
+    if (picture != null && picture is String && picture.isNotEmpty) {
+      if (picture.startsWith('http')) {
+        return picture;
+      } else if (picture.startsWith('/')) {
+        return '${ApiService.baseUrl}$picture';
+      }
+      return picture;
     }
     
-    return picture;
+    return null;
   }
   
-  // Helper getters for Django model fields
+  // Helper getters
   String get fullName => getProfileField('full_name', defaultValue: '');
   String get contactEmail => getProfileField('contact_email', defaultValue: '');
   String get phoneNumber => getProfileField('phone_number', defaultValue: '');
@@ -590,33 +468,28 @@ class ClientProfileProvider with ChangeNotifier {
   String? get linkedinUrl => getProfileField('linkedin_url');
   String? get twitterUrl => getProfileField('twitter_url');
   
-  // Verification progress getter
+  // Verification progress
   int get verificationProgress {
     if (_profile == null) return 0;
     
     int steps = 0;
     if (getProfileField('email_verified', defaultValue: false)) steps++;
     if (getProfileField('phone_verified', defaultValue: false)) steps++;
-    if (getProfileField('id_number') != null) steps++;
+    if (getProfileField('id_verified', defaultValue: false)) steps++;
     
     return (steps / 3 * 100).round();
   }
   
-  // Numeric field getters with safe parsing
+  // Numeric fields
   double get totalSpent {
     final value = getProfileField('total_spent');
     if (value == null) return 0.0;
     
     try {
-      if (value is num) {
-        return value.toDouble();
-      } else if (value is String) {
-        return double.tryParse(value) ?? 0.0;
-      } else {
-        return 0.0;
-      }
+      if (value is num) return value.toDouble();
+      if (value is String) return double.tryParse(value) ?? 0.0;
+      return 0.0;
     } catch (e) {
-      print('Error parsing total spent: $e');
       return 0.0;
     }
   }
@@ -626,15 +499,10 @@ class ClientProfileProvider with ChangeNotifier {
     if (value == null) return 0.0;
     
     try {
-      if (value is num) {
-        return value.toDouble();
-      } else if (value is String) {
-        return double.tryParse(value) ?? 0.0;
-      } else {
-        return 0.0;
-      }
+      if (value is num) return value.toDouble();
+      if (value is String) return double.tryParse(value) ?? 0.0;
+      return 0.0;
     } catch (e) {
-      print('Error parsing average rating: $e');
       return 0.0;
     }
   }

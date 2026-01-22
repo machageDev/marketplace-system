@@ -484,10 +484,10 @@ class EmployerLoginSerializer(serializers.Serializer):
     password = serializers.CharField()
 
 
-
 class EmployerProfileSerializer(serializers.ModelSerializer):
     display_name = serializers.CharField(source='get_display_name', read_only=True)
-    is_fully_verified = serializers.BooleanField(source='is_fully_verified', read_only=True)
+    password = serializers.CharField(write_only=True, required=False)
+    is_fully_verified = serializers.BooleanField(read_only=True)  # FIXED: Removed source parameter
     verification_progress = serializers.IntegerField(source='get_verification_progress', read_only=True)
     
     class Meta:
@@ -504,8 +504,7 @@ class EmployerProfileSerializer(serializers.ModelSerializer):
             'phone_verified',
             'id_verified',
             'id_number',
-            'country',
-            'city',
+            'city',           # FIXED: city instead of country
             'address',
             'profession',
             'skills',
@@ -522,6 +521,7 @@ class EmployerProfileSerializer(serializers.ModelSerializer):
             'display_name',
             'is_fully_verified',
             'verification_progress',
+            'password',       # FIXED: Added to fields list
         ]
         read_only_fields = [
             'id',
@@ -541,6 +541,9 @@ class EmployerProfileSerializer(serializers.ModelSerializer):
             'is_fully_verified',
             'verification_progress',
         ]
+        extra_kwargs = {
+            'password': {'write_only': True},
+        }
     
     def validate_contact_email(self, value):
         """Ensure email is unique"""
@@ -559,10 +562,17 @@ class EmployerProfileSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Phone number is required.")
         # Add more validation as needed
         return value
-from rest_framework import serializers
-from .models import Employer, EmployerProfile
-
-# Removed duplicate EmployerProfileSerializer
+    
+    # FIXED: Add create and update methods to handle password
+    def create(self, validated_data):
+        # Remove password from validated_data if present
+        validated_data.pop('password', None)
+        return super().create(validated_data)
+    
+    def update(self, instance, validated_data):
+        # Remove password from validated_data if present
+        validated_data.pop('password', None)
+        return super().update(instance, validated_data)
 class EmployerProfileCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating employer profile"""
     id_number = serializers.CharField(
@@ -637,46 +647,34 @@ class EmployerProfileCreateSerializer(serializers.ModelSerializer):
         return value
     
     def validate_twitter_url(self, value):
-        """Preprocess Twitter/X URL - FIXED for x.com"""
+        """Preprocess Twitter/X URL"""
         if not value or value.strip() == '':
             return ''
         
         value = value.strip()
-        print(f"Validating Twitter URL: '{value}'")  # Debug log
+        print(f"Processing Twitter URL: '{value}'")
         
-        # If empty after stripping, return empty
+        # Handle empty
         if value == '':
             return ''
         
-        # Handle @username format
+        # Convert @username to x.com URL
         if value.startswith('@'):
             return f'https://x.com/{value[1:]}'
         
-        # Handle x.com without protocol
-        if value.startswith('x.com/'):
-            return f'https://{value}'
-        
-        # Handle twitter.com without protocol
-        if value.startswith('twitter.com/'):
-            return f'https://x.com/{value[12:]}'  # Convert twitter.com to x.com
-        
-        # If it's just a username (no dots, no slashes)
-        if '.' not in value and '/' not in value:
+        # Ensure it starts with https://
+        if not value.startswith(('http://', 'https://')):
+            # If it's x.com or twitter.com, add https://
+            if value.startswith(('x.com/', 'twitter.com/')):
+                return f'https://{value}'
+            # Otherwise assume username
             return f'https://x.com/{value}'
         
-        # If it has a dot but no protocol, add https://
-        if '.' in value and not value.startswith(('http://', 'https://')):
-            return f'https://{value}'
+        # Convert twitter.com to x.com if needed
+        if 'twitter.com/' in value:
+            value = value.replace('twitter.com/', 'x.com/')
         
-        # If it already has http:// or https://, ensure twitter.com is converted to x.com
-        if value.startswith(('http://', 'https://')):
-            if 'twitter.com/' in value:
-                # Replace twitter.com with x.com
-                if value.startswith('http://twitter.com/'):
-                    return value.replace('http://twitter.com/', 'https://x.com/')
-                elif value.startswith('https://twitter.com/'):
-                    return value.replace('https://twitter.com/', 'https://x.com/')
-        
+        # Return as is - NO STRICT VALIDATION
         return value
     
     def validate(self, data):
@@ -687,39 +685,6 @@ class EmployerProfileCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 'id_number': 'ID number is too short. Minimum 5 characters required.'
             })
-        
-        # Optional: Validate URLs after preprocessing
-        from django.core.validators import URLValidator
-        from django.core.exceptions import ValidationError
-        
-        validator = URLValidator()
-        
-        # Validate LinkedIn URL if present
-        linkedin_url = data.get('linkedin_url', '')
-        if linkedin_url:
-            try:
-                validator(linkedin_url)
-            except ValidationError:
-                # Try to fix common issues
-                if linkedin_url.startswith('linkedin.com/'):
-                    linkedin_url = f'https://{linkedin_url}'
-                    try:
-                        validator(linkedin_url)
-                        data['linkedin_url'] = linkedin_url
-                    except ValidationError:
-                        raise serializers.ValidationError({
-                            'linkedin_url': 'Please enter a valid LinkedIn URL.'
-                        })
-        
-        # Validate Twitter URL if present
-        twitter_url = data.get('twitter_url', '')
-        if twitter_url:
-            try:
-                validator(twitter_url)
-            except ValidationError as e:
-                print(f"Twitter URL validation failed: {e}")
-                # Don't raise error - we're being permissive with Twitter URLs
-                # Just ensure it's at least a string that can be stored
         
         return data
     
@@ -829,40 +794,7 @@ class EmployerProfileUpdateSerializer(serializers.ModelSerializer):
                 # Assume it's a username
                 return f'https://x.com/{value}'
         
-        return value
-
-class IDNumberUpdateSerializer(serializers.ModelSerializer):
-    """Serializer for updating ID number"""
-    class Meta:
-        model = EmployerProfile
-        fields = ['id_number']
-        extra_kwargs = {
-            'id_number': {
-                'required': True,
-                'allow_null': False,
-                'allow_blank': False,
-                'error_messages': {
-                    'required': 'ID number is required.',
-                    'blank': 'ID number cannot be blank.'
-                }
-            }
-        }
-    
-    def validate_id_number(self, value):
-        """Validate ID number format"""
-        if not value or value.strip() == '':
-            raise serializers.ValidationError("ID number cannot be empty.")
-        
-        # Add ID number length validation (adjust for your country)
-        if len(value) < 5:
-            raise serializers.ValidationError("ID number seems too short.")
-        
-        # Check for duplicates (optional - remove if not needed)
-        if self.instance:
-            if EmployerProfile.objects.filter(id_number=value).exclude(id=self.instance.id).exists():
-                raise serializers.ValidationError("This ID number is already registered.")
-        
-        return value.strip()
+        return value                
 
 class EmployerSerializer(serializers.ModelSerializer):
     profile = EmployerProfileSerializer(required=False)
@@ -921,17 +853,44 @@ class EmployerSerializer(serializers.ModelSerializer):
                 profile.save()
         
         return instance 
+class IDNumberUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for updating ID number"""
+    class Meta:
+        model = EmployerProfile
+        fields = ['id_number']
+        extra_kwargs = {
+            'id_number': {
+                'required': True,
+                'allow_null': False,
+                'allow_blank': False,
+                'error_messages': {
+                    'required': 'ID number is required.',
+                    'blank': 'ID number cannot be blank.'
+                }
+            }
+        }
+    
+    def validate_id_number(self, value):
+        """Validate ID number format"""
+        if not value or value.strip() == '':
+            raise serializers.ValidationError("ID number cannot be empty.")
+        
+        # Add ID number length validation (adjust for your country)
+        if len(value) < 5:
+            raise serializers.ValidationError("ID number seems too short.")
+        
+        # Check for duplicates (optional - remove if not needed)
+        if self.instance:
+            if EmployerProfile.objects.filter(id_number=value).exclude(id=self.instance.id).exists():
+                raise serializers.ValidationError("This ID number is already registered.")
+        
+        return value.strip()
 
 class EmployerRegisterSerializer(serializers.Serializer):
     username = serializers.CharField(max_length=255)
     password = serializers.CharField(max_length=128)
     contact_email = serializers.EmailField()
     phone_number = serializers.CharField(max_length=20, required=False, allow_blank=True)
-
-   
-# In your serializers.py
-# Removed duplicate TaskCreateSerializer and TaskSerializer       
-
    
 
 class WalletSerializer(serializers.ModelSerializer):

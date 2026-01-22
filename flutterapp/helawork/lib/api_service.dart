@@ -1,5 +1,4 @@
 import 'dart:math';
-
 import 'package:flutter/src/widgets/framework.dart';
 import 'package:helawork/api_config.dart';
 import 'package:helawork/freelancer/model/contract_model.dart';
@@ -12,9 +11,9 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
 class ApiService{
-  static const String baseUrl = 'https://marketplace-system-1.onrender.com';
+  //static const String baseUrl = 'https://marketplace-system-1.onrender.com';
   
-  //static const String baseUrl = 'http://192.168.100.188:8000';
+  static const String baseUrl = 'http://172.16.124.1:8000';
  
   static const String registerUrl = '$baseUrl/apiregister';
   static const String  loginUrl ='$baseUrl/apilogin';
@@ -174,15 +173,11 @@ Future<Map<String, dynamic>> login(String name, String password) async {
     };
   }
 }
-
-
-Future<List<dynamic>> getEmployerRateableTasks() async {
+// 1. Updated for EMPLOYERS to see tasks they need to rate
+Future<dynamic> getEmployerRateableTasks() async { // Changed return type to dynamic
   try {
     final String? token = await _getUserToken();
-    
-    if (token == null) {
-      throw Exception('No authentication token found');
-    }
+    if (token == null) throw Exception('No authentication token found');
 
     final response = await http.get(
       Uri.parse('$baseUrl/api/tasks/employer/rateable/'),
@@ -192,19 +187,20 @@ Future<List<dynamic>> getEmployerRateableTasks() async {
       },
     );
 
-    print('Employer Rateable Tasks API Response:');
-    print('URL: $baseUrl/api/tasks/employer/rateable/');
-    print('Status: ${response.statusCode}');
-    print('Body: ${response.body}');
-
+    // If successful, decode and return the raw data (List or Map)
     if (response.statusCode == 200) {
       return jsonDecode(response.body);
     } else {
-      throw Exception("Failed to load employer rateable tasks: ${response.statusCode}");
+      // Return a Map with the error so the Provider can catch it gracefully
+      return {
+        'success': false, 
+        'error': "Error ${response.statusCode}: ${response.body}"
+      };
     }
   } catch (e) {
-    print('Error in getEmployerRateableTasks: $e');
-    rethrow;
+    print('❌ Error in getEmployerRateableTasks: $e');
+    // Return a Map so the Provider's "response is Map" check works
+    return {'success': false, 'error': e.toString()};
   }
 }
 // Add this to your ApiService class
@@ -2249,7 +2245,7 @@ static Future<List<dynamic>> getUserRatings(int userId) async {
 
 // Change from: /api/contracts/rateable/
 // To: /contracts/rateable/ (remove /api/ prefix)
-static Future<List<dynamic>> getRateableContracts() async {
+static Future<dynamic> getRateableContracts() async {
   try {
     final String? token = await _getUserToken();
     
@@ -2257,7 +2253,6 @@ static Future<List<dynamic>> getRateableContracts() async {
       throw Exception('No authentication token found');
     }
 
-    // ✅ FIXED: Use correct endpoint without /api/ prefix
     final response = await http.get(
       Uri.parse('$baseUrl/contracts/rateable/'),
       headers: {
@@ -2273,10 +2268,10 @@ static Future<List<dynamic>> getRateableContracts() async {
 
     if (response.statusCode == 200) {
       final responseData = jsonDecode(response.body);
-      if (responseData['success'] == true) {
-        return responseData['contracts'] ?? [];
-      }
-      return [];
+      
+      // Return the FULL response data (not just contracts)
+      // Based on your logs, backend returns: {"success":true,"count":2,"tasks":[...]}
+      return responseData;
     } else {
       throw Exception("Failed to load rateable contracts: ${response.statusCode}");
     }
@@ -2361,6 +2356,11 @@ Future<Map<String, dynamic>> submitEmployerRating({
   String review = '',
   Map<String, dynamic>? extendedData,
 }) async {
+  print('🔍 DEBUG submitEmployerRating called with:');
+  print('  taskId: $taskId (type: ${taskId.runtimeType})');
+  print('  freelancerId: $freelancerId (type: ${freelancerId.runtimeType})');
+  print('  score: $score (type: ${score.runtimeType})');
+  
   final String? token = await _getUserToken();
   
   final Map<String, dynamic> requestBody = {
@@ -2391,7 +2391,6 @@ Future<Map<String, dynamic>> submitEmployerRating({
     throw Exception(error['error'] ?? 'Server Error');
   }
 }
-
 // 2. For FREELANCERS rating employers/clients (WITH contract field)
 static Future<Map<String, dynamic>> createRating({
   required int taskId,

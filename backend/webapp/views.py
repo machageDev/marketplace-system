@@ -912,36 +912,80 @@ def _update_verification_status(profile):
 @permission_classes([IsAuthenticated])
 def create_employer_profile(request):
     try:
-        employer = get_employer_from_token(request)
-        if not employer:
-            return Response({'error': 'Invalid authentication token'}, status=status.HTTP_401_UNAUTHORIZED)
+        print(f"=== DEBUG create_employer_profile START ===")
+        employer = request.user
+        print(f"Employer: {employer}")
+       #print(f"Employer ID: {employer.id}")
         
-        # FIX: Use the SAME check as get_employer_profile
-        existing_profile = EmployerProfile.objects.filter(employer=employer).first()
-        if existing_profile:
-            return Response({'error': 'Profile already exists. Use update instead.'}, status=status.HTTP_400_BAD_REQUEST)
+        # Check if profile already exists
+        if hasattr(employer, 'profile'):
+            print(f"DEBUG: Profile already exists for employer {employer.id}")
+            profile = employer.profile
+            serializer = EmployerProfileSerializer(profile)
+            return Response({
+                'success': True,
+                'message': 'Profile already exists. Use update instead.',
+                'profile': serializer.data,
+                'exists': True
+            }, status=status.HTTP_200_OK)  # Return 200 instead of 400
         
-        serializer = EmployerProfileCreateSerializer(data=request.data, context={'employer': employer})
+        #print(f"DEBUG: Creating new profile for employer {employer.id}")
+        print(f"DEBUG: Request data: {request.data}")
+        
+        serializer = EmployerProfileCreateSerializer(
+            data=request.data, 
+            context={'employer': employer}
+        )
+        
         if serializer.is_valid():
+            print(f"DEBUG: Serializer is valid")
             profile = serializer.save()
-            send_verification_email(profile)
-            if profile.phone_number:
-                send_phone_verification_code(profile)
+            
+            # Optionally send verification emails
+            # send_verification_email(profile)
+            # if profile.phone_number:
+            #     send_phone_verification_code(profile)
             
             full_serializer = EmployerProfileSerializer(profile)
-            return Response(full_serializer.data, status=status.HTTP_201_CREATED)
+            print(f"=== DEBUG create_employer_profile END ===")
+            return Response({
+                'success': True,
+                'message': 'Profile created successfully',
+                'profile': full_serializer.data
+            }, status=status.HTTP_201_CREATED)
         
-        return Response({'error': 'Validation failed', 'details': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        print(f"DEBUG: Serializer errors: {serializer.errors}")
+        return Response({
+            'success': False,
+            'error': 'Validation failed',
+            'details': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+        
     except Exception as e:
-        return Response({'error': f'Server error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        print(f"=== DEBUG ERROR in create_employer_profile ===")
+        print(f"Error: {e}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        print(f"=== DEBUG ERROR END ===")
+        return Response({
+            'success': False,
+            'error': f'Server error: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 @api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def get_employer_profile(request):
     try:
+        print(f"=== DEBUG get_employer_profile START ===")
+        print(f"Request user: {request.user}")
+        #print(f"User ID: {request.user_id}")
+        print(f"Username: {request.user.username}")
+        
         employer = request.user
+        print(f"Hasattr employer.profile: {hasattr(employer, 'profile')}")
 
         if not hasattr(employer, 'profile'):
+            print(f"DEBUG: No profile attribute found for user {employer.id}")
             return Response({
                 'success': False,
                 'data': None,
@@ -951,18 +995,36 @@ def get_employer_profile(request):
             }, status=status.HTTP_200_OK)
 
         profile = employer.profile
-        serializer = EmployerProfileSerializer(profile)
+        print(f"DEBUG: Profile object found: {profile}")
+        print(f"DEBUG: Profile ID: {profile.id if hasattr(profile, 'id') else 'No ID'}")
+        
+        # Try to serialize
+        try:
+            serializer = EmployerProfileSerializer(profile)
+            serialized_data = serializer.data
+            print(f"DEBUG: Serialization successful")
+        except Exception as serialize_error:
+            print(f"DEBUG: Serialization failed: {serialize_error}")
+            print(f"DEBUG: Profile type: {type(profile)}")
+            print(f"DEBUG: Profile attributes: {dir(profile)}")
+            raise serialize_error
+        
+        print(f"=== DEBUG get_employer_profile END ===")
         return Response({
             'success': True,
-            'data': serializer.data
+            'data': serialized_data
         }, status=status.HTTP_200_OK)
 
     except Exception as e:
+        print(f"=== DEBUG ERROR in get_employer_profile ===")
+        print(f"Error type: {type(e)}")
+        print(f"Error message: {str(e)}")
+        print(f"Error traceback: {traceback.format_exc()}")
+        print(f"=== DEBUG ERROR END ===")
         return Response(
             {'success': False, 'error': f'Server error: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
-
 @api_view(['PUT', 'PATCH'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -985,7 +1047,55 @@ def update_employer_profile(request):
         return Response({'error': 'Profile not found. Create one first.'}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
         return Response({'error': f'Server error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+@api_view(['GET'])
+@authentication_classes([EmployerTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def check_profile_exists(request):
+    """Check if employer has a profile"""
+    try:
+        print(f"=== DEBUG check_profile_exists START ===")
+        employer = request.user
+        print(f"Employer: {employer}")
+        print(f"Employer ID: {employer.id}")
+        
+        # Check if profile exists using the same method as get_employer_profile
+        profile_exists = hasattr(employer, 'profile')
+        print(f"Has profile: {profile_exists}")
+        
+        if profile_exists:
+            profile = employer.profile
+            print(f"Profile ID: {profile.id}")
+            print(f"Profile full_name: {profile.full_name}")
+            
+            # Return profile data if exists
+            serializer = EmployerProfileSerializer(profile)
+            return Response({
+                'exists': True,
+                'profile': serializer.data,
+                'full_name': profile.full_name,
+                'is_profile_complete': True,
+                'message': 'Profile found'
+            }, status=status.HTTP_200_OK)
+        else:
+            print("No profile found")
+            return Response({
+                'exists': False,
+                'profile': None,
+                'full_name': employer.username,
+                'is_profile_complete': False,
+                'message': 'Profile not found'
+            }, status=status.HTTP_200_OK)
+            
+    except Exception as e:
+        print(f"=== DEBUG ERROR in check_profile_exists ===")
+        print(f"Error: {e}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        print(f"=== DEBUG ERROR END ===")
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 @api_view(['POST'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -1523,90 +1633,116 @@ from django.db.models import Q, Exists, OuterRef
 @permission_classes([IsAuthenticated])
 def get_rateable_contracts(request):
     """
-    Fetches contracts where the freelancer has submitted work 
-    that the employer now needs to review and rate.
+    FOR FREELANCERS (like Micah):
+    Fetches contracts where Micah is the 'freelancer' so he can rate his Client (the Employer).
     """
     try:
+        # 'user' here is an instance of your 'User' model (Micah)
         user = request.user
-        print(f"DEBUG: Fetching rateable work for Employer: {user.name} (ID: {user.user_id})")
+        print(f"DEBUG: Freelancer {user.name} (ID: {user.user_id}) is fetching rateable contracts")
 
-        # 1. Get contracts where current user is the employer 
-        # AND there is a submission with status 'submitted' or 'resubmitted'
-        # We use distinct() to avoid duplicate contracts if there are multiple submissions
+        # We filter the Contract table where 'freelancer' matches the logged-in User
+        # We use select_related to get the Task and Employer (Client) data in one go
         contracts = Contract.objects.filter(
-            task__employer=user,
+            freelancer=user,
             is_active=True,
-            submissions__status__in=['submitted', 'resubmitted']
-        ).select_related('task', 'freelancer').distinct()
+            status__in=['active', 'completed', 'pending_verification']
+        ).select_related('task', 'employer').distinct()
 
-        print(f"DEBUG: Found {contracts.count()} contracts with pending submissions")
+        print(f"DEBUG: Found {contracts.count()} total contracts for this freelancer")
 
         rateable_list = []
         for contract in contracts:
             try:
-                # Get the latest submission for this contract
-                latest_submission = contract.submissions.filter(
-                    status__in=['submitted', 'resubmitted']
-                ).latest('submitted_at')
-
-                # Handle User/Profile naming logic safely
-                freelancer_user = contract.freelancer
-                freelancer_name = getattr(freelancer_user, 'name', 
-                                  getattr(freelancer_user, 'username', 'Freelancer'))
-
+                # The person Micah needs to rate is the Employer linked to this contract
+                client = contract.employer 
+                
                 rateable_list.append({
                     'contract_id': contract.contract_id,
-                    'submission_id': latest_submission.submission_id,
                     'task': {
                         'id': contract.task.task_id,
                         'title': contract.task.title,
                         'budget': str(contract.task.budget),
                     },
-                    'freelancer': {
-                        'id': freelancer_user.user_id,
-                        'name': freelancer_name,
+                    'client': {
+                        'id': client.employer_id,
+                        'name': client.username,  # The Client's name
+                        'email': client.contact_email,
                     },
-                    'submitted_work': {
-                        'content': latest_submission.content,
-                        'submitted_at': latest_submission.submitted_at.isoformat(),
-                    },
-                    'status': latest_submission.status,
+                    'status': contract.status,
+                    'is_completed': contract.is_completed,
                 })
-
-            except Exception as e:
-                print(f"DEBUG: Skipping contract {contract.contract_id} due to error: {e}")
+            except Exception as inner_e:
+                print(f"DEBUG: Skipping contract {contract.contract_id} due to: {inner_e}")
                 continue
 
         return Response({
             'success': True,
             'count': len(rateable_list),
-            'tasks': rateable_list  # Named 'tasks' to match your Flutter expectations
+            'tasks': rateable_list # Flutter expects this list
         }, status=status.HTTP_200_OK)
 
     except Exception as e:
-        print(f"FATAL ERROR in get_rateable_contracts: {str(e)}")
+        import traceback
+        print(f"FATAL ERROR: {traceback.format_exc()}")
         return Response({
-            'success': False,
-            'error': "Internal server error occurred while fetching submissions."
+            'success': False, 
+            'error': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 @api_view(['GET'])
+@authentication_classes([CustomTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def get_task_ratings(request):
+    """
+    Retrieves ratings for a specific task or all task-related ratings for the employer.
+    """
+    try:
+        task_id = request.GET.get('task_id')
+        
+        if task_id:
+            # Get ratings for one specific task
+            ratings = Rating.objects.filter(task_id=task_id).order_by('-created_at')
+            print(f"DEBUG: Fetching ratings for Task ID: {task_id}")
+        else:
+            # Get all ratings for tasks belonging to the current employer
+            # We filter by rater_employer because the employer is the one who 
+            # gave these ratings to freelancers for their tasks.
+            ratings = Rating.objects.filter(rater_employer=request.user).order_by('-created_at')
+            print(f"DEBUG: Fetching all task ratings given by: {request.user.username}")
 
-def get_task_ratings(request, task_id):
-    task = get_object_or_404(Task, id=task_id)
-    
-    # Check permissions
-    user = request.user
-    if not (user == task.employer.user or user == task.contract.freelancer or user.is_staff):
-        return Response(
-            {"error": "You don't have permission to view ratings for this task"}, 
-            status=status.HTTP_403_FORBIDDEN
-        )
-    
-    ratings = Rating.objects.filter(task=task).order_by('-created_at')
-    serializer = RatingSerializer(ratings, many=True)
-    return Response(serializer.data)
+        serializer = RatingSerializer(ratings, many=True)
+        return Response({
+            "success": True,
+            "count": ratings.count(),
+            "ratings": serializer.data
+        }, status=status.HTTP_200_OK)
 
-# Dashboard Stats
+    except Exception as e:
+        print(f"ERROR in get_task_ratings: {str(e)}")
+        return Response({
+            "success": False,
+            "error": str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+@api_view(['GET'])
+@authentication_classes([CustomTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def get_user_ratings(request):
+    """
+    Get ratings for a specific user or the current authenticated user.
+    """
+    try:
+        user_id = request.GET.get('user_id')
+        
+        if not user_id:
+            ratings = Rating.objects.filter(rated_user=request.user).order_by('-created_at')
+        else:
+            ratings = Rating.objects.filter(rated_user_id=user_id).order_by('-created_at')
+        
+        serializer = RatingSerializer(ratings, many=True)
+        return Response(serializer.data)
+    
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def submission_stats(request):
@@ -1656,86 +1792,106 @@ def submission_stats(request):
 @permission_classes([IsAuthenticated])
 def employer_rateable_tasks(request):
     """
-    Get tasks that are ready for employer to rate/review.
+    Get tasks ready for rating with deep debug logging.
     """
-    if request.method == 'GET':
-        try:
-            print(f"\n=== GET RATEABLE TASKS (UPDATED) ===")
-            
-            employer = request.user
-            
-            # Get tasks that are COMPLETED or ready for review
-            # Statuses that indicate task is done and ready for rating
-            rateable_statuses = ['completed', 'done', 'submitted', 'review']
-            
-            tasks_query = Task.objects.filter(
-                employer=employer,
-                assigned_user__isnull=False
-            ).select_related('assigned_user')
-            
-            print(f"Found {tasks_query.count()} tasks with assigned users")
-            
-            tasks_data = []
-            for task in tasks_query:
-                print(f"\nProcessing task: {task.task_id} - {task.title}")
-                print(f"Status: {task.status}")
-                print(f"Assigned user: {task.assigned_user.name} (ID: {task.assigned_user.user_id})")
-                
-                # Check if task status is appropriate for rating
-                if task.status.lower() not in [s.lower() for s in rateable_statuses]:
-                    print(f"  ✗ Status '{task.status}' not in rateable statuses: {rateable_statuses}")
-                    continue
-                
-                # Check if already rated (using rater_employer)
-                already_rated = Rating.objects.filter(
-                    task=task,
-                    rater_employer=employer,
-                    rated_user=task.assigned_user
-                ).exists()
-                
-                print(f"Already rated: {already_rated}")
-                
-                if not already_rated:
-                    # Get latest submission
-                    submission = Submission.objects.filter(
-                        task=task,
-                        freelancer=task.assigned_user
-                    ).order_by('-submitted_at').first()
-                    
-                    if submission:
-                        tasks_data.append({
-                            'id': task.task_id,
-                            'title': task.title,
-                            'description': task.description,
-                            'budget': str(task.budget) if task.budget else "0.00",
-                            'freelancer': {
-                                'id': task.assigned_user.user_id,
-                                'username': task.assigned_user.name,
-                                'email': task.assigned_user.email,
-                            },
-                            'submission_id': submission.submission_id,
-                            'submission_title': submission.title,
-                            'submission_status': submission.status,
-                            'submitted_at': submission.submitted_at.isoformat() if submission.submitted_at else None,
-                            'task_status': task.status,
-                            'can_rate': True
-                        })
-                        print(f"  ✓ Added to rateable list")
+    try:
+        employer = request.user
+        print(f"\n" + "="*40)
+        print(f"DEBUG: STARTING RATEABLE TASK FETCH FOR: {employer.username}")
+        print("="*40)
+
+        tasks_query = Task.objects.filter(
+            employer=employer,
+            assigned_user__isnull=False
+        ).select_related('assigned_user')
+
+        print(f"DEBUG: Found {tasks_query.count()} total tasks assigned to users.")
+
+        tasks_data = []
+        for task in tasks_query:
+            # --- THE PRINT SECTION ---
+            print(f"\n>>> PROCESSING TASK: ID={task.task_id} | TITLE='{task.title}'")
+            print(f"    [DATABASE] Raw service_type: '{task.service_type}'")
+            print(f"    [DATABASE] Raw status: '{task.status}'")
+
+            # Normalization
+            service_type_val = (task.service_type or "").lower()
+            status_val = (task.status or "").lower()
+
+            # Logic Check
+            # We use 'in' to catch variants like 'Onsite', 'On-Site', 'On-Site (Physical)'
+            is_onsite = "onsite" in service_type_val or "on-site" in service_type_val or "on_site" in service_type_val
+            is_remote = "remote" in service_type_val
+
+            print(f"    [LOGIC] Normalized service_type: '{service_type_val}'")
+            print(f"    [LOGIC] Result -> is_onsite: {is_onsite} | is_remote: {is_remote}")
+
+            can_rate = False
+            submission_info = None
+
+            if is_onsite:
+                # Onsite depends on task completion
+                if status_val in ['completed', 'paid', 'awaiting_confirmation']:
+                    if not Rating.objects.filter(task=task, rater_employer=employer).exists():
+                        can_rate = True
+                        print("    [RESULT] Task is RATEABLE ONSITE")
                     else:
-                        print(f"  ⚠ No submission found")
+                        print("    [SKIP] Already rated.")
                 else:
-                    print(f"  ✗ Already rated, skipping")
-            
-            print(f"\nReturning {len(tasks_data)} rateable tasks")
-            return JsonResponse(tasks_data, safe=False)
-            
-        except Exception as e:
-            print(f"Error in employer_rateable_tasks: {e}")
-            import traceback
-            traceback.print_exc()
-            return JsonResponse([], safe=False)
-    
-    return JsonResponse([], safe=False)
+                    print(f"    [SKIP] Onsite task status '{status_val}' is not completed/paid.")
+
+            elif is_remote:
+                # Remote depends on submission
+                submission = Submission.objects.filter(
+                    task=task, 
+                    status__in=['submitted', 'resubmitted']
+                ).order_by('-submitted_at').first()
+                
+                if submission:
+                    if not Rating.objects.filter(task=task, submission=submission).exists():
+                        can_rate = True
+                        submission_info = {
+                            'id': submission.submission_id,
+                            'title': submission.title,
+                        }
+                        print("    [RESULT] Task is RATEABLE REMOTE")
+                    else:
+                        print("    [SKIP] Submission already rated.")
+                else:
+                    print("    [SKIP] Remote task has no active submissions.")
+            else:
+                print("    [ERROR] Task type unknown! Not recognized as onsite or remote.")
+
+            if can_rate:
+                # Determine what string we send back to Flutter
+                # This ensures Flutter receives 'onsite' even if DB says 'On-Site (Physical)'
+                final_service_type = 'onsite' if is_onsite else 'remote'
+                
+                tasks_data.append({
+                    'id': task.task_id,
+                    'title': task.title,
+                    'service_type': final_service_type, 
+                    'status': task.status,
+                    'budget': str(task.budget),
+                    'freelancer': {
+                        'id': task.assigned_user.user_id,
+                        'username': task.assigned_user.name,
+                    },
+                    'submission': submission_info
+                })
+
+        print(f"\nDEBUG: Final list count returning to Flutter: {len(tasks_data)}")
+        print("="*40 + "\n")
+
+        return JsonResponse({
+            'success': True,
+            'tasks': tasks_data,
+            'count': len(tasks_data)
+        }, safe=False)
+
+    except Exception as e:
+        print(f"!!! FATAL ERROR !!!: {str(e)}")
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
 @api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])

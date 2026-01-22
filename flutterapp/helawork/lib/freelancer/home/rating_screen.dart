@@ -126,6 +126,9 @@ class _RatingsScreenState extends State<RatingsScreen> {
   Widget _buildRateableContractsSheet(RatingProvider provider) {
     return Container(
       padding: const EdgeInsets.all(24),
+      constraints: const BoxConstraints(
+        maxHeight: 500,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -216,10 +219,72 @@ class _RatingsScreenState extends State<RatingsScreen> {
     );
   }
 
+
   Widget _buildRateableContractTile(Map<String, dynamic> contract) {
-    final userToRate = contract['user_to_rate'];
-    final daysRemaining = contract['days_remaining'] ?? 0;
-    final isFreelancer = contract['is_freelancer'] ?? false;
+    // Add null safety check
+    
+    debugPrint('📋 Building contract tile with keys: ${contract.keys.toList()}');
+    
+    // FIXED: Handle different data structures from backend
+    final Map<String, dynamic> userToRate;
+    
+    // Check for 'client' field (from your backend logs)
+    if (contract['client'] != null && contract['client'] is Map) {
+      userToRate = Map<String, dynamic>.from(contract['client'] as Map);
+      debugPrint('✅ Using "client" field for user data');
+    } 
+    // Check for 'user_to_rate' field (old format)
+    else if (contract['user_to_rate'] != null && contract['user_to_rate'] is Map) {
+      userToRate = Map<String, dynamic>.from(contract['user_to_rate'] as Map);
+      debugPrint('✅ Using "user_to_rate" field for user data');
+    } else {
+      userToRate = <String, dynamic>{};
+      debugPrint('⚠️ No user data found in contract');
+    }
+    
+    final Map<String, dynamic> task;
+    if (contract['task'] != null && contract['task'] is Map) {
+      task = Map<String, dynamic>.from(contract['task'] as Map);
+    } else {
+      task = <String, dynamic>{};
+    }
+    
+    // Extract data with defaults
+    final daysRemaining = contract['days_remaining'] as int? ?? 30;
+    final currentUserRole = contract['current_user_role'] as String? ?? 'freelancer';
+    final isFreelancer = currentUserRole == 'freelancer';
+    
+    // Handle budget - convert to KSH format
+    final dynamic budgetData = task['budget'] ?? contract['budget'] ?? 0;
+    double budget = 0.0;
+    
+    if (budgetData is String) {
+      // Try to parse string to double
+      final cleaned = budgetData.replaceAll(RegExp(r'[^0-9.]'), '');
+      budget = double.tryParse(cleaned) ?? 0.0;
+    } else if (budgetData is num) {
+      budget = budgetData.toDouble();
+    }
+    
+    // Format budget as KSH
+    String budgetText = 'KSH ${budget.toStringAsFixed(0)}';
+    if (budget >= 1000) {
+      budgetText = 'KSH ${(budget / 1000).toStringAsFixed(1)}K';
+    }
+    
+    final taskTitle = (task['title'] as String?) ?? 
+                      (contract['task_title'] as String?) ?? 
+                      'Task';
+    
+    // Handle username from different possible fields
+    String username = 'User';
+    if (userToRate['name'] != null) {
+      username = userToRate['name'].toString();
+    } else if (userToRate['username'] != null) {
+      username = userToRate['username'].toString();
+    } else if (contract['client_name'] != null) {
+      username = contract['client_name'].toString();
+    }
     
     return Material(
       color: Colors.transparent,
@@ -255,7 +320,7 @@ class _RatingsScreenState extends State<RatingsScreen> {
                 ),
                 child: Center(
                   child: Text(
-                    (userToRate['username']?[0] ?? 'U').toUpperCase(),
+                    username.isNotEmpty ? username[0].toUpperCase() : 'U',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
@@ -274,7 +339,7 @@ class _RatingsScreenState extends State<RatingsScreen> {
                       children: [
                         Expanded(
                           child: Text(
-                            userToRate['username'] ?? 'User',
+                            username,
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w500,
@@ -305,7 +370,7 @@ class _RatingsScreenState extends State<RatingsScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      contract['task_title'] ?? 'Task',
+                      taskTitle,
                       style: TextStyle(
                         fontSize: 13,
                         color: Colors.grey[600],
@@ -330,9 +395,9 @@ class _RatingsScreenState extends State<RatingsScreen> {
                           ),
                         ),
                         const Spacer(),
-                        if (contract['budget'] > 0)
+                        if (budget > 0)
                           Text(
-                            '\$${contract['budget']}',
+                            budgetText,
                             style: const TextStyle(
                               fontSize: 12,
                               color: Colors.green,
@@ -370,38 +435,79 @@ class _RatingsScreenState extends State<RatingsScreen> {
       return;
     }
     
-    final userToRate = contract['user_to_rate'];
-    final ratedUserId = userToRate['id'] ?? 0;
-    final taskId = contract['task_id'] ?? 0;
-    final contractId = contract['contract_id'] ?? 0;
-    
-    if (ratedUserId == 0 || taskId == 0 || contractId == 0) {
+    try {
+      // FIXED: Handle different data structures
+      final Map<String, dynamic> userToRate;
+      if (contract['client'] != null && contract['client'] is Map) {
+        userToRate = Map<String, dynamic>.from(contract['client'] as Map);
+      } else if (contract['user_to_rate'] != null && contract['user_to_rate'] is Map) {
+        userToRate = Map<String, dynamic>.from(contract['user_to_rate'] as Map);
+      } else {
+        userToRate = <String, dynamic>{};
+      }
+      
+      final Map<String, dynamic> task;
+      if (contract['task'] != null && contract['task'] is Map) {
+        task = Map<String, dynamic>.from(contract['task'] as Map);
+      } else {
+        task = <String, dynamic>{};
+      }
+      
+      final ratedUserId = _parseToInt(userToRate['id']) ?? 0;
+      final taskId = _parseToInt(task['id'] ?? contract['task_id']) ?? 0;
+      final contractId = _parseToInt(contract['contract_id']) ?? 0;
+      
+      debugPrint('🎯 Navigate to rating: ratedUserId=$ratedUserId, taskId=$taskId, contractId=$contractId');
+      
+      if (ratedUserId == 0 || taskId == 0 || contractId == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Invalid contract data - missing IDs'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+      
+      final currentUserRole = contract['current_user_role'] as String? ?? 'freelancer';
+      final isFreelancer = currentUserRole == 'freelancer';
+      
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => SubmitRatingScreen(
+            employerId: isFreelancer ? ratedUserId : currentUserId,
+            freelancerId: isFreelancer ? currentUserId : ratedUserId,
+            taskId: taskId,
+            contractId: contractId,
+            clientId: ratedUserId,
+            clientName: userToRate['name'] as String? ?? 
+                       userToRate['username'] as String? ?? 
+                       'Client',
+            taskTitle: task['title'] as String? ?? 'Task',
+            isFreelancerRating: isFreelancer,
+          ),
+        ),
+      ).then((_) {
+        _refreshData();
+      });
+    } catch (e) {
+      debugPrint('❌ Error navigating to submit rating: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Invalid contract data'),
+        SnackBar(
+          content: Text('Error: ${e.toString()}'),
           backgroundColor: Colors.red,
         ),
       );
-      return;
     }
+  }
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => SubmitRatingScreen(
-          employerId: contract['is_employer'] ? currentUserId : ratedUserId,
-          freelancerId: contract['is_freelancer'] ? currentUserId : ratedUserId,
-          taskId: taskId,
-          contractId: contractId,
-          clientId: ratedUserId,
-          clientName: userToRate['username'] ?? 'User',
-          taskTitle: contract['task_title'] ?? 'Task',
-          isFreelancerRating: contract['is_freelancer'] ?? false,
-        ),
-      ),
-    ).then((_) {
-      _refreshData();
-    });
+  int? _parseToInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is String) return int.tryParse(value);
+    if (value is num) return value.toInt();
+    return null;
   }
 
   Future<void> _refreshData() async {
@@ -804,21 +910,37 @@ class _RatingsScreenState extends State<RatingsScreen> {
     );
   }
 
-  // FIXED: This method now properly parses JSON from database and displays it beautifully
   Widget _buildRatingCard(Map<String, dynamic> rating) {
-    // Extract basic data
+    // Extract basic data with null safety
     final double overallRating = _extractDouble(rating, ['rating', 'overall', 'value'], 0.0);
-    final String raterName = rating['rater_name'] ?? rating['client_name'] ?? rating['from_user']?['name'] ?? 'Anonymous';
-    final String taskTitle = rating['task_title'] ?? rating['task']?['title'] ?? 'Web applications';
+    
+    String raterName = 'Anonymous';
+    if (rating['rater_name'] != null) {
+      raterName = rating['rater_name'].toString();
+    } else if (rating['client_name'] != null) {
+      raterName = rating['client_name'].toString();
+    } else if (rating['from_user'] != null && rating['from_user'] is Map) {
+      final fromUser = Map<String, dynamic>.from(rating['from_user'] as Map);
+      raterName = fromUser['name']?.toString() ?? 'Anonymous';
+    }
+    
+    String taskTitle = 'Task';
+    if (rating['task_title'] != null) {
+      taskTitle = rating['task_title'].toString();
+    } else if (rating['task'] != null && rating['task'] is Map) {
+      final task = Map<String, dynamic>.from(rating['task'] as Map);
+      taskTitle = task['title']?.toString() ?? 'Task';
+    }
+    
     final String? comment = rating['comment'] ?? rating['feedback'] ?? rating['review'];
     
     // Parse date
     DateTime? createdAt;
     if (rating['created_at'] != null) {
       if (rating['created_at'] is String) {
-        createdAt = DateTime.tryParse(rating['created_at']);
+        createdAt = DateTime.tryParse(rating['created_at'] as String);
       } else if (rating['created_at'] is int) {
-        createdAt = DateTime.fromMillisecondsSinceEpoch(rating['created_at'] * 1000);
+        createdAt = DateTime.fromMillisecondsSinceEpoch((rating['created_at'] as int) * 1000);
       }
     }
     
@@ -866,7 +988,7 @@ class _RatingsScreenState extends State<RatingsScreen> {
         }
       }
     } else if (rating['extended_data'] is Map) {
-      extendedData = Map<String, dynamic>.from(rating['extended_data']);
+      extendedData = Map<String, dynamic>.from(rating['extended_data'] as Map);
     }
     
     // Extract data from parsed JSON
@@ -876,26 +998,31 @@ class _RatingsScreenState extends State<RatingsScreen> {
     bool wouldRehire = false;
     
     if (extendedData != null) {
-      categoryScores = extendedData['category_scores'] is Map 
-          ? Map<String, dynamic>.from(extendedData['category_scores'])
-          : null;
-      
-      if (extendedData['performance_tags'] is List) {
-        final tags = extendedData['performance_tags'];
-        if (tags is List) {
-          performanceTags = List<String>.from(tags);
-        }
+      if (extendedData['category_scores'] is Map) {
+        categoryScores = Map<String, dynamic>.from(extendedData['category_scores'] as Map);
       }
       
-      wouldRecommend = extendedData['would_recommend'] ?? false;
-      wouldRehire = extendedData['would_rehire'] ?? false;
+      if (extendedData['performance_tags'] is List) {
+        final tags = extendedData['performance_tags'] as List;
+        performanceTags = List<String>.from(tags);
+      }
+      
+      wouldRecommend = extendedData['would_recommend'] as bool? ?? false;
+      wouldRehire = extendedData['would_rehire'] as bool? ?? false;
     }
     
     return Container(
       decoration: BoxDecoration(
-        color: Colors.black,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey[300]!),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -911,16 +1038,16 @@ class _RatingsScreenState extends State<RatingsScreen> {
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: Colors.grey[900],
+                    color: Colors.blue.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(24),
                   ),
                   child: Center(
                     child: Text(
-                      raterName[0].toUpperCase(),
-                      style: const TextStyle(
+                      raterName.isNotEmpty ? raterName[0].toUpperCase() : 'A',
+                      style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w600,
-                        color: Colors.white,
+                        color: Colors.blue[700],
                       ),
                     ),
                   ),
@@ -933,10 +1060,10 @@ class _RatingsScreenState extends State<RatingsScreen> {
                     children: [
                       Text(
                         raterName,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
-                          color: Colors.grey[900],
+                          color: Colors.black87,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -965,10 +1092,10 @@ class _RatingsScreenState extends State<RatingsScreen> {
                         const SizedBox(width: 4),
                         Text(
                           overallRating.toStringAsFixed(1),
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
-                            color: Colors.grey[900],
+                            color: Colors.black87,
                           ),
                         ),
                       ],
@@ -995,14 +1122,14 @@ class _RatingsScreenState extends State<RatingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Divider(height: 1, color: Colors.grey[900]),
+                  const Divider(height: 1, color: Colors.grey),
                   const SizedBox(height: 12),
-                  Text(
+                  const Text(
                     'Category Ratings',
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: Colors.grey[700],
+                      color: Colors.black87,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -1095,7 +1222,7 @@ class _RatingsScreenState extends State<RatingsScreen> {
                         color: Colors.green,
                       ),
                       const SizedBox(width: 6),
-                      Text(
+                      const Text(
                         'Verified',
                         style: TextStyle(
                           fontSize: 12,

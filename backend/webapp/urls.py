@@ -90,6 +90,7 @@ urlpatterns = [
     path('profile/upload-id/', views.update_id_number, name='upload-id-document'),
     path('profile/verify-email/', views.verify_email, name='verify-email'),
     path('profile/verify-phone/', views.verify_phone, name='verify-phone'),
+    path('check_profile_exists/', views.check_profile_exists, name='check_profile_exists'),
     
     # ============ EMPLOYER AUTH ============
     path('login', views.employer_login, name='login'),  
