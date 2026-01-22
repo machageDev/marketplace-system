@@ -3,14 +3,14 @@ class AppConfig {
   //static const String baseUrl = 'https://marketplace-system-1.onrender.com';
   
   // Local development URL (commented out)
-  static const String baseUrl = 'http://172.16.124.1:8000';
+  static const String baseUrl = 'https://marketplace-system-1.onrender.com';
   
   // Other endpoints
   static const String paystackInitializeEndpoint = '/api/payment/initialize/';
   
   // Environment URLs
-  static const String developmentBaseUrl = 'http://172.16.124.1:8000';
-  static const String productionBaseUrl = 'http://172.16.124.1:8000';
+  static const String developmentBaseUrl = 'https://marketplace-system-1.onrender.com';
+  static const String productionBaseUrl = 'https://marketplace-system-1.onrender.com';
   
   static String getBaseUrl() {
     // Always return production URL for now

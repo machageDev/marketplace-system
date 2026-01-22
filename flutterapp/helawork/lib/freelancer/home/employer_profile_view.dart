@@ -75,8 +75,8 @@ class _EmployerProfileScreenState extends State<EmployerProfileScreen> {
 
     try {
       final response = await http.get(
-        //Uri.parse("https://marketplace-system-1.onrender.com/freelancer/employer-profile/${widget.employerId}/"),
-        Uri.parse("http://172.16.124.1:8000/freelancer/employer-profile/${widget.employerId}/"),
+        Uri.parse("https://marketplace-system-1.onrender.com/freelancer/employer-profile/${widget.employerId}/"),
+        //Uri.parse("http://172.16.124.1:8000/freelancer/employer-profile/${widget.employerId}/"),
         headers: {"Authorization": "Bearer $_userToken"},
       ).timeout(const Duration(seconds: 30));
 

@@ -11,9 +11,9 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
 class ApiService{
-  //static const String baseUrl = 'https://marketplace-system-1.onrender.com';
+  static const String baseUrl = 'https://marketplace-system-1.onrender.com';
   
-  static const String baseUrl = 'http://172.16.124.1:8000';
+  //static const String baseUrl = 'http://172.16.124.1:8000';
  
   static const String registerUrl = '$baseUrl/apiregister';
   static const String  loginUrl ='$baseUrl/apilogin';
