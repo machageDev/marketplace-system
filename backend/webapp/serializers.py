@@ -1219,6 +1219,10 @@ class TaskCompletionSerializer(serializers.ModelSerializer):
             'employer_notes', 'freelancer_notes', 'payment_date', 'payment_reference'
         ]
         read_only_fields = ['completion_id', 'completed_at', 'payment_date']
+import json
+from rest_framework import serializers
+from .models import Rating, Contract
+
 class RatingSerializer(serializers.ModelSerializer):
     rater_name = serializers.CharField(source='rater.get_full_name', read_only=True)
     rated_user_name = serializers.CharField(source='rated_user.get_full_name', read_only=True)
@@ -1226,48 +1230,50 @@ class RatingSerializer(serializers.ModelSerializer):
     contract = serializers.PrimaryKeyRelatedField(queryset=Contract.objects.all(), required=False)
     can_rate = serializers.SerializerMethodField(read_only=True)
     
+    # New field to hold the unpacked JSON from Flutter
+    details = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = Rating
         fields = [
             'rating_id', 'task', 'contract', 'task_title', 
             'rater', 'rater_name', 'rated_user', 'rated_user_name',
-            'rating_type', 'score', 'review', 'created_at', 'can_rate'
+            'rating_type', 'score', 'review', 'created_at', 'can_rate',
+            'details'
         ]
         read_only_fields = ['rating_id', 'created_at', 'rating_type', 'can_rate']
-    
+
+    def get_details(self, obj):
+        """Extracts the JSON blob hidden in the review text"""
+        if obj.review and "__EXTENDED_DATA__:" in obj.review:
+            try:
+                parts = obj.review.split("__EXTENDED_DATA__:")
+                return json.loads(parts[1])
+            except Exception:
+                return None
+        return None
+
+    def to_representation(self, instance):
+        """Cleans the review field so it only shows the text comment to the UI"""
+        repr = super().to_representation(instance)
+        if repr['review'] and "__EXTENDED_DATA__:" in repr['review']:
+            # Show only the part BEFORE the JSON string
+            repr['review'] = repr['review'].split("__EXTENDED_DATA__:")[0].strip()
+        return repr
+
     def get_can_rate(self, obj):
-        """Check if rating is allowed"""
-        if not obj.contract:
-            return False
-        
-        return (
-            obj.contract.is_completed and 
-            obj.contract.is_paid and
-            obj.contract.status == 'completed'
-        )
-    
+        if not obj.contract: return False
+        return (obj.contract.is_completed and obj.contract.is_paid and obj.contract.status == 'completed')
+
     def validate(self, data):
-        # ... existing validation ...
-        
-        # Add contract validation
         task = data['task']
-        user = self.context['request'].user
-        
         try:
             contract = Contract.objects.get(task=task)
-            
-            # Check if contract allows rating
             if not (contract.is_completed and contract.is_paid):
-                raise serializers.ValidationError(
-                    "Contract must be completed and paid before rating"
-                )
-            
-            # Set the contract on the rating
+                raise serializers.ValidationError("Contract must be completed and paid before rating")
             data['contract'] = contract
-            
         except Contract.DoesNotExist:
             raise serializers.ValidationError("No contract found for this task")
-        
         return data
 class EmployerRatingSerializer(serializers.ModelSerializer):
     employer_name = serializers.CharField(source='rater.name', read_only=True)

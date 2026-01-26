@@ -30,14 +30,30 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
-        // Service Providers (formerly Freelancers)
-        ChangeNotifierProvider(
-          create: (_) => WalletProvider.create(
-            walletService: WalletService(),
-            token: '',
-          ),
-        ),
+        // 1. First, provide the AuthProvider
         ChangeNotifierProvider(create: (_) => auth.AuthProvider()),
+        
+        // 2. Use ProxyProvider for Wallet to "steal" the token from AuthProvider
+        ChangeNotifierProxyProvider<auth.AuthProvider, WalletProvider>(
+          create: (context) => WalletProvider.create(
+            walletService: WalletService(),
+            token: '', 
+          ),
+          update: (context, authProvider, previousWallet) {
+            // This runs whenever authProvider.notifyListeners() is called
+            if (previousWallet == null) {
+              return WalletProvider.create(
+                walletService: WalletService(),
+                token: authProvider.token ?? '',
+              );
+            }
+            // Update the existing wallet provider with the new token
+            previousWallet.updateToken(authProvider.token ?? '');
+            return previousWallet;
+          },
+        ),
+
+        // ... Keep all your other providers below ...
         ChangeNotifierProvider(create: (_) => ForgotPasswordProvider()),
         ChangeNotifierProvider(create: (_) => UserProfileProvider()),
         ChangeNotifierProvider(create: (_) => DashboardProvider()),
@@ -46,7 +62,6 @@ void main() async {
         ChangeNotifierProvider(create: (_) => ContractProvider()),
         ChangeNotifierProvider(create: (_) => freelancer_rating.RatingProvider()),
         ChangeNotifierProvider(create: (_) => freelancer_submission.SubmissionProvider()),
-        // Task Posters (formerly Clients)
         ChangeNotifierProvider(create: (_) => client_dashboard.DashboardProvider(apiService: ApiService())),
         ChangeNotifierProvider(create: (_) => client_auth.AuthProvider(apiService: ApiService())),
         ChangeNotifierProvider(create: (_) => client_task.TaskProvider()),
@@ -54,7 +69,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => ClientProfileProvider()),
         ChangeNotifierProvider(create: (_) => client_rating.ClientRatingProvider()),
         ChangeNotifierProvider(create: (_) => RecommendedJobsProvider()),
-        ChangeNotifierProvider(   create: (_) => client_contract.ClientContractProvider() ),
+        ChangeNotifierProvider(create: (_) => client_contract.ClientContractProvider()),
         ChangeNotifierProvider(create: (_) => client_submission.SubmissionProvider()),
       ],
       child: const MyApp(),

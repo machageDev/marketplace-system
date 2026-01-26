@@ -1,67 +1,93 @@
+import requests
+from django.conf import settings
+
 def get_bank_name(bank_code):
+    """Your local bank mapping (Internal use)"""
     banks = {
         '01': 'KCB Bank Kenya',
         '02': 'Standard Chartered Kenya',
-        '03': 'Barclays Bank of Kenya (Absa)',
-        '06': 'Bank of Baroda Kenya Limited',
+        '03': 'Absa Bank Kenya',
         '07': 'NCBA Bank Kenya',
         '09': 'Equity Bank Kenya',
-        '10': 'Prime Bank Limited',
         '11': 'Co-operative Bank of Kenya Ltd',
-        '12': 'National Bank of Kenya Ltd',
-        '13': 'Citi Bank Kenya',
-        '14': 'M-Oriental Bank Ltd',
-        '16': 'Citibank NA',
-        '17': 'Habib Bank Limited',
-        '18': 'Middle East Bank Kenya Ltd',
-        '19': 'Bank of Africa Kenya Ltd',
-        '20': 'Bank of Africa Kenya',
-        '21': 'Consolidated Bank of Kenya',
-        '23': 'Consolidated Bank of Kenya Ltd',
-        '24': 'Dubai Bank Kenya',
-        '25': 'Credit Bank Limited',
-        '26': 'Access Bank Kenya',
-        '27': 'Imperial Bank Kenya',
-        '28': 'Paramount Bank',
-        '29': 'Trans National Bank Kenya',
-        '30': 'UBA Kenya',
-        '31': 'Victoria Commercial Bank',
-        '33': 'Chase Bank Kenya',
         '34': 'Ecobank Kenya',
-        '35': 'African Banking Corporation Ltd',
-        '39': 'Jamil Bora Bank',
-        '40': 'Kingdom Bank',
-        '41': 'M-Oriental Bank',
-        '42': 'Mayfair Bank',
-        '43': 'Ecobank Kenya Limited',
-        '48': 'Caritas Microfinance Bank',
-        '50': 'Paramount Universal Bank Ltd',
-        '51': 'Kingdom Bank',
-        '53': 'Guaranty Trust Bank Kenya',
-        '54': 'Victoria Commercial Bank Ltd',
-        '55': 'Guardian Bank Ltd',
-        '57': 'I & M Bank Kenya Ltd',
-        '59': 'Development Bank of Kenya Ltd',
-        '60': 'SBM Bank Kenya',
-        '61': 'Housing Finance Cooperation Kenya (HFC Bank)',
-        '62': 'PostBank Kenya',
-        '63': 'Diamond Trust Bank Kenya Ltd',
-        '65': 'Commercial International Bank',
-        '66': 'Sidian Bank Kenya',
-        '67': 'UMBA Microfinance Bank',
+        '57': 'I&M Bank Kenya',
+        '63': 'Diamond Trust Bank',
         '68': 'Equity Bank Kenya Ltd',
         '70': 'Family Bank Ltd',
-        '72': 'Gulf African Bank Ltd',
-        '74': 'Premier Bank Kenya',
-        '75': 'Dubai Islamic Bank Ltd',
-        '76': 'UBA Kenya Bank Ltd',
-        '78': 'Kenya Women Microfinance Bank',
-        '79': 'Faulu Microfinance Bank',
-        '82': 'Choice Microfinance Bank',
-        '89': 'Stima Sacco',
-        '93': 'Vooma',
-        '97': 'Telkom Kenya',
-        '138': 'NCBA Loop',
+    }
+    return banks.get(str(bank_code).strip(), 'Unknown Bank')
+
+def get_paystack_bank_list():
+    """Fetches official Paystack codes for Kenya from their API"""
+    url = "https://api.paystack.co/bank?country=kenya"
+    headers = {"Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}"}
+    try:
+        response = requests.get(url, headers=headers, timeout=5)
+        if response.status_code == 200:
+            return response.json().get('data', [])
+    except Exception:
+        return []
+    return []
+
+def get_paystack_code_dynamically(bank_name_search):
+    """Matches your bank name to Paystack's required code"""
+    # 1. Quick Map for performance
+    quick_map = {
+        'Equity Bank Kenya Ltd': '007',
+        'Equity Bank Kenya': '007',
+        'KCB Bank Kenya': '008',
+        'Co-operative Bank of Kenya Ltd': '009',
+        'Absa Bank Kenya': '001',
+        'Standard Chartered Kenya': '010',
+    }
+    
+    if bank_name_search in quick_map:
+        return quick_map[bank_name_search]
+
+    # 2. API Fallback for other banks
+    all_banks = get_paystack_bank_list()
+    for bank in all_banks:
+        paystack_name = bank['name'].lower()
+        search_name = bank_name_search.lower()
+        if search_name in paystack_name or paystack_name in search_name:
+            return bank['code']
+    return None
+
+def create_paystack_records(freelancer, account_number, paystack_bank_code):
+    """
+    Creates both a Transfer Recipient and a Subaccount.
+    Returns (recipient_code, subaccount_code, error_message)
+    """
+    headers = {
+        "Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}",
+        "Content-Type": "application/json"
     }
 
-    return banks.get(str(bank_code).strip(), 'Unknown Bank')
+    # Step A: Create Transfer Recipient (for Payouts)
+    recipient_data = {
+        "type": "nuban",
+        "name": f"{freelancer.user.first_name} {freelancer.user.last_name}",
+        "account_number": account_number,
+        "bank_code": paystack_bank_code,
+        "currency": "KES"
+    }
+    
+    res_rec = requests.post("https://api.paystack.co/transferrecipient", json=recipient_data, headers=headers)
+    if res_rec.status_code != 201:
+        return None, None, res_rec.json().get('message', 'Recipient creation failed')
+    
+    recipient_code = res_rec.json()['data']['recipient_code']
+
+    # Step B: Create Subaccount (for Split Payments)
+    sub_data = {
+        "business_name": f"{freelancer.user.first_name} {freelancer.user.last_name}",
+        "settlement_bank": paystack_bank_code,
+        "account_number": account_number,
+        "percentage_charge": 10.0  # Your platform fee
+    }
+    
+    res_sub = requests.post("https://api.paystack.co/subaccount", json=sub_data, headers=headers)
+    subaccount_code = res_sub.json()['data']['subaccount_code'] if res_sub.status_code in [200, 201] else None
+
+    return recipient_code, subaccount_code, None

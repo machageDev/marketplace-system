@@ -99,7 +99,7 @@ class DashboardProvider with ChangeNotifier {
               'title': taskTitle,
               'description': taskData['description']?.toString() ?? '',
               'status': _determineTaskStatus(contract),
-              'budget': contract.budget?.toString() ?? '0',
+              'budget': contract.budget.toString(),
               'deadline': taskData['deadline']?.toString() ?? taskData['end_date']?.toString(),
               'contract_id': contract.contractId.toString(),
               'employer_name': contract.employerName,

@@ -1,4 +1,3 @@
-
 import 'package:intl/intl.dart';
 
 class Contract {
@@ -12,8 +11,8 @@ class Contract {
   final bool isActive;
   final bool isFullyAccepted;
   final String status;
-  final bool? isPaid;
-  final bool? isCompleted;
+  final bool isPaid;      
+  final bool isCompleted; 
 
   Contract({
     required this.contractId,
@@ -26,153 +25,100 @@ class Contract {
     required this.isActive,
     required this.isFullyAccepted,
     required this.status,
-    this.isPaid,
-    this.isCompleted,
+    required this.isPaid,
+    required this.isCompleted,
   });
 
   factory Contract.fromJson(Map<String, dynamic> json) {
+    Map<String, dynamic> employerData = json['employer'] is Map 
+        ? Map<String, dynamic>.from(json['employer']) 
+        : {};
+    
+    Map<String, dynamic> taskData = json['task'] is Map 
+        ? Map<String, dynamic>.from(json['task']) 
+        : {};
+
+    if (json.containsKey('client')) {
+      employerData = {
+        'id': json['client']?['id'] ?? 0,
+        'name': json['client']?['name'] ?? 'Unknown Client',
+      };
+    }
+
     return Contract(
       contractId: json['contract_id'] ?? 0,
-      task: json['task'] is Map ? Map<String, dynamic>.from(json['task']) : {},
-      employer: json['employer'] is Map ? Map<String, dynamic>.from(json['employer']) : {},
-      startDate: json['start_date']?.toString() ?? DateTime.now().toString(),
+      task: taskData,
+      employer: employerData,
+      startDate: json['start_date']?.toString() ?? DateTime.now().toIso8601String(),
       endDate: json['end_date']?.toString(),
-      employerAccepted: (json['employer_accepted'] ?? false) == true,
+      employerAccepted: (json['employer_accepted'] ?? true) == true,
       freelancerAccepted: (json['freelancer_accepted'] ?? false) == true,
       isActive: (json['is_active'] ?? false) == true,
       isFullyAccepted: (json['is_fully_accepted'] ?? false) == true,
       status: (json['status']?.toString() ?? 'pending').toLowerCase().trim(),
-      isPaid: (json['is_paid'] ?? json['task']?['is_paid'] ?? false) == true,
-      isCompleted: (json['is_completed'] ?? json['task']?['is_completed'] ?? false) == true,
+      isPaid: (json['is_paid'] ?? taskData['is_paid'] ?? false) == true,
+      isCompleted: (json['is_completed'] ?? false) == true,
     );
   }
 
-  // --- GETTERS FOR LOGIC ---
+  // --- LOGIC GATES ---
 
-  /// Checks if the task is an On-Site service
   bool get isOnSite {
-    try {
-      final type = task['service_type']?.toString().toLowerCase() ?? 
-                  task['serviceType']?.toString().toLowerCase();
-      return type == 'on_site' || type == 'onsite' || type == 'on-site';
-    } catch (e) {
-      return false;
-    }
+    final type = (task['service_type'] ?? '').toString().toLowerCase();
+    return type.contains('on_site') || type.contains('onsite');
   }
+  
+  bool get canAccept => isPaid && !freelancerAccepted && !isCompleted;
 
-  bool get isRemote => !isOnSite;
+  bool get isAccepted => freelancerAccepted;
 
-  /// Check if contract is fully paid and completed
-  bool get isPaidAndCompleted => (isPaid == true) && (isCompleted == true);
+  bool get isAwaitingPayment => isAccepted && !isPaid;
 
-  /// Check if freelancer can accept this contract (employer accepted but freelancer hasn't)
-  bool get canAccept => employerAccepted && !freelancerAccepted;
+  // REMOVED !isCompleted so Micah can still enter OTP after Client marks completed
+  bool get needsOtpVerification => isOnSite && isAccepted && isPaid && status != 'paid';
 
-  /// Check if contract is accepted by both parties
-  bool get isAccepted => isFullyAccepted;
+  bool get needsWorkSubmission => !isOnSite && isAccepted && isPaid && !isCompleted;
 
-  /// Check if needs OTP verification (for on-site jobs)
-  bool get needsOtpVerification {
-    // Check if status indicates OTP is needed
-    if (status.contains('awaiting') && status.contains('otp')) return true;
-    if (status.contains('pending_verification')) return true;
-    
-    // For on-site jobs that are accepted and paid but not completed
-    if (isOnSite && isAccepted && (isPaid == true) && (isCompleted == false)) {
-      return true;
-    }
-    
-    return false;
-  }
+  bool get isPaidAndCompleted => isPaid && isCompleted && status == 'paid';
 
-  /// Check if needs work submission (for remote jobs)
-  bool get needsWorkSubmission {
-    // For remote jobs that are accepted, paid, but not completed
-    if (isRemote && isAccepted && (isPaid == true) && (isCompleted == false)) {
-      return true;
-    }
-    return false;
-  }
-
-  /// Check if awaiting payment
-  bool get isAwaitingPayment {
-    // Accepted but not paid yet
-    return isAccepted && (isPaid == false);
-  }
-
-  /// Check if contract should be shown in the list
+  // FIXED: UI needs this getter
   bool get shouldShowInList {
-    // ALWAYS SHOW contracts that need freelancer action
-    if (canAccept) return true;
-    if (needsOtpVerification) return true;
-    if (needsWorkSubmission) return true;
-    if (isAwaitingPayment) return true;
-    
-    // For completed contracts, show only if recent (within last 7 days)
-    if (isPaidAndCompleted) {
-      try {
-        final completedDate = endDate != null ? DateTime.parse(endDate!) : null;
-        if (completedDate != null) {
-          final daysSinceCompletion = DateTime.now().difference(completedDate).inDays;
-          return daysSinceCompletion <= 7;
-        }
-      } catch (e) {
-        return false;
-      }
-    }
-    
-    return false;
+    if (status == 'rejected' || status == 'cancelled') return false;
+    return true;
   }
 
-  // --- UI GETTERS ---
+  // --- UI FORMATTING ---
 
   String get taskTitle => task['title']?.toString() ?? 'Untitled Task';
-
+  
   String get employerName {
-    if (employer['company_name']?.toString().isNotEmpty == true) {
-      return employer['company_name'].toString();
-    }
-    if (employer['name']?.toString().isNotEmpty == true) {
-      return employer['name'].toString();
-    }
-    return 'Client';
+    return employer['name'] ?? employer['username'] ?? employer['company_name'] ?? 'Client';
+  }
+  
+  // FIXED: Restored 'budget' getter for your UI
+  double get budget {
+    final val = task['budget'] ?? task['amount'] ?? 0.0;
+    if (val is num) return val.toDouble();
+    if (val is String) return double.tryParse(val) ?? 0.0;
+    return 0.0;
+  }
+
+  String get displayStatus {
+    // Prioritize OTP input so it doesn't disappear
+    if (needsOtpVerification) return 'Action Required: Enter OTP';
+    if (isPaidAndCompleted) return 'Completed & Paid';
+    if (canAccept) return 'Action Required: Accept Offer';
+    if (needsWorkSubmission) return 'Work in Progress';
+    if (isAwaitingPayment) return 'Waiting for Escrow Deposit';
+    
+    return status.replaceAll('_', ' ').toUpperCase();
   }
 
   String get formattedStartDate {
     try {
-      return DateFormat('dd/MM/yyyy').format(DateTime.parse(startDate));
+      return DateFormat('dd MMM yyyy').format(DateTime.parse(startDate));
     } catch (e) {
       return startDate;
     }
-  }
-
-  String? get formattedEndDate {
-    if (endDate == null) return null;
-    try {
-      return DateFormat('dd/MM/yyyy').format(DateTime.parse(endDate!));
-    } catch (e) {
-      return endDate;
-    }
-  }
-
-  double? get budget {
-    try {
-      final val = task['budget'] ?? task['amount'];
-      if (val is num) return val.toDouble();
-      if (val is String) return double.tryParse(val);
-      return null;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  String get displayStatus {
-    if (isPaidAndCompleted) return 'Completed & Paid';
-    if (needsOtpVerification) return 'Awaiting OTP';
-    if (canAccept) return 'Pending Acceptance';
-    if (needsWorkSubmission) return 'Submit Work';
-    if (isAwaitingPayment) return 'Awaiting Payment';
-    if (isAccepted) return 'In Progress';
-    return status;
   }
 }

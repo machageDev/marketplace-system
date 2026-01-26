@@ -1232,4 +1232,26 @@ class PaymentTransaction(models.Model):
     
     def __str__(self):
         return f"TX-{self.paystack_reference}"
- 
+class UserBank(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.CASCADE, 
+        related_name='bank_account'
+    )
+    bank_code = models.CharField(max_length=20)
+    account_number = models.CharField(max_length=20)
+    account_name = models.CharField(max_length=255)
+    paystack_recipient_code = models.CharField(max_length=100, null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.name} - {self.account_number}" 
+
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+
+@receiver(post_save, sender=User)
+def ensure_wallet_exists(sender, instance, created, **kwargs):
+    if created:
+        Wallet.objects.create(user=instance)    

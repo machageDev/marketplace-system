@@ -1,136 +1,103 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 
 class WalletService {
-  //final String baseUrl = "http://172.16.124.1:8000/api/wallet"; 
+  //final String baseUrl = "http://192.168.100.188:8000/api/wallet";
+  final String baseUrl = "https://marketplace-system-1.onrender.com/api/wallet";
 
-   static const String baseUrl = 'https://marketplace-system-1.onrender.com';
- 
+  /// Helper to generate standard headers
+  Map<String, String> _getHeaders(String token) => {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      };
+
+  /// 1. Fetch Full Wallet Data
   Future<Map<String, dynamic>?> getWalletData(String token) async {
     try {
+      debugPrint('--- 🛰️ API CALL: Fetching Wallet ---');
       final response = await http.get(
         Uri.parse('$baseUrl/'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
+        headers: _getHeaders(token),
       );
 
-      print(' Fetching wallet data: Status ${response.statusCode}');
-      
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        print(' Wallet data received: $data');
-        
-        if (data['status'] == true) {
-          return data['data'];
-        } else if (data.containsKey('balance')) {
-          // For backward compatibility if API returns direct balance
-          return {
-            'balance': data['balance'],
-            'bank_verified': data['bank_verified'] ?? false,
-          };
-        }
-      } else if (response.statusCode == 404) {
-        
-        return await _getLegacyWalletData(token);
-      }
-      
-      return null;
-    } catch (e) {
-      print('❌ Error in getWalletData: $e');
-      return null;
-    }
-  }
-
-  // Fallback method if main endpoint doesn't exist
-  Future<Map<String, dynamic>?> _getLegacyWalletData(String token) async {
-    try {
-      // Try to get balance first
-      final balance = await getBalance(token);
-      
-      if (balance != null) {
-        return {
-          'balance': balance,
-          'bank_verified': false, // Default to false if not available
-        };
-      }
-      
-      return null;
-    } catch (e) {
-      print(' Legacy wallet data fallback failed: $e');
-      return null;
-    }
-  }
-
-  // Keep existing getBalance method
-  Future<double?> getBalance(String token) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/balance/'),
-        headers: {'Authorization': 'Bearer $token'},
-      );
+      debugPrint('Response Status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        
-        // Handle different response formats
-        if (data is Map) {
-          if (data.containsKey('balance')) {
-            return double.parse(data['balance'].toString());
-          } else if (data.containsKey('data') && data['data'] is Map) {
-            return double.parse(data['data']['balance'].toString());
+        // Handle nested 'data' key if present, otherwise return raw map
+        if (data is Map<String, dynamic>) {
+          if (data['status'] == true && data.containsKey('data')) {
+            return data['data'];
           }
-        } else if (data is num) {
-          return data.toDouble();
+          return data;
         }
+      } else if (response.statusCode == 401) {
+        debugPrint('❌ Auth Error: Unauthorized access. Check token.');
       }
-      
       return null;
     } catch (e) {
-      print(' Error in getBalance: $e');
+      debugPrint('❌ Network Error in getWalletData: $e');
       return null;
     }
   }
 
+  /// 2. Withdraw Funds
   Future<bool> withdraw(String token, double amount) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/withdraw/'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
+        headers: _getHeaders(token),
         body: json.encode({'amount': amount}),
       );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return data['status'] == true || data['success'] == true;
-      }
       
-      return false;
+      final data = json.decode(response.body);
+      return response.statusCode == 200 && data['status'] == true;
     } catch (e) {
-      print(' Error in withdraw: $e');
+      debugPrint('❌ Error in withdraw: $e');
       return false;
     }
   }
 
+  /// 3. Get Current Balance Only
+  Future<double?> getBalance(String token) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/balance/'),
+        headers: _getHeaders(token),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        
+        // Check for common balance nesting patterns
+        if (data is Map) {
+          var val = data['balance'] ?? data['data']?['balance'];
+          if (val != null) return double.parse(val.toString());
+        } else if (data is num) {
+          return data.toDouble();
+        }
+      }
+      return null;
+    } catch (e) {
+      debugPrint('❌ Error in getBalance: $e');
+      return null;
+    }
+  }
+
+  /// 4. Initiate Top Up (Paystack/Flutterwave Link)
   Future<String?> topUp(String token, double amount) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/topup/'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
+        headers: _getHeaders(token),
         body: json.encode({'amount': amount}),
       );
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         
-        // Handle different response formats
+        // Extract payment URL from various possible keys
         if (data is Map) {
           return data['payment_link'] ?? 
                  data['authorization_url'] ?? 
@@ -138,17 +105,16 @@ class WalletService {
                  data['data']?['authorization_url'];
         }
       }
-      
       return null;
     } catch (e) {
-      print(' Error in topUp: $e');
+      debugPrint('❌ Error in topUp: $e');
       return null;
     }
   }
 
-  
+  /// 5. Register Bank Account for Withdrawals
   Future<Map<String, dynamic>?> registerBankAccount(
-    String token, 
+    String token,
     String accountNumber,
     String bankCode,
     String accountName,
@@ -156,10 +122,7 @@ class WalletService {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/register-bank/'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
+        headers: _getHeaders(token),
         body: json.encode({
           'account_number': accountNumber,
           'bank_code': bankCode,
@@ -167,29 +130,29 @@ class WalletService {
         }),
       );
 
+      final data = json.decode(response.body);
+
       if (response.statusCode == 200 || response.statusCode == 201) {
-        final data = json.decode(response.body);
-        
         if (data['status'] == true) {
           return {
             'success': true,
-            'recipient_code': data['recipient_code'],
-            'bank_name': data['bank_name'],
-            'account_last_4': accountNumber.substring(accountNumber.length - 4),
+            'recipient_code': data['recipient_code'] ?? data['data']?['recipient_code'],
+            'bank_name': data['bank_name'] ?? data['data']?['bank_name'],
+            'account_last_4': accountNumber.length >= 4 
+                ? accountNumber.substring(accountNumber.length - 4) 
+                : accountNumber,
             'message': data['message'] ?? 'Bank account registered successfully',
           };
         }
       }
       
-      // Handle error response
-      final errorData = json.decode(response.body);
       return {
         'success': false,
-        'message': errorData['message'] ?? 'Failed to register bank account',
-        'errors': errorData['errors'],
+        'message': data['message'] ?? 'Failed to register bank account',
+        'errors': data['errors'],
       };
     } catch (e) {
-      print(' Error in registerBankAccount: $e');
+      debugPrint('❌ Error in registerBankAccount: $e');
       return {
         'success': false,
         'message': 'Network error: $e',
@@ -197,14 +160,17 @@ class WalletService {
     }
   }
 
-  
+  /// 6. Check if user has a bank account linked
   Future<bool> checkBankRegistration(String token) async {
     try {
       final walletData = await getWalletData(token);
-      return walletData?['bank_verified'] == true || 
-             walletData?['paystack_recipient_code'] != null;
+      if (walletData == null) return false;
+      
+      return walletData['bank_verified'] == true || 
+             walletData['paystack_recipient_code'] != null ||
+             walletData['bank_name'] != null;
     } catch (e) {
-      print(' Error checking bank registration: $e');
+      debugPrint('❌ Error checking bank registration: $e');
       return false;
     }
   }

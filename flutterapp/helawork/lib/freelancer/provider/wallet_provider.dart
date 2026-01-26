@@ -3,107 +3,144 @@ import 'package:helawork/wallet_service.dart';
 
 class WalletProvider extends ChangeNotifier {
   final WalletService walletService;
+  
+  // Internal State
   String? _token;
+  double _balance = 0.0;
+  bool _loading = false;
+  Map<String, dynamic>? _walletData;
 
-  double balance = 0.0;
-  bool loading = true;
-  Map<String, dynamic>? _walletData; 
+  // Getters for UI
+  double get balance => _balance;
+  bool get loading => _loading;
+  String? get token => _token;
+  Map<String, dynamic>? get walletData => _walletData;
 
-  WalletProvider._internal({
-    required this.walletService,
-  });
+  WalletProvider._internal({required this.walletService});
 
+  /// Factory constructor used for dependency injection
   factory WalletProvider.create({
     required WalletService walletService,
     required String token,
   }) {
     final provider = WalletProvider._internal(walletService: walletService);
-    provider.initialize(token);
+    if (token.isNotEmpty) {
+      provider._token = token;
+      provider.initialize(token);
+    }
     return provider;
   }
 
+  // --- INITIALIZATION & TOKEN MANAGEMENT ---
+
   void initialize(String token) {
+    if (token.isEmpty) {
+      debugPrint("⚠️ WalletProvider: Attempted to initialize with empty token.");
+      return;
+    }
     _token = token;
-    loadWallet();
+    loadWallet(token: token);
   }
 
-  // Update token when it changes
   void updateToken(String newToken) {
+    if (newToken.isEmpty) return;
     _token = newToken;
-    loadWallet();
+    loadWallet(token: newToken);
   }
 
-  // ✅ ADD THIS GETTER
+ /// Updated to check the exact keys we set in the Django Shell
   bool get hasBankAccount {
-    // Check from wallet data if bank is verified
+    if (_walletData == null) return false;
     return _walletData?['bank_verified'] == true || 
-           _walletData?['paystack_recipient_code'] != null;
+           _walletData?['is_paystack_setup'] == true || // <--- ADD THIS
+           (_walletData?['bank_name'] != null && _walletData?['bank_name'] != "Not Linked");
   }
 
-  // Get bank details (optional)
   Map<String, dynamic>? get bankInfo {
     if (!hasBankAccount) return null;
     return {
-      'bank_name': _walletData?['bank_name'],
-      'account_last_4': _walletData?['account_last_4'],
-      'verified_at': _walletData?['bank_verified_at'],
+      'bank_name': _walletData?['bank_name'] ?? 'Linked Account',
+      'account_last_4': _walletData?['account_last_4'] ?? '****',
+      'verified_at': _walletData?['bank_verified_at'] ?? 'Verified (Test Mode)',
     };
-  }
+  }  
+  // --- CORE API METHODS ---
 
-  // Update loadWallet to store full data
-  Future<void> loadWallet() async {
-    if (_token == null) return;
-    
-    loading = true;
+  /// Fetches wallet data from the backend
+  Future<void> loadWallet({String? token}) async {
+    String? authToken = (token != null && token.isNotEmpty) ? token : _token;
+
+    // FIX: Guard against null token to stop logs spamming
+    if (authToken == null || authToken.isEmpty) {
+      debugPrint("⏳ WalletProvider: Waiting for token...");
+      return; 
+    }
+
+    _loading = true;
     notifyListeners();
 
     try {
-      // Call API to get full wallet data including bank info
-      final walletResponse = await walletService.getWalletData(_token!);
+      debugPrint("🛰️ Syncing Wallet for Micah (Token: ${authToken.substring(0, 5)}...)");
       
-      if (walletResponse != null) {
-        // Store the full data
-        _walletData = walletResponse;
-        
-        // Extract balance
-        balance = (walletResponse['balance'] as num?)?.toDouble() ?? 0.0;
-      } else {
-        balance = 0.0;
-        _walletData = null;
+      final responseBody = await walletService.getWalletData(authToken);
+      
+      if (responseBody != null) {
+        // FIX: Navigate into the 'data' key sent by Django
+        final dynamic nestedData = responseBody['data'];
+
+        if (nestedData != null && nestedData is Map<String, dynamic>) {
+          _walletData = nestedData;
+          // FIX: Convert String from Django to Double safely
+          _balance = double.tryParse(nestedData['balance']?.toString() ?? '0') ?? 0.0;
+        } else {
+          _walletData = responseBody;
+          _balance = double.tryParse(responseBody['balance']?.toString() ?? '0') ?? 0.0;
+        }
+
+        _token = authToken; 
+        debugPrint("✅ WALLET UPDATED: KES $_balance");
       }
     } catch (e) {
-      balance = 0.0;
-      _walletData = null;
+      debugPrint("❌ WalletProvider Error: $e");
     } finally {
-      loading = false;
-      notifyListeners();
+      _loading = false;
+      notifyListeners(); // Essential for UI Refresh
     }
   }
 
-  // Top-up wallet
+  // --- USER ACTIONS ---
+
+  /// Requests a payment URL for topping up the wallet
   Future<String?> topUp(double amount) async {
-    if (amount <= 0 || _token == null) return null;
+    if (amount <= 0 || _token == null) {
+      debugPrint("❌ Top Up failed: Invalid amount or missing token.");
+      return null;
+    }
     return await walletService.topUp(_token!, amount);
   }
 
-  // Withdraw funds
+  /// Initiates a withdrawal to the registered bank account
   Future<bool> withdraw(double amount) async {
-    if (amount <= 0 || amount > balance || _token == null) return false;
+    if (amount <= 0 || amount > _balance || _token == null) {
+      debugPrint("❌ Withdrawal failed: Insufficient funds.");
+      return false;
+    }
     
-    // Optional: Check if bank is registered before withdrawing
     if (!hasBankAccount) {
-      throw Exception('Bank account is required for withdrawal');
+      debugPrint("❌ Withdrawal failed: No bank account linked.");
+      return false;
     }
 
     final success = await walletService.withdraw(_token!, amount);
-    if (success) await loadWallet();
+    if (success) {
+      await loadWallet(); 
+    }
     return success;
   }
 
-  // ✅ ADD THIS: Update bank account status after registration
+  /// Updates local state manually after a successful bank registration
   void updateBankAccountStatus(Map<String, dynamic> bankData) {
     _walletData ??= {};
-    
     _walletData!.addAll({
       'bank_verified': true,
       'bank_name': bankData['bank_name'],
@@ -111,7 +148,6 @@ class WalletProvider extends ChangeNotifier {
       'paystack_recipient_code': bankData['recipient_code'],
       'bank_verified_at': DateTime.now().toIso8601String(),
     });
-    
     notifyListeners();
   }
 }

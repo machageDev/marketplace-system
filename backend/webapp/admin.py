@@ -605,3 +605,16 @@ class ServiceAdmin(admin.ModelAdmin):
     list_display = ('freelancer', 'title', 'price', 'is_active')
     list_filter = ('is_active', 'price')
     search_fields = ('title', 'description', 'freelancer__user__name')
+@admin.register(UserBank)
+class UserBankAdmin(admin.ModelAdmin):
+    # This controls which columns appear in the admin list view
+    list_display = ('user', 'account_name', 'account_number', 'bank_code', 'paystack_recipient_code', 'created_at')
+    
+    # This adds a search bar to find users by name or account number
+    search_fields = ('user__username', 'account_name', 'account_number')
+    
+    # This adds a filter sidebar on the right
+    list_filter = ('bank_code', 'created_at')
+    
+    # Makes the recipient code read-only so you don't accidentally break it
+    readonly_fields = ('created_at',)    

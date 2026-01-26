@@ -63,10 +63,10 @@ urlpatterns = [
     path('api/orders/<str:order_id>/verify-payment/', views.verify_order_payment, name='verify-order-payment'),
     path('contracts/<int:contract_id>/order/', views.get_order_for_contract, name='contract-order'),
     path('tasks/<uuid:task_id>/verify-otp/',views.verify_onsite_completion,name='verify-onsite-otp'),
-    path('api/banks/', views.register_bank,name='register-bank'),
+    path('api/banks/', views.register_bank_account,name='register-bank'),
     path('api/webhooks/paystack/', views.paystack_webhook, name='paystack_webhook'),
     path('payment/verify/<str:reference>/', views.verify_payment, name='verify_payment'),
-   
+    
     # OPTION B: Use new payment endpoints (if you implemented them) - REMOVE ABOVE IF USING THESE
     # path('api/payment/order/<str:order_id>/', views.order_detail, name='order_detail'),
     # path('api/orders/pending-payment/', views.pending_payment_orders, name='pending_payment_orders'),
@@ -103,8 +103,7 @@ urlpatterns = [
     path('submissions/stats/', views.submission_stats, name='submission-stats'),
     path('freelancer/recommended-jobs/', views.recommended_jobs, name='recommended_jobs'),
     path('completetask', views.task_completion_list, name='task-completion-list'),
-    path('task-completions/<int:pk>/', views.task_completion_detail, name='task-completion-detail'),
-    path('tasks/<int:task_id>/generate-otp/', views.generate_task_otp, name='generate_task_otp'),
+    path('task-completions/<int:pk>/', views.task_completion_detail, name='task-completion-detail'),    
     path('tasks/<int:task_id>/verify-otp/', views.verify_task_otp, name='verify_task_otp'),
     path('api/contracts/verify-work-otp/', views.verify_work_otp, name='verify_work_otp'),
     
@@ -113,7 +112,8 @@ urlpatterns = [
     path('api/wallet/balance/', views.get_wallet_balance, name='wallet-balance'),
     path('api/wallet/withdraw/', views.withdraw_funds, name='withdraw-funds'),
     path('api/wallet/topup/', views.top_up_wallet, name='top-up-wallet'),
-    path('api/wallet/register-bank/', views.register_bank, name='register-bank'),
+    path('api/wallet/register-bank/', views.register_bank_account, name='register-bank'),
+    path('api/contracts/<int:contract_id>/verify-completion/', views.verify_otp, name='verify_otp'),
     
     # Skill and Portfolio endpoints
     path('api/skills/all/', get_all_skills, name='all_skills'),
@@ -132,4 +132,5 @@ urlpatterns = [
     path('api/freelancer/verified-skills/<int:user_id>/', get_freelancer_verified_skills, name='freelancer-verified-skills-by-id'),
     path('api/freelancer/portfolio/', get_freelancer_portfolio, name='freelancer-portfolio'),
     path('api/freelancer/portfolio/<int:user_id>/', get_freelancer_portfolio, name='freelancer-portfolio-by-id'),
+    path('api/force-sync/', views.force_sync_freelancer_wallet, name='force-sync'),
 ]

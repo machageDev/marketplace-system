@@ -2,26 +2,50 @@ import 'package:flutter/material.dart';
 import 'package:helawork/freelancer/provider/wallet_provider.dart';
 import 'package:provider/provider.dart';
 import 'checkout_page.dart';
-import 'bank_registration_screen.dart'; // Add this import
+import 'bank_registration_screen.dart';
 
-class WalletScreen extends StatelessWidget {
-  const WalletScreen({super.key, required String token});
+class WalletScreen extends StatefulWidget {
+  final String token;
+  const WalletScreen({super.key, required this.token});
 
-  // Navigation methods
+  @override
+  State<WalletScreen> createState() => _WalletScreenState();
+}
+
+class _WalletScreenState extends State<WalletScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Fetch data immediately using the token passed from the previous screen
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshData();
+    });
+  }
+
+  // Centralized refresh logic to sync UI with Backend
+  Future<void> _refreshData() async {
+    if (widget.token.isEmpty) {
+      debugPrint("⚠️ WalletScreen: Cannot refresh, token is empty.");
+      return;
+    }
+    await Provider.of<WalletProvider>(context, listen: false)
+        .loadWallet(token: widget.token);
+  }
+
+  // --- NAVIGATION METHODS ---
+
   void _navigateToBankRegistration(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => const BankRegistrationScreen(),
+        builder: (_) => BankRegistrationScreen(token: widget.token),
       ),
     ).then((refresh) {
-      if (refresh == true) {
-        // Reload wallet data if bank was successfully added
-        final wallet = Provider.of<WalletProvider>(context, listen: false);
-        wallet.loadWallet();
-      }
+      if (refresh == true) _refreshData();
     });
   }
+
+  // --- DIALOG METHODS ---
 
   void _showNoBankAlert(BuildContext context) {
     showDialog(
@@ -29,8 +53,7 @@ class WalletScreen extends StatelessWidget {
       builder: (context) => AlertDialog(
         title: const Text('Bank Account Required'),
         content: const Text(
-          'You need to register a bank account before you can withdraw funds.\n\n'
-          'This ensures your payments go directly to your verified bank account.',
+          'Register a bank account to enable direct withdrawals to your account.',
         ),
         actions: [
           TextButton(
@@ -42,15 +65,14 @@ class WalletScreen extends StatelessWidget {
               Navigator.pop(context);
               _navigateToBankRegistration(context);
             },
-            child: const Text('Add Bank Account'),
+            child: const Text('Add Bank'),
           ),
         ],
       ),
     );
   }
 
-  // Dialog methods
-  void showWithdrawDialog(BuildContext context, WalletProvider wallet) {
+  void _showWithdrawDialog(BuildContext context, WalletProvider wallet) {
     final amountController = TextEditingController();
     showDialog(
       context: context,
@@ -58,27 +80,34 @@ class WalletScreen extends StatelessWidget {
         title: const Text('Withdraw Funds'),
         content: TextField(
           controller: amountController,
-          keyboardType: TextInputType.number,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
           decoration: InputDecoration(
-            hintText: 'Enter amount (Max: KES ${wallet.balance.toStringAsFixed(2)})',
+            hintText: 'Max: KES ${wallet.balance.toStringAsFixed(2)}',
             prefixText: 'KES ',
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () async {
               final amount = double.tryParse(amountController.text) ?? 0;
+              if (amount <= 0 || amount > wallet.balance) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Please enter a valid amount")),
+                );
+                return;
+              }
               Navigator.pop(context);
               bool success = await wallet.withdraw(amount);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(success ? "Withdrawal successful" : "Withdrawal failed"),
-                ),
-              );
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    backgroundColor: success ? Colors.green : Colors.red,
+                    content: Text(success ? "Withdrawal initiated successfully" : "Withdrawal failed"),
+                  ),
+                );
+              }
             },
             child: const Text('Withdraw'),
           ),
@@ -87,7 +116,7 @@ class WalletScreen extends StatelessWidget {
     );
   }
 
-  void showTopUpDialog(BuildContext context, WalletProvider wallet) {
+  void _showTopUpDialog(BuildContext context, WalletProvider wallet) {
     final amountController = TextEditingController();
     showDialog(
       context: context,
@@ -95,31 +124,38 @@ class WalletScreen extends StatelessWidget {
         title: const Text('Top Up Wallet'),
         content: TextField(
           controller: amountController,
+          autofocus: true,
           keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            hintText: 'Enter amount',
-            prefixText: 'KES ',
-          ),
+          decoration: const InputDecoration(hintText: 'Enter amount', prefixText: 'KES '),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () async {
               final amount = double.tryParse(amountController.text) ?? 0;
+              if (amount < 10) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Minimum top up is KES 10")),
+                );
+                return;
+              }
               Navigator.pop(context);
               String? url = await wallet.topUp(amount);
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => CheckoutPage(
-                    paymentUrl: url ?? '',
-                    onSuccess: wallet.loadWallet,
+              if (url != null && mounted) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => CheckoutPage(
+                      paymentUrl: url,
+                      onSuccess: _refreshData,
+                    ),
                   ),
-                ),
-              );
+                );
+              } else if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Could not generate payment link")),
+                );
+              }
             },
             child: const Text('Top Up'),
           ),
@@ -128,232 +164,157 @@ class WalletScreen extends StatelessWidget {
     );
   }
 
+  // --- BUILD METHOD ---
+
   @override
   Widget build(BuildContext context) {
+    // Listen to changes in WalletProvider
     final wallet = Provider.of<WalletProvider>(context);
 
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false, // This removes the back arrow
         title: const Text('My Wallet'),
         centerTitle: true,
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        automaticallyImplyLeading: false,
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: wallet.loadWallet,
+            icon: wallet.loading 
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Icon(Icons.refresh), 
+            onPressed: wallet.loading ? null : _refreshData,
           ),
         ],
       ),
-      body: wallet.loading
-          ? const Center(child: CircularProgressIndicator(color: Colors.blueAccent))
-          : Center(
+      body: wallet.loading && wallet.balance == 0
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _refreshData,
               child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(20),
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // Balance Card
-                    Card(
-                      color: const Color(0xFF1A1A1A),
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          children: [
-                            const Text(
-                              'Available Balance',
-                              style: TextStyle(color: Colors.white70),
-                            ),
-                            const SizedBox(height: 15),
-                            Text(
-                              'KES ${wallet.balance.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                fontSize: 40,
-                                color: Colors.blueAccent,
-                              ),
-                            ),
-                            // Bank Status Indicator (Optional)
-                            if (wallet.hasBankAccount)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 10),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.verified,
-                                      color: Colors.green.shade400,
-                                      size: 16,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'Bank account verified',
-                                      style: TextStyle(
-                                        color: Colors.green.shade400,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
+                    _buildBalanceCard(wallet),
                     const SizedBox(height: 40),
-                    
-                    // Action Buttons Row - FIXED WITH WRAP
                     Wrap(
-                      spacing: 12, // Horizontal spacing between buttons
-                      runSpacing: 12, // Vertical spacing if buttons wrap
+                      spacing: 12,
+                      runSpacing: 12,
                       alignment: WrapAlignment.center,
                       children: [
-                        // Bank Registration Button
-                        SizedBox(
-                          width: 140, // Fixed width for buttons
-                          child: ElevatedButton.icon(
-                            onPressed: () => _navigateToBankRegistration(context),
-                            icon: const Icon(Icons.account_balance, size: 20),
-                            label: const Text('Add Bank', style: TextStyle(fontSize: 12)),
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              backgroundColor: wallet.hasBankAccount 
-                                  ? Colors.grey.shade300 
-                                  : Colors.green,
-                              foregroundColor: wallet.hasBankAccount 
-                                  ? Colors.grey.shade600 
-                                  : Colors.white,
-                            ),
-                          ),
+                        _actionButton(
+                          icon: Icons.account_balance,
+                          label: wallet.hasBankAccount ? 'Update Bank' : 'Add Bank',
+                          color: wallet.hasBankAccount ? Colors.blueGrey : Colors.green,
+                          textColor: Colors.white,
+                          onPressed: () => _navigateToBankRegistration(context),
                         ),
-                        
-                        // Top Up Button
-                        SizedBox(
-                          width: 140,
-                          child: ElevatedButton.icon(
-                            onPressed: () => showTopUpDialog(context, wallet),
-                            icon: const Icon(Icons.add_circle_outline, size: 20),
-                            label: const Text('Top Up', style: TextStyle(fontSize: 12)),
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                            ),
-                          ),
+                        _actionButton(
+                          icon: Icons.add_circle_outline,
+                          label: 'Top Up',
+                          onPressed: () => _showTopUpDialog(context, wallet),
                         ),
-                        
-                        // Withdraw Button
-                        SizedBox(
-                          width: 140,
-                          child: ElevatedButton.icon(
-                            onPressed: wallet.hasBankAccount
-                                ? () => showWithdrawDialog(context, wallet)
-                                : () => _showNoBankAlert(context),
-                            icon: const Icon(Icons.arrow_circle_down_outlined, size: 20),
-                            label: const Text('Withdraw', style: TextStyle(fontSize: 12)),
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              backgroundColor: wallet.hasBankAccount
-                                  ? null
-                                  : Colors.grey.shade300,
-                              foregroundColor: wallet.hasBankAccount
-                                  ? null
-                                  : Colors.grey.shade600,
-                            ),
-                          ),
+                        _actionButton(
+                          icon: Icons.arrow_circle_down_outlined,
+                          label: 'Withdraw',
+                          color: wallet.hasBankAccount ? Colors.blue : Colors.grey.shade400,
+                          onPressed: wallet.hasBankAccount
+                              ? () => _showWithdrawDialog(context, wallet)
+                              : () => _showNoBankAlert(context),
                         ),
                       ],
                     ),
-                    
-                    // Alternative: Single column layout for very small screens
-                    /* Column(
-                      children: [
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: () => _navigateToBankRegistration(context),
-                            icon: const Icon(Icons.account_balance),
-                            label: const Text('Add Bank Account'),
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: () => showTopUpDialog(context, wallet),
-                            icon: const Icon(Icons.add_circle_outline),
-                            label: const Text('Top Up Wallet'),
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: wallet.hasBankAccount
-                                ? () => showWithdrawDialog(context, wallet)
-                                : () => _showNoBankAlert(context),
-                            icon: const Icon(Icons.arrow_circle_down_outlined),
-                            label: const Text('Withdraw Funds'),
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ), */
-                    
-                    // Additional Info (Optional)
                     if (!wallet.hasBankAccount) ...[
                       const SizedBox(height: 30),
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.orange.shade200),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.info,
-                              color: Colors.orange.shade700,
-                              size: 24,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Bank Account Required',
-                                    style: TextStyle(
-                                      color: Colors.orange.shade800,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Add your bank details to withdraw your earnings',
-                                    style: TextStyle(
-                                      color: Colors.orange.shade700,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                      _buildWarningBox(),
                     ],
                   ],
                 ),
               ),
             ),
+    );
+  }
+
+  // --- UI COMPONENTS ---
+
+  Widget _buildBalanceCard(WalletProvider wallet) {
+    return Card(
+      elevation: 4,
+      color: const Color(0xFF1A1A1A),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            const Text('Available Balance', style: TextStyle(color: Colors.white70, fontSize: 16)),
+            const SizedBox(height: 10),
+            Text(
+              'KES ${wallet.balance.toStringAsFixed(2)}',
+              style: const TextStyle(fontSize: 36, color: Colors.blueAccent, fontWeight: FontWeight.bold),
+            ),
+            if (wallet.hasBankAccount)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.verified, color: Colors.green, size: 18),
+                    const SizedBox(width: 8),
+                    Text('Bank verified', style: TextStyle(color: Colors.green.shade400)),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _actionButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+    Color? color,
+    Color? textColor,
+  }) {
+    return SizedBox(
+      width: 155,
+      child: ElevatedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 20),
+        label: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: color ?? Colors.black,
+          foregroundColor: textColor ?? Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWarningBox() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.orange.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.shade300),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.orange.shade800),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'Withdrawals are disabled until you link a verified bank account.',
+              style: TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

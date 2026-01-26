@@ -13,7 +13,7 @@ import 'package:file_picker/file_picker.dart';
 class ApiService{
   static const String baseUrl = 'https://marketplace-system-1.onrender.com';
   
-  //static const String baseUrl = 'http://172.16.124.1:8000';
+  //static const String baseUrl = 'http://192.168.100.188:8000';
  
   static const String registerUrl = '$baseUrl/apiregister';
   static const String  loginUrl ='$baseUrl/apilogin';
@@ -2349,6 +2349,7 @@ Future<Map<String, dynamic>> getSubmissionStats() async {
     rethrow;
   }
 }
+
 Future<Map<String, dynamic>> submitEmployerRating({
   required int taskId,
   required int freelancerId,
@@ -2376,7 +2377,7 @@ Future<Map<String, dynamic>> submitEmployerRating({
 
   // NOTE: Ensure this URL matches your urls.py path exactly
   final response = await http.post(
-    Uri.parse('$baseUrl/create-employer-rating/'), 
+    Uri.parse('$baseUrl/ratings/'), 
     headers: {
       "Content-Type": "application/json",
       "Authorization": "Bearer $token",

@@ -12,25 +12,17 @@ class ContractScreen extends StatefulWidget {
 }
 
 class _ContractScreenState extends State<ContractScreen> {
-  bool _hasFetched = false;
-
   @override
   void initState() {
     super.initState();
-    _hasFetched = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<ContractProvider>(context, listen: false).fetchContracts(context);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<ContractProvider>(context);
-
-    // Initial fetch logic
-    if (!_hasFetched && !provider.isLoading && provider.contracts.isEmpty) {
-      _hasFetched = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        provider.fetchContracts(context);
-      });
-    }
 
     return Scaffold(
       backgroundColor: Colors.grey[900],
@@ -71,12 +63,15 @@ class _ContractScreenState extends State<ContractScreen> {
       decoration: BoxDecoration(
         color: Colors.grey[850],
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey[800]!),
+        border: Border.all(
+          // Visual cue: Green border if Peter has paid but you haven't accepted
+          color: contract.canAccept ? Colors.green : Colors.grey[800]!,
+          width: contract.canAccept ? 2 : 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header with task title and status
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -89,22 +84,26 @@ class _ContractScreenState extends State<ContractScreen> {
           ),
           const SizedBox(height: 12),
           
-          // Contract details
           _buildInfoRow(Icons.person, "Client: ${contract.employerName}"),
           _buildInfoRow(Icons.calendar_today, "Started: ${contract.formattedStartDate}"),
           
-          if (contract.budget != null)
-            _buildInfoRow(Icons.payments, "Budget: \$${contract.budget!.toStringAsFixed(2)}", color: Colors.green),
+          _buildInfoRow(Icons.payments, "Budget: KES ${contract.budget.toStringAsFixed(2)}", color: Colors.green),
           
           _buildInfoRow(
             contract.isOnSite ? Icons.location_on : Icons.computer,
             "Type: ${contract.isOnSite ? 'On-Site' : 'Remote'}",
             color: contract.isOnSite ? Colors.orange : Colors.blue
           ),
+
+          // --- DEBUG LINE: REMOVE THIS AFTER TESTING ---
+          // Padding(
+          //   padding: const EdgeInsets.only(top: 8.0),
+          //   child: Text("Paid: ${contract.isPaid}, Accepted: ${contract.isAccepted}", 
+          //   style: TextStyle(color: Colors.white38, fontSize: 10)),
+          // ),
           
           const Divider(height: 32, color: Colors.grey),
 
-          // Action buttons based on contract state
           _buildActionButtons(context, contract, provider),
         ],
       ),
@@ -112,46 +111,64 @@ class _ContractScreenState extends State<ContractScreen> {
   }
 
   Widget _buildActionButtons(BuildContext context, Contract contract, ContractProvider provider) {
-    // Check what action is needed
+    // 1. Check Acceptance first. This solves your "only showing active" problem.
     if (contract.canAccept) {
       return _buildAcceptRejectSection(context, contract, provider);
     } 
     
-    else if (contract.needsOtpVerification) {
-      return _buildOnSiteOTPButton(context, contract, provider);
-    } 
-    
-    else if (contract.needsWorkSubmission) {
-      return _buildRemoteTaskButton(context, contract);
-    } 
-    
-    else if (contract.isAwaitingPayment) {
-      return _buildAwaitingPaymentStatus();
-    } 
-    
-    else if (contract.isPaidAndCompleted) {
-      return _buildCompletedStatus(contract);
-    } 
-    
-    else if (contract.isAccepted) {
+    // 2. If already accepted, show the workflow
+    if (contract.isAccepted) {
+      if (contract.needsOtpVerification) return _buildOnSiteOTPButton(context, contract, provider);
+      if (contract.needsWorkSubmission) return _buildRemoteTaskButton(context, contract);
+      if (contract.isPaidAndCompleted) return _buildCompletedStatus(contract);
+      if (contract.isAwaitingPayment) return _buildAwaitingPaymentStatus();
+      
       return _buildInProgressStatus();
     }
+
+    // 3. Fallback
+    return Center(
+      child: Text(
+        contract.displayStatus,
+        style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge(Contract contract) {
+    Color color;
+    String text = contract.displayStatus;
     
-    else {
-      return Center(
-        child: Text(
-          contract.displayStatus.toUpperCase(),
-          style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
-        ),
-      );
+    if (contract.canAccept) {
+      color = Colors.green;
+      text = 'PAID & READY';
+    } else if (contract.isPaidAndCompleted) {
+      color = Colors.blueGrey;
+      text = 'COMPLETED';
+    } else if (contract.isAccepted) {
+      color = Colors.cyan;
+      text = 'IN PROGRESS';
+    } else {
+      color = Colors.grey;
     }
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.5)),
+      ),
+      child: Text(text,
+          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color)),
+    );
   }
 
   Widget _buildAcceptRejectSection(BuildContext context, Contract contract, ContractProvider provider) {
     return Column(
       children: [
-        const Text("Client has sent you this contract",
-            style: TextStyle(color: Colors.grey, fontSize: 12)),
+        const Text("✅ Peter has paid for this task. Accept to start.",
+            style: TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.bold)),
         const SizedBox(height: 12),
         Row(
           children: [
@@ -176,121 +193,28 @@ class _ContractScreenState extends State<ContractScreen> {
     );
   }
 
+  // --- Utility Widgets ---
   Widget _buildOnSiteOTPButton(BuildContext context, Contract contract, ContractProvider provider) {
-    return Column(
-      children: [
-        const Text("On-site job - Awaiting completion verification",
-            style: TextStyle(color: Colors.orange, fontSize: 12)),
-        const SizedBox(height: 8),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            icon: const Icon(Icons.vpn_key),
-            label: const Text("Enter Completion Code"),
-            onPressed: () => _showOTPDialog(context, contract, provider),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[800], foregroundColor: Colors.white),
-          ),
-        ),
-      ],
-    );
+    return SizedBox(width: double.infinity, child: ElevatedButton.icon(
+      icon: const Icon(Icons.vpn_key),
+      label: const Text("Enter Completion Code"),
+      onPressed: () => _showOTPDialog(context, contract, provider),
+      style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[800], foregroundColor: Colors.white),
+    ));
   }
 
   Widget _buildRemoteTaskButton(BuildContext context, Contract contract) {
-    return Column(
-      children: [
-        const Text("Remote work - Payment in escrow",
-            style: TextStyle(color: Colors.blue, fontSize: 12)),
-        const SizedBox(height: 8),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            icon: const Icon(Icons.upload_file),
-            label: const Text("Submit Work Files"),
-            onPressed: () => _navigateToTaskPage(context, contract),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
-          ),
-        ),
-      ],
-    );
+    return SizedBox(width: double.infinity, child: ElevatedButton.icon(
+      icon: const Icon(Icons.upload_file),
+      label: const Text("Submit Work Files"),
+      onPressed: () => _navigateToTaskPage(context, contract),
+      style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+    ));
   }
 
-  Widget _buildAwaitingPaymentStatus() {
-    return Column(
-      children: [
-        const Icon(Icons.hourglass_empty, color: Colors.orange, size: 40),
-        const SizedBox(height: 8),
-        const Text("⏳ Awaiting Client Payment", 
-            style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
-        const Text("Client needs to pay into escrow to start",
-            style: TextStyle(color: Colors.grey, fontSize: 12)),
-      ],
-    );
-  }
-
-  Widget _buildCompletedStatus(Contract contract) {
-    return Column(
-      children: [
-        const Icon(Icons.check_circle, color: Colors.green, size: 40),
-        const SizedBox(height: 8),
-        const Text("✅ Milestone Completed & Paid", 
-            style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-        if (contract.formattedEndDate != null)
-          Text("Completed on: ${contract.formattedEndDate}",
-              style: const TextStyle(color: Colors.grey, fontSize: 12)),
-      ],
-    );
-  }
-
-  Widget _buildInProgressStatus() {
-    return Column(
-      children: [
-        const Icon(Icons.autorenew, color: Colors.blue, size: 40),
-        const SizedBox(height: 8),
-        const Text("🔄 Work In Progress", 
-            style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
-        const Text("Continue working on the task",
-            style: TextStyle(color: Colors.grey, fontSize: 12)),
-      ],
-    );
-  }
-
-  Widget _buildStatusBadge(Contract contract) {
-    Color color;
-    String text;
-    
-    if (contract.isPaidAndCompleted) {
-      color = Colors.green;
-      text = 'COMPLETED';
-    } else if (contract.needsOtpVerification) {
-      color = Colors.orange;
-      text = 'AWAITING OTP';
-    } else if (contract.canAccept) {
-      color = Colors.blue;
-      text = 'PENDING';
-    } else if (contract.needsWorkSubmission) {
-      color = Colors.purple;
-      text = 'SUBMIT WORK';
-    } else if (contract.isAwaitingPayment) {
-      color = Colors.yellow;
-      text = 'AWAITING PAYMENT';
-    } else if (contract.isAccepted) {
-      color = Colors.cyan;
-      text = 'IN PROGRESS';
-    } else {
-      color = Colors.grey;
-      text = contract.displayStatus.toUpperCase();
-    }
-    
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(text,
-          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color)),
-    );
-  }
+  Widget _buildAwaitingPaymentStatus() => const Center(child: Text("Awaiting Payment...", style: TextStyle(color: Colors.orange)));
+  Widget _buildCompletedStatus(Contract contract) => const Center(child: Text("✅ Task Completed", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)));
+  Widget _buildInProgressStatus() => const Center(child: Text("🔄 Work in Progress", style: TextStyle(color: Colors.cyan)));
 
   Widget _buildInfoRow(IconData icon, String text, {Color color = Colors.grey}) {
     return Padding(
@@ -303,131 +227,55 @@ class _ContractScreenState extends State<ContractScreen> {
     );
   }
 
-  Widget _buildEmptyState(ContractProvider provider) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.assignment_late_outlined, size: 64, color: Colors.grey[700]),
-          const SizedBox(height: 16),
-          const Text("No contracts found.", style: TextStyle(color: Colors.grey, fontSize: 16)),
-          const SizedBox(height: 8),
-          const Text("Contracts awaiting your action will appear here",
-              style: TextStyle(color: Colors.grey, fontSize: 12)),
-        ],
-      ),
-    );
-  }
+  Widget _buildEmptyState(ContractProvider provider) => const Center(child: Text("No contracts found.", style: TextStyle(color: Colors.grey)));
 
-  // --- DIALOGS ---
-
-  void _showOTPDialog(BuildContext context, Contract contract, ContractProvider provider) {
-    final TextEditingController otpController = TextEditingController();
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey[900],
-        title: const Text("Verify Completion", style: TextStyle(color: Colors.white)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text("Enter the code from the client to release payment.",
-                style: TextStyle(color: Colors.grey)),
-            const SizedBox(height: 20),
-            TextField(
-              controller: otpController,
-              keyboardType: TextInputType.number,
-              maxLength: 6,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.blue, fontSize: 32, letterSpacing: 4),
-              decoration: const InputDecoration(hintText: "000000", counterText: "", hintStyle: TextStyle(color: Colors.white24)),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-          ElevatedButton(
-            onPressed: () async {
-              if (otpController.text.length == 6) {
-                final success = await provider.verifyContractOTP(
-                  context, 
-                  contract.contractId, 
-                  otpController.text
-                );
-                if (success && mounted) {
-                  Navigator.pop(context);
-                }
-              }
-            },
-            child: const Text("Verify & Pay"),
-          ),
-        ],
-      ),
-    );
-  }
-
+  // --- Dialogs ---
   void _showAcceptDialog(BuildContext context, int id, ContractProvider p) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey[900],
-        title: const Text("Accept Contract?", style: TextStyle(color: Colors.white)),
-        content: const Text("By accepting, you agree to complete this task within the agreed timeline.", style: TextStyle(color: Colors.grey)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            onPressed: () {
-              p.acceptContract(context, id);
-              Navigator.pop(context);
-            }, 
-            child: const Text("Confirm Accept")
-          ),
-        ],
-      )
-    );
+    showDialog(context: context, builder: (context) => AlertDialog(
+      backgroundColor: Colors.grey[900],
+      title: const Text("Accept Offer?", style: TextStyle(color: Colors.white)),
+      content: const Text("This confirms you are starting the work."),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+        ElevatedButton(onPressed: () { p.acceptContract(context, id); Navigator.pop(context); }, child: const Text("Confirm")),
+      ],
+    ));
   }
 
   void _showRejectDialog(BuildContext context, int id, ContractProvider p) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey[900],
-        title: const Text("Reject Contract?", style: TextStyle(color: Colors.red)),
-        content: const Text("This action cannot be undone. The client will be notified.", style: TextStyle(color: Colors.grey)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Close")),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () {
-              p.rejectContract(context, id);
-              Navigator.pop(context);
-            }, 
-            child: const Text("Confirm Reject")
-          ),
-        ],
-      )
-    );
+    showDialog(context: context, builder: (context) => AlertDialog(
+      backgroundColor: Colors.grey[900],
+      title: const Text("Reject?", style: TextStyle(color: Colors.red)),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+        ElevatedButton(onPressed: () { p.rejectContract(context, id); Navigator.pop(context); }, child: const Text("Reject")),
+      ],
+    ));
+  }
+
+  void _showOTPDialog(BuildContext context, Contract contract, ContractProvider provider) {
+    final TextEditingController otpController = TextEditingController();
+    showDialog(context: context, builder: (context) => AlertDialog(
+      backgroundColor: Colors.grey[900],
+      title: const Text("Enter Code"),
+      content: TextField(controller: otpController, keyboardType: TextInputType.number, maxLength: 6, style: const TextStyle(color: Colors.white)),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+        ElevatedButton(onPressed: () async {
+          if (otpController.text.length == 6) {
+            await provider.verifyContractOTP(context, contract.contractId, otpController.text);
+            Navigator.pop(context);
+          }
+        }, child: const Text("Verify")),
+      ],
+    ));
   }
 
   void _navigateToTaskPage(BuildContext context, Contract contract) {
     final rawId = contract.task['task_id'] ?? contract.task['id'];
-    final int parsedId = rawId is int 
-        ? rawId 
-        : int.tryParse(rawId.toString()) ?? 0;
-
-    Navigator.push(
-      context, 
-      MaterialPageRoute(
-        builder: (context) => TaskDetailScreen(
-          taskId: parsedId,
-          task: contract.task,
-          employer: contract.employer,
-          isTaken: true,
-          isFromContract: true,
-        ),
-      ),
-    );
+    final int parsedId = rawId is int ? rawId : int.tryParse(rawId.toString()) ?? 0;
+    Navigator.push(context, MaterialPageRoute(builder: (context) => TaskDetailScreen(
+      taskId: parsedId, task: contract.task, employer: contract.employer, isTaken: true, isFromContract: true,
+    )));
   }
 }
