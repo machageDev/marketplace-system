@@ -2357,7 +2357,7 @@ Future<Map<String, dynamic>> submitEmployerRating({
   String review = '',
   Map<String, dynamic>? extendedData,
 }) async {
-  print('🔍 DEBUG submitEmployerRating called with:');
+  print(' DEBUG submitEmployerRating called with:');
   print('  taskId: $taskId (type: ${taskId.runtimeType})');
   print('  freelancerId: $freelancerId (type: ${freelancerId.runtimeType})');
   print('  score: $score (type: ${score.runtimeType})');
@@ -2399,6 +2399,7 @@ static Future<Map<String, dynamic>> createRating({
   required int contractId,   // Freelancer needs contract ID
   required int score,
   String review = '',
+  String ratingType = 'freelancer_to_employer',
 }) async {
   try {
     final String? token = await _getUserToken();
@@ -2408,7 +2409,7 @@ static Future<Map<String, dynamic>> createRating({
     }
 
     final response = await http.post(
-      Uri.parse('$baseUrl/ratings/'),
+      Uri.parse('$baseUrl/api/ratings/'),
       headers: {
         "Content-Type": "application/json",
         "Authorization": "Bearer $token",
@@ -2419,6 +2420,7 @@ static Future<Map<String, dynamic>> createRating({
         'rated_user': ratedUserId,  
         'score': score,
         'review': review,
+        'rating_type': ratingType,
       }),
     );
 

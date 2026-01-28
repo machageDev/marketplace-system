@@ -109,60 +109,76 @@ class _ContractScreenState extends State<ContractScreen> {
       ),
     );
   }
-
   Widget _buildActionButtons(BuildContext context, Contract contract, ContractProvider provider) {
-    // 1. Check Acceptance first. This solves your "only showing active" problem.
-    if (contract.canAccept) {
-      return _buildAcceptRejectSection(context, contract, provider);
-    } 
-    
-    // 2. If already accepted, show the workflow
-    if (contract.isAccepted) {
-      if (contract.needsOtpVerification) return _buildOnSiteOTPButton(context, contract, provider);
-      if (contract.needsWorkSubmission) return _buildRemoteTaskButton(context, contract);
-      if (contract.isPaidAndCompleted) return _buildCompletedStatus(contract);
-      if (contract.isAwaitingPayment) return _buildAwaitingPaymentStatus();
-      
-      return _buildInProgressStatus();
-    }
-
-    // 3. Fallback
-    return Center(
-      child: Text(
-        contract.displayStatus,
-        style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
-      ),
-    );
+  // 1. HIGH PRIORITY: If it's done, show the completed status immediately
+  // This is where the "Mark Completed" visual happens
+  if (contract.isCompleted || contract.status.toLowerCase() == 'completed') {
+    return _buildCompletedStatus(contract);
   }
 
-  Widget _buildStatusBadge(Contract contract) {
-    Color color;
-    String text = contract.displayStatus;
-    
-    if (contract.canAccept) {
-      color = Colors.green;
-      text = 'PAID & READY';
-    } else if (contract.isPaidAndCompleted) {
-      color = Colors.blueGrey;
-      text = 'COMPLETED';
-    } else if (contract.isAccepted) {
-      color = Colors.cyan;
-      text = 'IN PROGRESS';
-    } else {
-      color = Colors.grey;
+  // 2. Check Acceptance
+  if (contract.canAccept) {
+    return _buildAcceptRejectSection(context, contract, provider);
+  } 
+  
+  // 3. If already accepted and NOT completed, show active workflow
+  if (contract.isAccepted) {
+    // Only show OTP button if NOT completed
+    if (contract.isOnSite && !contract.isCompleted) {
+       return _buildOnSiteOTPButton(context, contract, provider);
     }
     
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.5)),
-      ),
-      child: Text(text,
-          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color)),
-    );
+    if (contract.isRemote && !contract.isCompleted) {
+       return _buildRemoteTaskButton(context, contract);
+    }
+
+    if (contract.isAwaitingPayment) return _buildAwaitingPaymentStatus();
+    
+    return _buildInProgressStatus();
   }
+
+  // 4. Fallback
+  return Center(
+    child: Text(
+      contract.displayStatus.toUpperCase(),
+      style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
+    ),
+  );
+
+
+}
+Widget _buildStatusBadge(Contract contract) {
+  Color color;
+  String text;
+
+  // 1. Check for completion first to override "In Progress"
+  if (contract.isCompleted || contract.status == 'completed') {
+    color = Colors.grey; // Or blueGrey
+    text = 'COMPLETED';
+  } else if (contract.canAccept) {
+    color = Colors.green;
+    text = 'PAID & READY';
+  } else if (contract.isAccepted) {
+    color = Colors.cyan;
+    text = 'IN PROGRESS';
+  } else {
+    color = Colors.grey;
+    text = contract.status.toUpperCase();
+  }
+
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      color: color.withOpacity(0.1),
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: color.withOpacity(0.5)),
+    ),
+    child: Text(
+      text,
+      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color),
+    ),
+  );
+}
 
   Widget _buildAcceptRejectSection(BuildContext context, Contract contract, ContractProvider provider) {
     return Column(

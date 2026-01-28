@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:helawork/freelancer/provider/auth_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:helawork/freelancer/provider/rating_provider.dart';
 
@@ -13,7 +14,7 @@ class SubmitRatingScreen extends StatefulWidget {
     required this.taskId,
     required this.clientId,
     required this.clientName,
-    required this.taskTitle, required int employerId, required int freelancerId, required contractId, required isFreelancerRating,
+    required this.taskTitle,
   });
 
   @override
@@ -41,50 +42,53 @@ class _SubmitRatingScreenState extends State<SubmitRatingScreen> {
         return 'Select Rating';
     }
   }
-
-  void _submitRating() async {
-    if (_selectedRating == 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select a rating'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    setState(() => _isSubmitting = true);
-
-    try {
-      final ratingProvider = Provider.of<RatingProvider>(context, listen: false);
-      
-      // FIXED: Use submitClientRating method
-      await ratingProvider.submitClientRating(
-        taskId: widget.taskId,
-        clientId: widget.clientId,
-        score: _selectedRating,
-        review: _reviewController.text.trim(), userId: 0,
-      );
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Rating submitted successfully!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      
-      Navigator.pop(context);
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to submit rating: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      setState(() => _isSubmitting = false);
-    }
+ void _submitRating() async {
+  if (_selectedRating == 0) {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select stars')));
+    return;
   }
+
+  final auth = Provider.of<AuthProvider>(context, listen: false);
+  final ratingProv = Provider.of<RatingProvider>(context, listen: false);
+
+  final int raterId = auth.getUserIdOrZero();
+  final int ratedId = int.tryParse(widget.clientId.toString()) ?? 0;
+
+  // 🚨 THE IDENTITY CHECK
+  if (raterId == ratedId) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Logic Error Detected"),
+        content: Text("The app is trying to send a rating to ID: $ratedId, but that is YOUR ID. The data source provided the wrong ID."),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("OK"))],
+      ),
+    );
+    return; 
+  }
+
+  setState(() => _isSubmitting = true);
+
+  try {
+    // We call the provider. The provider calls ApiService. ApiService calls Django.
+    await ratingProv.submitClientRating(
+      userId: raterId,
+      clientId: ratedId,
+      taskId: widget.taskId,
+      score: _selectedRating,
+      review: _reviewController.text.trim(),
+      freelancerId: raterId,
+      task: {},
+      extendedData: {},
+    );
+
+    if (mounted) Navigator.pop(context);
+  } catch (e) {
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+  } finally {
+    if (mounted) setState(() => _isSubmitting = false);
+  }
+}
 
   @override
   Widget build(BuildContext context) {

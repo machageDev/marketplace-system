@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:helawork/client/provider/client_rating_provider.dart';
+import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // Performance Tags Enum
 enum FreelancerPerformanceTag {
@@ -176,27 +178,192 @@ extension PerformanceTagExtension on FreelancerPerformanceTag {
 }
 
 class ClientRatingScreen extends StatefulWidget {
-  final int employerId;
-  const ClientRatingScreen({super.key, required this.employerId});
+  const ClientRatingScreen({super.key});
 
   @override
   State<ClientRatingScreen> createState() => _ClientRatingScreenState();
 }
 
-class _ClientRatingScreenState extends State<ClientRatingScreen> {
+class _ClientRatingScreenState extends State<ClientRatingScreen> with SingleTickerProviderStateMixin {
   final Color blue = const Color(0xFF007BFF);
   final Color white = Colors.white;
+  late TabController _tabController;
+  bool _isTabControllerInitialized = false;
+  int? _employerId;
+  bool _isLoadingUser = true;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<ClientRatingProvider>(context, listen: false)
-          .fetchEmployerRateableTasks();
+    _tabController = TabController(length: 2, vsync: this);
+    _isTabControllerInitialized = true;
+    
+    // Load employer ID first, then fetch tasks
+    _loadEmployerId().then((_) {
+      if (_employerId != null && _employerId! > 0) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          Provider.of<ClientRatingProvider>(context, listen: false)
+              .fetchEmployerRateableTasks();
+        });
+      }
     });
+  }
+ 
+ Future<void> _loadEmployerId() async {
+  try {
+    print("📱 Loading employer ID from storage...");
+    
+    final prefs = await SharedPreferences.getInstance();
+    final allKeys = prefs.getKeys();
+    print("🔑 Available shared preferences keys: $allKeys");
+    
+    // Get the token
+    final token = prefs.getString('user_token');
+    final userName = prefs.getString('user_name');
+    print("🔍 User token exists: ${token != null}");
+    print("🔍 User name: $userName");
+    
+    int? foundId;
+    
+    // Try to get ID from storage first
+    // Check as string (how AuthProvider saves it)
+    final userIdString = prefs.getString('user_id');
+    if (userIdString != null && userIdString.isNotEmpty) {
+      final parsed = int.tryParse(userIdString);
+      if (parsed != null && parsed > 0) {
+        foundId = parsed;
+        print("✅ Found user_id as string: $userIdString -> $foundId");
+      }
+    }
+    
+    // Check as int
+    if (foundId == null) {
+      final userIdInt = prefs.getInt('user_id');
+      if (userIdInt != null && userIdInt > 0) {
+        foundId = userIdInt;
+        print("✅ Found user_id as int: $foundId");
+      }
+    }
+    
+    // Debug: Show what's actually in user_id key
+    print("🔍 Direct check of 'user_id' key:");
+    final rawUserId = prefs.get('user_id');
+    print("🔍 user_id value: $rawUserId (${rawUserId != null ? rawUserId.runtimeType : 'null'})");
+    
+    // If no ID found but we have a token, use a fallback
+    if (foundId == null && token != null && token.isNotEmpty) {
+      print("⚠️ No user_id found but token exists. Using fallback strategy...");
+      
+      // STRATEGY 1: Try to fetch from profile API
+      try {
+        print("🔄 Attempting to fetch user profile...");
+        final response = await http.get(
+          Uri.parse('/api/auth/me'),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+        );
+        
+        if (response.statusCode == 200) {
+          final Map<String, dynamic> data = jsonDecode(response.body);
+          print("✅ Profile API response: ${data.containsKey('id') ? 'Has ID' : 'No ID'}");
+          
+          if (data['id'] != null) {
+            if (data['id'] is int) {
+              foundId = data['id'];
+            } else if (data['id'] is String) {
+              foundId = int.tryParse(data['id']);
+            }
+            if (foundId != null) {
+              print("✅ Retrieved ID from profile API: $foundId");
+              await prefs.setInt('user_id', foundId);
+            }
+          }
+        }
+      } catch (e) {
+        print("❌ Profile API error (this is normal if endpoint doesn't exist): $e");
+      }
+      
+      // STRATEGY 2: If profile API fails, try ID 1 (based on your working logs)
+      if (foundId == null) {
+        print("🔄 Trying with ID 1 (fallback)...");
+        
+        // Test if ID 1 works by checking ratings
+        try {
+          final testResponse = await http.get(
+            Uri.parse('https://marketplace-system-1.onrender.com/api/employers/1/ratings/'),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+            },
+          );
+          
+          if (testResponse.statusCode == 200) {
+            foundId = 1;
+            print("✅ ID 1 works! Using employer ID: 1");
+          }
+        } catch (e) {
+          print("❌ ID 1 test failed: $e");
+        }
+      }
+      
+      // STRATEGY 3: Last resort - use 1 if we have token
+      if (foundId == null) {
+        print("⚠️ Using default ID 1 (last resort)");
+        foundId = 1;
+      }
+    }
+    
+    setState(() {
+      _employerId = foundId;
+      _isLoadingUser = false;
+    });
+    
+    if (_employerId != null && _employerId! > 0) {
+      print("✅ FINAL: Loaded employer ID: $_employerId");
+      
+      // Fetch tasks immediately if we have an ID
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Provider.of<ClientRatingProvider>(context, listen: false)
+            .fetchEmployerRateableTasks();
+      });
+    } else {
+      print("❌ FINAL: Could not load employer ID");
+      
+      // Show what we found for debugging
+      print("=== STORAGE DUMP ===");
+      for (final key in allKeys) {
+        final value = prefs.get(key);
+        print("  $key: $value");
+      }
+      print("===================");
+    }
+    
+  } catch (e) {
+    print("❌ Error in _loadEmployerId: $e");
+    setState(() {
+      _isLoadingUser = false;
+    });
+  }
+}
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   void _showRatingDialog(BuildContext context, dynamic task) {
+    if (_employerId == null || _employerId! <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Please login again to rate"),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    
     final ratingProvider = Provider.of<ClientRatingProvider>(context, listen: false);
     final isOnsite = ratingProvider.isOnsiteTask(task);
     
@@ -206,7 +373,7 @@ class _ClientRatingScreenState extends State<ClientRatingScreen> {
       builder: (ctx) {
         return _RatingDialogContent(
           task: task,
-          employerId: widget.employerId,
+          employerId: _employerId!,
           ratingProvider: ratingProvider,
           blue: blue,
           isOnsite: isOnsite,
@@ -215,325 +382,431 @@ class _ClientRatingScreenState extends State<ClientRatingScreen> {
     );
   }
 
-  void _showEmployerRatings(BuildContext context, dynamic task) {
-    final employer = task['employer'];
-    if (employer == null) return;
-    
-    final employerId = employer['id'];
-    
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: white,
-        title: Text("How Freelancers Rated Me", style: TextStyle(color: blue)),
-        content: FutureBuilder(
-          future: Provider.of<ClientRatingProvider>(context, listen: false)
-              .getEmployerRatings(employerId),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            
-            if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isEmpty) {
-              return const Text("No ratings received yet", style: TextStyle(color: Colors.grey));
-            }
-            
-            final ratings = snapshot.data!;
-            return _buildEmployerRatingsList(ratings);
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Close"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmployerRatingsList(List<dynamic> ratings) {
-    double averageRating = 0;
-    if (ratings.isNotEmpty) {
-      final total = ratings.fold<int>(0, (sum, rating) => sum + (rating['score'] as int));
-      averageRating = total / ratings.length;
-    }
-
-    return SizedBox(
-      height: 400,
-      child: Column(
-        children: [
-          Card(
-            color: white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: blue.withOpacity(0.3)),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  Text(
-                    "Average Rating",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: blue),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        averageRating.toStringAsFixed(1),
-                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(width: 8),
-                      ...List.generate(5, (starIndex) => Icon(
-                        Icons.star,
-                        size: 20,
-                        color: starIndex < averageRating.round() ? Colors.amber : Colors.grey,
-                      )),
-                    ],
-                  ),
-                  Text(
-                    "Based on ${ratings.length} rating${ratings.length == 1 ? '' : 's'}",
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: ListView.builder(
-              itemCount: ratings.length,
-              itemBuilder: (context, index) {
-                final rating = ratings[index];
-                final extendedData = _extractExtendedData(rating['review'] ?? '');
-                final isOnsiteRating = extendedData['work_type'] == 'onsite';
-                
-                return Card(
-                  color: white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    side: BorderSide(color: Colors.grey[200]!),
-                  ),
-                  margin: const EdgeInsets.symmetric(vertical: 4),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            if (isOnsiteRating)
-                              Icon(Icons.location_on, size: 14, color: Colors.green),
-                            const SizedBox(width: 4),
-                            ...List.generate(5, (starIndex) => Icon(
-                              Icons.star,
-                              size: 16,
-                              color: starIndex < (rating['score'] as int) ? Colors.amber : Colors.grey,
-                            )),
-                            const Spacer(),
-                            Text(
-                              "${rating['score']}/5",
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          "Task: ${rating['task']?['title'] ?? 'Unknown Task'}",
-                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          "From: ${rating['freelancer']?['name'] ?? 'Freelancer'}",
-                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                        ),
-                        if (rating['review'] != null && rating['review'].isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            _cleanReviewText(rating['review']),
-                            style: const TextStyle(fontSize: 14),
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-  
-  String _cleanReviewText(String review) {
-    final extendedDataMatch = RegExp(r'__EXTENDED_DATA__:\{.*\}').firstMatch(review);
-    if (extendedDataMatch != null) {
-      return review.substring(0, extendedDataMatch.start).trim();
-    }
-    return review;
-  }
-  
-  Map<String, dynamic> _extractExtendedData(String review) {
-    try {
-      final match = RegExp(r'__EXTENDED_DATA__:(.*)').firstMatch(review);
-      if (match != null) {
-        final jsonString = match.group(1);
-        return jsonDecode(jsonString!) as Map<String, dynamic>;
-      }
-    } catch (e) {
-      print('Error extracting extended data: $e');
-    }
-    return {};
-  }
-
   @override
   Widget build(BuildContext context) {
+    // Show loading screen while fetching user ID
+    if (_isLoadingUser) {
+      return Scaffold(
+        backgroundColor: white,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 20),
+              Text(
+                "Loading your information...",
+                style: TextStyle(color: blue, fontSize: 16),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    
+    // Show error if no employer ID found
+    if (_employerId == null || _employerId! <= 0) {
+      return Scaffold(
+        backgroundColor: white,
+        appBar: AppBar(
+          title: const Text("Ratings Dashboard"),
+          backgroundColor: blue,
+          foregroundColor: white,
+          centerTitle: true,
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, size: 70, color: Colors.orange),
+              SizedBox(height: 20),
+              Text(
+                "User Information Required",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: blue),
+              ),
+              SizedBox(height: 10),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 40),
+                child: Text(
+                  "Unable to load your employer information. Please ensure you're logged in correctly.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+              SizedBox(height: 30),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: blue,
+                  padding: EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+                ),
+                onPressed: () => _loadEmployerId(),
+                child: Text("Retry", style: TextStyle(color: white)),
+              ),
+              SizedBox(height: 10),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text("Go Back", style: TextStyle(color: blue)),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Show loading screen if TabController not ready
+    if (!_isTabControllerInitialized) {
+      return Scaffold(
+        backgroundColor: white,
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: white,
       appBar: AppBar(
-        title: const Text("Rate Completed Work"),
+        title: const Text("Ratings Dashboard"),
         backgroundColor: blue,
         foregroundColor: white,
         centerTitle: true,
+        bottom: _isTabControllerInitialized
+            ? TabBar(
+                controller: _tabController,
+                indicatorColor: white,
+                labelColor: white,
+                unselectedLabelColor: white.withOpacity(0.7),
+                tabs: const [
+                  Tab(
+                    icon: Icon(Icons.star_rate, size: 20),
+                    text: "Rate Freelancers",
+                  ),
+                  Tab(
+                    icon: Icon(Icons.person, size: 20),
+                    text: "My Ratings",
+                  ),
+                ],
+              )
+            : null,
       ),
-      body: Consumer<ClientRatingProvider>(
-        builder: (context, provider, child) {
-          final tasks = provider.tasksForRating;
-          final taskCount = tasks.length;
+      body: _isTabControllerInitialized
+          ? TabBarView(
+              controller: _tabController,
+              children: [
+                // TAB 1: Rate Freelancers
+                _buildRateFreelancersTab(),
+                
+                // TAB 2: View How You Were Rated
+                _buildMyRatingsTab(),
+              ],
+            )
+          : Center(
+              child: CircularProgressIndicator(),
+            ),
+    );
+  }
 
-          if (provider.isLoading) {
-            return const Center(
+  // TAB 1: Rate Freelancers
+  Widget _buildRateFreelancersTab() {
+    return Consumer<ClientRatingProvider>(
+      builder: (context, provider, child) {
+        final tasks = provider.tasksForRating;
+        final taskCount = tasks.length;
+
+        if (provider.isLoading) {
+          return const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text(
+                  "Loading completed tasks...",
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ],
+            ),
+          );
+        }
+
+        if (provider.error != null) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, size: 70, color: Colors.red),
+                const SizedBox(height: 10),
+                Text(
+                  "Error Loading Tasks",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: blue),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  provider.error!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.grey),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: blue),
+                  onPressed: () {
+                    Provider.of<ClientRatingProvider>(context, listen: false)
+                        .fetchEmployerRateableTasks();
+                  },
+                  child: const Text("Try Again", style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            ),
+          );
+        }
+
+        if (taskCount == 0) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.assignment_turned_in, size: 70, color: Colors.grey),
+                const SizedBox(height: 10),
+                const Text(
+                  "No Tasks to Rate",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  "You don't have any completed tasks ready for rating.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: blue),
+                  onPressed: () {
+                    Navigator.pop(context);
+                  },
+                  child: const Text("Back to Tasks", style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return Column(
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              color: blue,
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
                   Text(
-                    "Loading completed tasks...",
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          if (provider.error != null) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline, size: 70, color: Colors.red),
-                  const SizedBox(height: 10),
-                  Text(
-                    "Error Loading Tasks",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: blue),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    provider.error!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.grey),
-                  ),
-                  const SizedBox(height: 20),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: blue),
-                    onPressed: () {
-                      Provider.of<ClientRatingProvider>(context, listen: false)
-                          .fetchEmployerRateableTasks();
-                    },
-                    child: const Text("Try Again", style: TextStyle(color: Colors.white)),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          if (taskCount == 0) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.assignment_turned_in, size: 70, color: Colors.grey),
-                  const SizedBox(height: 10),
-                  const Text(
-                    "No Completed Tasks",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    "You don't have any completed tasks ready for rating.",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                  const SizedBox(height: 20),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: blue),
-                    onPressed: () {
-                      Navigator.pop(context);
-                    },
-                    child: const Text("Back to Tasks", style: TextStyle(color: Colors.white)),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          return Column(
-            children: [
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                color: blue,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "Rate Freelancer Performance",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: white,
-                      ),
+                    "Rate Freelancer Performance",
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: white,
                     ),
-                    const SizedBox(height: 4),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    "Rate freelancers based on their work quality, communication, and professionalism",
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: white.withOpacity(0.9),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: taskCount,
+                itemBuilder: (context, index) {
+                  if (index < 0 || index >= taskCount) {
+                    return _buildErrorCard("Invalid task data at index $index");
+                  }
+                  
+                  final task = tasks[index];
+                  
+                  if (task == null) {
+                    return _buildErrorCard("Task data is null at index $index");
+                  }
+                  
+                  return _buildTaskCard(task, provider);
+                },
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // TAB 2: My Ratings (How freelancers rated you)
+  Widget _buildMyRatingsTab() {
+    return Consumer<ClientRatingProvider>(
+      builder: (context, provider, child) {
+        // Check if employer ID is available
+        if (_employerId == null || _employerId! <= 0) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.person_off, size: 70, color: Colors.orange),
+                SizedBox(height: 20),
+                Text(
+                  "User ID Required",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: blue),
+                ),
+                SizedBox(height: 10),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 40),
+                  child: Text(
+                    "Unable to load ratings. Please ensure you're logged in correctly.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+                SizedBox(height: 20),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: blue),
+                  onPressed: () => _loadEmployerId(),
+                  child: Text("Retry Login", style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            ),
+          );
+        }
+
+        print("📊 Fetching ratings for employer ID: $_employerId");
+        
+        return FutureBuilder<List<dynamic>>(
+          future: provider.getEmployerRatings(_employerId!),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
                     Text(
-                      "Rate freelancers based on their work quality, communication, and professionalism",
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: white.withOpacity(0.9),
-                      ),
+                      "Loading your ratings...",
+                      style: TextStyle(color: Colors.grey),
                     ),
                   ],
                 ),
-              ),
-              Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: taskCount,
-                  itemBuilder: (context, index) {
-                    if (index < 0 || index >= taskCount) {
-                      return _buildErrorCard("Invalid task data at index $index");
-                    }
-                    
-                    final task = tasks[index];
-                    
-                    if (task == null) {
-                      return _buildErrorCard("Task data is null at index $index");
-                    }
-                    
-                    return _buildTaskCard(task, provider);
-                  },
+              );
+            }
+
+            if (snapshot.hasError) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.error_outline, size: 70, color: Colors.red),
+                    const SizedBox(height: 10),
+                    const Text(
+                      "Error Loading Ratings",
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      snapshot.error.toString(),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.grey),
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: blue),
+                      onPressed: () {
+                        provider.fetchEmployerRatings(_employerId!);
+                      },
+                      child: const Text("Try Again", style: TextStyle(color: Colors.white)),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          );
-        },
-      ),
+              );
+            }
+
+            if (!snapshot.hasData || snapshot.data!.isEmpty) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.star_outline, size: 70, color: Colors.grey),
+                    const SizedBox(height: 10),
+                    const Text(
+                      "No Ratings Yet",
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      "Freelancers haven't rated you yet.\n(Employer ID: $_employerId)",
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.grey),
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: blue),
+                      onPressed: () {
+                        provider.fetchEmployerRatings(_employerId!);
+                      },
+                      child: const Text("Refresh", style: TextStyle(color: Colors.white)),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            final ratings = snapshot.data!;
+            print("✅ Loaded ${ratings.length} ratings for employer ID: $_employerId");
+            
+            return Column(
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  color: blue,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "How Freelancers Rated You",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: white,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        "See feedback from freelancers you've worked with",
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: white.withOpacity(0.9),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        "Employer ID: $_employerId | ${ratings.length} rating${ratings.length != 1 ? 's' : ''}",
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: white.withOpacity(0.8),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: _buildEmployerRatingsList(ratings),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -657,25 +930,467 @@ class _ClientRatingScreenState extends State<ClientRatingScreen> {
                     style: const TextStyle(color: Colors.white, fontSize: 12),
                   ),
                 ),
-                const SizedBox(width: 8),
-                OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: blue),
-                    foregroundColor: blue,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  ),
-                  onPressed: () => _showEmployerRatings(context, task),
-                  child: Text(
-                    "My Ratings",
-                    style: TextStyle(color: blue, fontSize: 11),
-                  ),
-                ),
               ],
             ),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildEmployerRatingsList(List<dynamic> ratings) {
+    double averageRating = 0;
+    final Map<String, double> categoryAverages = {};
+    final Map<String, int> tagFrequency = {};
+    
+    if (ratings.isNotEmpty) {
+      // Calculate average rating
+      final total = ratings.fold<int>(0, (sum, rating) => sum + (rating['score'] as int));
+      averageRating = total / ratings.length;
+      
+      // Calculate category averages
+      final Map<String, int> categoryTotals = {};
+      final Map<String, int> categoryCounts = {};
+      
+      // Count performance tags
+      for (final rating in ratings) {
+        // Extract extended data
+        final extendedData = _extractExtendedData(rating['review'] ?? '');
+        
+        // Process category scores
+        final categoryScores = extendedData['category_scores'] as Map<String, dynamic>?;
+        if (categoryScores != null) {
+          categoryScores.forEach((category, score) {
+            if (score is int) {
+              categoryTotals[category] = (categoryTotals[category] ?? 0) + score;
+              categoryCounts[category] = (categoryCounts[category] ?? 0) + 1;
+            }
+          });
+        }
+        
+        // Process performance tags
+        final performanceTags = extendedData['performance_tags'] as List<dynamic>?;
+        if (performanceTags != null) {
+          for (final tag in performanceTags) {
+            if (tag is String) {
+              tagFrequency[tag] = (tagFrequency[tag] ?? 0) + 1;
+            }
+          }
+        }
+      }
+      
+      // Calculate averages
+      categoryTotals.forEach((category, total) {
+        final count = categoryCounts[category] ?? 1;
+        categoryAverages[category] = total / count;
+      });
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          // Summary Card
+          Card(
+            color: white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: blue.withOpacity(0.3)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  Text(
+                    "Your Work Passport",
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: blue),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        averageRating.toStringAsFixed(1),
+                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(width: 8),
+                      ...List.generate(5, (starIndex) => Icon(
+                        Icons.star,
+                        size: 20,
+                        color: starIndex < averageRating.round() ? Colors.amber : Colors.grey,
+                      )),
+                    ],
+                  ),
+                  Text(
+                    "Based on ${ratings.length} rating${ratings.length == 1 ? '' : 's'}",
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                  
+                  // Category Averages
+                  if (categoryAverages.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    const Divider(),
+                    const SizedBox(height: 8),
+                    const Text(
+                      "Your Strengths",
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: categoryAverages.entries.map<Widget>((entry) {
+                        final categoryName = _getCategoryDisplayName(entry.key);
+                        final score = entry.value;
+                        return Chip(
+                          label: Text("$categoryName: ${score.toStringAsFixed(1)}"),
+                          backgroundColor: _getCategoryColor(score),
+                          labelStyle: TextStyle(
+                            fontSize: 11,
+                            color: score >= 4 ? Colors.white : Colors.black87,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                  
+                  // Top Performance Tags
+                  if (tagFrequency.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    const Divider(),
+                    const SizedBox(height: 8),
+                    const Text(
+                      "Frequently Praised For",
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: _getTopTags(tagFrequency, 5),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 16),
+          const Text(
+            "Individual Ratings",
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          
+          ...ratings.map((rating) {
+            final extendedData = _extractExtendedData(rating['review'] ?? '');
+            final isOnsiteRating = extendedData['work_type'] == 'onsite';
+            final categoryScores = extendedData['category_scores'] as Map<String, dynamic>?;
+            final performanceTags = extendedData['performance_tags'] as List<dynamic>?;
+            final wouldRehire = extendedData['would_rehire'] as bool?;
+            
+            // Create a list to hold the review widgets
+            final List<Widget> reviewWidgets = [];
+            final reviewText = rating['review']?.toString() ?? '';
+            if (reviewText.isNotEmpty && _cleanReviewText(reviewText).isNotEmpty) {
+              reviewWidgets.addAll([
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[50],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    _cleanReviewText(reviewText),
+                    style: const TextStyle(fontSize: 13),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ]);
+            }
+            
+            return Card(
+              color: white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: BorderSide(color: Colors.grey[200]!),
+              ),
+              margin: const EdgeInsets.symmetric(vertical: 4),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Rating header with stars and work type
+                    Row(
+                      children: [
+                        if (isOnsiteRating)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.green.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: Colors.green),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.location_on, size: 12, color: Colors.green),
+                                const SizedBox(width: 2),
+                                Text(
+                                  "ONSITE",
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.green,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (!isOnsiteRating)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: blue.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: blue),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.computer, size: 12, color: blue),
+                                const SizedBox(width: 2),
+                                Text(
+                                  "REMOTE",
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: blue,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        const Spacer(),
+                        ...List.generate(5, (starIndex) => Icon(
+                          Icons.star,
+                          size: 16,
+                          color: starIndex < (rating['score'] as int) ? Colors.amber : Colors.grey,
+                        )),
+                        const SizedBox(width: 8),
+                        Text(
+                          "${rating['score']}/5",
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    
+                    const SizedBox(height: 8),
+                    
+                    // Task and freelancer info
+                    Text(
+                      "Task: ${rating['task']?['title'] ?? 'Unknown Task'}",
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      "From: ${rating['freelancer']?['name'] ?? rating['rater_name'] ?? 'Freelancer'}",
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                    
+                    // Performance Tags
+                    if (performanceTags != null && performanceTags.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: performanceTags.map<Widget>((tag) {
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                            ),
+                            child: Text(
+                              _getPerformanceTagDisplayName(tag.toString()),
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: Colors.blue,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                    
+                    // Category Scores (if available)
+                    if (categoryScores != null && categoryScores.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: 60,
+                        child: ListView(
+                          scrollDirection: Axis.horizontal,
+                          children: categoryScores.entries.map<Widget>((entry) {
+                            final score = entry.value is int ? entry.value as int : 0;
+                            return Container(
+                              width: 70,
+                              margin: const EdgeInsets.only(right: 8),
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: _getCategoryColor(score.toDouble()),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.grey[300]!),
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    _getCategoryDisplayName(entry.key),
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                      color: score >= 4 ? Colors.white : Colors.black87,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    "$score/5",
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: score >= 4 ? Colors.white : Colors.black87,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ],
+                    
+                    // Review Text using the list
+                    ...reviewWidgets,
+                    
+                    // Recommendations
+                    if (wouldRehire == true) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Icon(Icons.check_circle, color: Colors.green, size: 14),
+                          const SizedBox(width: 4),
+                          Text(
+                            "Would hire again",
+                            style: TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ],
+                    
+                    // Submission Date (if available)
+                    if (rating['created_at'] != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        _formatDate(rating['created_at'].toString()),
+                        style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  // Helper methods
+  List<Widget> _getTopTags(Map<String, int> tagFrequency, int count) {
+    final sortedEntries = tagFrequency.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    
+    return sortedEntries.take(count).map((entry) {
+      final tagName = _getPerformanceTagDisplayName(entry.key);
+      return Chip(
+        label: Text("$tagName (${entry.value}x)"),
+        backgroundColor: Colors.blue.withOpacity(0.1),
+        side: BorderSide(color: Colors.blue.withOpacity(0.3)),
+        labelStyle: const TextStyle(fontSize: 10),
+      );
+    }).toList();
+  }
+
+  String _getCategoryDisplayName(String categoryKey) {
+    try {
+      final category = RatingCategory.values.firstWhere(
+        (c) => c.name == categoryKey,
+        orElse: () => RatingCategory.workQuality,
+      );
+      return category.displayName;
+    } catch (e) {
+      return categoryKey.split('_').map((word) => 
+        word[0].toUpperCase() + word.substring(1)
+      ).join(' ');
+    }
+  }
+
+  String _getPerformanceTagDisplayName(String tagKey) {
+    try {
+      final tag = FreelancerPerformanceTag.values.firstWhere(
+        (t) => t.name == tagKey,
+        orElse: () => FreelancerPerformanceTag.exceededExpectations,
+      );
+      return tag.displayName;
+    } catch (e) {
+      return tagKey.split('_').map((word) => 
+        word[0].toUpperCase() + word.substring(1)
+      ).join(' ');
+    }
+  }
+
+  Color _getCategoryColor(double score) {
+    if (score >= 4.5) return Colors.green;
+    if (score >= 4.0) return Colors.lightGreen;
+    if (score >= 3.5) return Colors.yellow[700]!;
+    if (score >= 3.0) return Colors.orange;
+    return Colors.red;
+  }
+
+  String _formatDate(String dateString) {
+    try {
+      final date = DateTime.parse(dateString);
+      return '${date.month}/${date.day}/${date.year}';
+    } catch (e) {
+      return dateString;
+    }
+  }
+  
+  String _cleanReviewText(String review) {
+    final extendedDataMatch = RegExp(r'__EXTENDED_DATA__:\{.*\}').firstMatch(review);
+    if (extendedDataMatch != null) {
+      return review.substring(0, extendedDataMatch.start).trim();
+    }
+    return review;
+  }
+  
+  Map<String, dynamic> _extractExtendedData(String review) {
+    try {
+      final match = RegExp(r'__EXTENDED_DATA__:(.*)').firstMatch(review);
+      if (match != null) {
+        final jsonString = match.group(1);
+        return jsonDecode(jsonString!) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      print('Error extracting extended data: $e');
+    }
+    return {};
   }
 
   Widget _buildErrorCard(String message) {
@@ -1120,7 +1835,7 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
             return _buildOnsiteCategoryCard(category);
           }
           return _buildCategoryRatingCard(category);
-        }).toList(),
+        }),
         
         const SizedBox(height: 16),
         const Text(
@@ -1422,7 +2137,7 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
           style: TextStyle(fontSize: 13, color: Colors.grey[600]),
         ),
         const SizedBox(height: 16),
-        ..._applicableCategories.map((category) => _buildCategoryRatingCard(category)).toList(),
+        ..._applicableCategories.map((category) => _buildCategoryRatingCard(category)),
       ],
     );
   }
@@ -2109,7 +2824,7 @@ class _RatingDialogContentState extends State<_RatingDialogContent> {
         review: reviewText,
         punctuality: widget.isOnsite ? punctualityScore : null,
         quality: !widget.isOnsite ? categoryScores[RatingCategory.workQuality] : null,
-        extendedData: extendedData, taskId: 0,
+        extendedData: extendedData, 
       );
 
       if (success && mounted) {

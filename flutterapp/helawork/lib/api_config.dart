@@ -1,9 +1,9 @@
 class AppConfig {
   // Use Render URL for production
-  //static const String baseUrl = 'https://marketplace-system-1.onrender.com';
- // static const String baseUrl = 'http://192.168.100.188:8000';
-  // Local development URL (commented out)
   static const String baseUrl = 'https://marketplace-system-1.onrender.com';
+  //static const String baseUrl = 'http://192.168.100.188:8000';
+  // Local development URL (commented out)
+ // static const String baseUrl = 'https://marketplace-system-1.onrender.com';
   
   // Other endpoints
   static const String paystackInitializeEndpoint = '/api/payment/initialize/';

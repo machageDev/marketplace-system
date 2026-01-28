@@ -34,7 +34,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
       const TasksScreen(),
       const ClientProposalsScreen(),  
       _buildPaymentPlaceholder(), // Keep this as placeholder
-      const ClientRatingScreen(employerId: 0), 
+      const ClientRatingScreen(), 
     ];
 
     WidgetsBinding.instance.addPostFrameCallback((_) {

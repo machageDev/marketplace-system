@@ -101,7 +101,7 @@ class PaymentService {
           },
         );
 
-        print('📥 Verification status: ${response.statusCode}');
+        print(' Verification status: ${response.statusCode}');
         
         if (response.statusCode == 200) {
           final Map<String, dynamic> data = jsonDecode(response.body);

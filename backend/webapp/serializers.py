@@ -1223,14 +1223,26 @@ import json
 from rest_framework import serializers
 from .models import Rating, Contract
 
+import json
+from rest_framework import serializers
+from .models import Rating, Contract
+import json
+from rest_framework import serializers
+from .models import Rating, Contract
+
+import json
+from rest_framework import serializers
+from .models import Rating, Contract, Employer, User, EmployerProfile
+
 class RatingSerializer(serializers.ModelSerializer):
-    rater_name = serializers.CharField(source='rater.get_full_name', read_only=True)
-    rated_user_name = serializers.CharField(source='rated_user.get_full_name', read_only=True)
+    """
+    Handles name resolution by checking Employer, User, and Profile models.
+    """
+    rater_name = serializers.SerializerMethodField()
+    rated_user_name = serializers.SerializerMethodField()
     task_title = serializers.CharField(source='task.title', read_only=True)
     contract = serializers.PrimaryKeyRelatedField(queryset=Contract.objects.all(), required=False)
     can_rate = serializers.SerializerMethodField(read_only=True)
-    
-    # New field to hold the unpacked JSON from Flutter
     details = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
@@ -1243,38 +1255,97 @@ class RatingSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['rating_id', 'created_at', 'rating_type', 'can_rate']
 
+    def get_rater_name(self, obj):
+        try:
+            # 1. Identify the rater object (Employer or User)
+            # Your Rating model likely has a ForeignKey to either Employer or User
+            rater_obj = getattr(obj, 'rater_employer', None) or getattr(obj, 'rater', None)
+            
+            if not rater_obj:
+                return "Client"
+
+            # 2. Check if it's an Employer instance (from your shared models)
+            if isinstance(rater_obj, Employer):
+                # Try to get the name from the linked EmployerProfile
+                if hasattr(rater_obj, 'profile') and rater_obj.profile:
+                    p_name = rater_obj.profile.full_name
+                    if p_name and p_name != 'Not provided':
+                        return p_name
+                # Fallback to the Employer's username
+                return rater_obj.username
+
+            # 3. Check if it's a User instance (Freelancer)
+            if isinstance(rater_obj, User):
+                # Your User model has a 'name' field
+                return rater_obj.name if rater_obj.name else "Freelancer"
+
+            return "Anonymous"
+        except Exception as e:
+            print(f"DEBUG: get_rater_name error: {e}")
+            return "Anonymous"
+
+    def get_rated_user_name(self, obj):
+        try:
+            user = obj.rated_user
+            if user:
+                # Use the 'name' field from your User model
+                return user.name if user.name else "User"
+            return "User"
+        except Exception:
+            return "User"
+
     def get_details(self, obj):
         """Extracts the JSON blob hidden in the review text"""
         if obj.review and "__EXTENDED_DATA__:" in obj.review:
             try:
                 parts = obj.review.split("__EXTENDED_DATA__:")
-                return json.loads(parts[1])
-            except Exception:
+                if len(parts) > 1:
+                    return json.loads(parts[1])
+            except:
                 return None
         return None
 
     def to_representation(self, instance):
-        """Cleans the review field so it only shows the text comment to the UI"""
-        repr = super().to_representation(instance)
-        if repr['review'] and "__EXTENDED_DATA__:" in repr['review']:
-            # Show only the part BEFORE the JSON string
-            repr['review'] = repr['review'].split("__EXTENDED_DATA__:")[0].strip()
-        return repr
+        """Clean the review text for the UI response"""
+        data = super().to_representation(instance)
+        review = data.get('review')
+        if review and "__EXTENDED_DATA__:" in review:
+            data['review'] = review.split("__EXTENDED_DATA__:")[0].strip()
+        return data
 
     def get_can_rate(self, obj):
-        if not obj.contract: return False
-        return (obj.contract.is_completed and obj.contract.is_paid and obj.contract.status == 'completed')
-
-    def validate(self, data):
-        task = data['task']
         try:
-            contract = Contract.objects.get(task=task)
-            if not (contract.is_completed and contract.is_paid):
-                raise serializers.ValidationError("Contract must be completed and paid before rating")
-            data['contract'] = contract
-        except Contract.DoesNotExist:
-            raise serializers.ValidationError("No contract found for this task")
-        return data
+            if not obj.contract: return False
+            # Matching the field names in your Contract model
+            return (obj.contract.is_completed and obj.contract.is_paid)
+        except:
+            return False
+# serializers.py - Add this
+class CreateRatingSerializer(serializers.ModelSerializer):
+    rated_user = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.all(),
+        required=True,
+        error_messages={
+            'required': 'rated_user is required.',
+            'does_not_exist': 'The user you are trying to rate does not exist.'
+        }
+    )
+    
+    class Meta:
+        model = Rating
+        fields = [
+            'task', 'contract', 'rater', 'rated_user',
+            'rating_type', 'score', 'review'
+        ]
+        read_only_fields = ['rater', 'rating_type']
+    
+    def validate(self, data):
+        # Ensure rated_user is not the same as rater
+        if data['rated_user'] == self.context['request'].user:
+            raise serializers.ValidationError({
+                'rated_user': 'You cannot rate yourself.'
+            })
+        return data        
 class EmployerRatingSerializer(serializers.ModelSerializer):
     employer_name = serializers.CharField(source='rater.name', read_only=True)
     freelancer_name = serializers.CharField(source='rated_user.name', read_only=True)

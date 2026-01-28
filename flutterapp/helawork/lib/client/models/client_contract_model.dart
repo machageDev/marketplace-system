@@ -1,20 +1,20 @@
 class ContractModel {
   final int contractId;
-  final String? orderId; 
-  final String? orderStatus; 
+  final String? orderId;
+  final String? orderStatus;
   final String taskTitle;
   final String taskDescription;
   final String taskCategory;
   final String freelancerName;
   final String freelancerEmail;
   final double amount;
-  final String serviceType; 
+  final String serviceType;
   final bool isPaid;
   final bool isCompleted;
   final bool isActive;
   final bool employerAccepted;
   final bool freelancerAccepted;
-  final String status; 
+  final String status;
   final String? startDate;
   final String? endDate;
   final String? paymentDate;
@@ -22,12 +22,15 @@ class ContractModel {
   final String? verificationCode;
   final String? locationAddress;
   final String? deadline;
-  
   final String freelancerPhoto;
   final int freelancerId;
   final String employerName;
   final int taskId;
   final String? completionCode;
+
+  // This field is mutable so the Provider can update it locally 
+  // immediately after generation without waiting for a full refresh.
+  String? verificationOtp;
 
   ContractModel({
     required this.contractId,
@@ -53,12 +56,12 @@ class ContractModel {
     this.verificationCode,
     this.locationAddress,
     this.deadline,
-    
     this.freelancerPhoto = '',
     this.freelancerId = 0,
     this.employerName = '',
     this.taskId = 0,
     this.completionCode,
+    this.verificationOtp,
   });
 
   factory ContractModel.fromJson(Map<String, dynamic> json) {
@@ -86,12 +89,13 @@ class ContractModel {
       verificationCode: json['verification_code'] as String?,
       locationAddress: json['location_address'] as String?,
       deadline: json['deadline'] as String?,
-      
       freelancerPhoto: json['freelancer_photo'] as String? ?? '',
       freelancerId: json['freelancer_id'] as int? ?? 0,
       employerName: json['employer_name'] as String? ?? '',
       taskId: json['task_id'] as int? ?? 0,
       completionCode: json['completion_code'] as String?,
+      // Maps both potential keys from your Django backend
+      verificationOtp: (json['verification_code'] ?? json['verification_otp'])?.toString(),
     );
   }
 
@@ -125,6 +129,7 @@ class ContractModel {
       'employer_name': employerName,
       'task_id': taskId,
       'completion_code': completionCode,
+      'verification_otp': verificationOtp,
     };
   }
 
@@ -132,15 +137,16 @@ class ContractModel {
   bool get isOnSite => serviceType == 'on_site';
   bool get isRemote => serviceType == 'remote';
   bool get isFullyAccepted => employerAccepted && freelancerAccepted;
-  bool get requiresPayment => !isPaid;
-  bool get canBeCompleted => isPaid && !isCompleted;
-  bool get isAwaitingPayment => !isPaid;
-  bool get isInProgress => isPaid && !isCompleted;
-  bool get isFinished => isPaid && isCompleted;
-  bool get hasVerificationCode => (verificationCode != null && verificationCode!.isNotEmpty) || (completionCode != null && completionCode!.isNotEmpty);
-  bool get hasValidOrderId => orderId != null && orderId!.isNotEmpty && orderId!.contains('-');
-  
-  // NEW GETTERS ADDED FOR THE SCREEN
   bool get isRejected => status.toLowerCase() == 'rejected';
-  String? get verificationOrCompletionCode => verificationCode ?? completionCode;
+  
+  /// This is the specific getter your ClientContractsScreen is calling.
+  /// It checks the local OTP first, then falls back to backend codes.
+  String? get verificationOrCompletionCode => 
+      (verificationOtp != null && verificationOtp!.isNotEmpty) 
+          ? verificationOtp 
+          : (verificationCode != null && verificationCode!.isNotEmpty) 
+              ? verificationCode 
+              : completionCode;
+
+  bool get hasValidOrderId => orderId != null && orderId!.isNotEmpty && orderId!.contains('-');
 }

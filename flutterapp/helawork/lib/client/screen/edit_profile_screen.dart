@@ -251,7 +251,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     const themeWhite = Colors.white;
 
     // ADDED: Function to navigate to create profile from another screen
-    void _navigateToCreateProfile() {
+    void navigateToCreateProfile() {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -296,7 +296,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         ElevatedButton(
                           onPressed: () {
                             Navigator.pop(context);
-                            _navigateToCreateProfile();
+                            navigateToCreateProfile();
                           },
                           child: const Text('Create New'),
                         ),
@@ -909,7 +909,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       ElevatedButton.icon(
                         icon: const Icon(Icons.add, size: 18),
                         label: const Text('New'),
-                        onPressed: _navigateToCreateProfile,
+                        onPressed: navigateToCreateProfile,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: themeBlue,
                           foregroundColor: themeWhite,

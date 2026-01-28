@@ -82,7 +82,7 @@ urlpatterns = [
     path('users/ratings/', views.get_user_ratings, name='user_ratings'),
     path('tasks/ratings/', views.get_task_ratings, name='task_ratings'),
     path('api/employers/<int:employer_id>/ratings/', views.employer_ratings, name='employer-ratings'),
-    
+    path('api/ratings/', views.create_freelancer_rating, name='freelancer-ratings'),
     # ============ EMPLOYER PROFILE ============
     path('profile/', views.get_employer_profile, name='get-employer-profile'),
     path('employers/profile/create/', views.create_employer_profile, name='create-employer-profile'),

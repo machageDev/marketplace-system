@@ -97,42 +97,47 @@ class ClientContractProvider extends ChangeNotifier {
       return {"success": false, "message": "Error: $e"};
     }
   }
+Future<Map<String, dynamic>> generateVerificationCode(int contractId) async {
+  try {
+    final token = await _getToken();
+    
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/contracts/$contractId/generate-verification-code/'),
+      headers: {
+        "Authorization": "Bearer $token",
+        "Content-Type": "application/json",
+      },
+      body: jsonEncode({"contract_id": contractId.toString()}),
+    );
 
-  // ======================================================
-  // Generate Verification Code (For On-Site Tasks)
-  // ======================================================
-  Future<Map<String, dynamic>> generateVerificationCode(int contractId) async {
-    try {
-      final token = await _getToken();
-
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/contracts/$contractId/generate-verification-code/'),
-        headers: {
-          "Authorization": "Bearer $token",
-          "Content-Type": "application/json",
-        },
-        body: jsonEncode({"contract_id": contractId.toString()}),
-      );
-
-      final data = jsonDecode(response.body);
+    final data = jsonDecode(response.body);
+    
+    if (data["status"] == true) {
+      String newCode = data["verification_code"].toString();
       
-      if (data["status"] == true) {
-        await fetchEmployerContracts();
-        return {
-          "success": true, 
-          "code": data["verification_code"],
-          "message": data["message"] ?? "Code generated"
-        };
-      } else {
-        return {"success": false, "message": data["message"] ?? "Failed to generate code"};
+      // Update local list manually to ensure immediate UI update
+      int index = contracts.indexWhere((c) => c.contractId == contractId);
+      if (index != -1) {
+        contracts[index].verificationOtp = newCode;
+        // Don't call fetchEmployerContracts here, it might overwrite newCode with null
+        // if the Django list serializer doesn't include the field yet.
+        notifyListeners(); 
       }
-    } catch (e) {
-      return {"success": false, "message": "Error: $e"};
-    }
-  }
 
-  // ======================================================
-  // Verify On-Site Completion (OTP)
+      return {
+        "success": true, 
+        "code": newCode,
+        "message": data["message"] ?? "Code generated"
+      };
+    } else {
+      return {"success": false, "message": data["message"] ?? "Failed to generate code"};
+    }
+  } catch (e) {
+    return {"success": false, "message": "Error: $e"};
+  }
+}
+
+  
   // ======================================================
   Future<Map<String, dynamic>> verifyOnSiteCompletion(int contractId, String code) async {
     try {

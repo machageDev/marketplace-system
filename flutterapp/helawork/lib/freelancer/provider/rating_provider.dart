@@ -18,78 +18,211 @@ class RatingProvider with ChangeNotifier {
 
   Future<void> fetchMyRatings(int userId) async {
     _isLoading = true;
+    notifyListeners();
+
+    try {
+      final List<dynamic> data = await ApiService.getUserRatings(userId);
+      
+      _myRatings = data.map((item) {
+        final Map<String, dynamic> mapItem = Map<String, dynamic>.from(item as Map);
+        return {
+          ...mapItem,
+          'display_name': mapItem['rater_name'] ?? 'Client',
+          'display_title': mapItem['task_title'] ?? 'Task',
+          'display_score': (mapItem['score'] ?? 0).toDouble(),
+        };
+      }).toList();
+
+      _error = null;
+    } catch (e) {
+      debugPrint("❌ Error in fetchMyRatings: $e");
+      _error = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> fetchRateableContracts(int userId) async {
+    _isLoading = true;
     _error = null;
     notifyListeners();
     
     try {
       if (userId == 0) throw Exception("User not logged in");
       
-      // Get your ratings
-      _myRatings = await ApiService.getUserRatings(userId);
-      debugPrint("✅ Loaded ${_myRatings.length} ratings");
+      final response = await ApiService.getRateableContracts();
+      
+      List<dynamic> tasks = [];
+      if (response is Map && response.containsKey('tasks')) {
+        tasks = List<dynamic>.from(response['tasks'] ?? []);
+      } else {
+        tasks = response as List<dynamic>;
+      }
+      
+      _rateableContracts = tasks;
+      _error = _rateableContracts.isEmpty ? "No contracts available for rating." : null;
       
     } catch (e) {
-      _error = "Failed to load ratings: ${e.toString()}";
-      _myRatings = [];
+      _error = "Failed to load rateable contracts: ${e.toString()}";
+      _rateableContracts = [];
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
-    
-    _isLoading = false;
-    notifyListeners();
   }
-  Future<void> fetchRateableContracts(int userId) async {
-  _isLoading = true;
-  _error = null;
-  notifyListeners();
+
+  // ============ RATING FILTERING METHODS ============
+
+  // Get ratings WHERE USER IS RATED (received from others)
+  List<Map<String, dynamic>> getRatingsReceived() {
+    try {
+      return _myRatings.where((rating) {
+        final Map<String, dynamic> map = Map<String, dynamic>.from(rating as Map);
+        final ratingType = (map['rating_type']?.toString() ?? '').toLowerCase();
+        
+        // Ratings received are when employer rates freelancer
+        return ratingType.contains('employer_to_freelancer');
+      }).map((rating) {
+        final Map<String, dynamic> map = Map<String, dynamic>.from(rating as Map);
+        
+        return {
+          'display_name': map['rater_name'] ?? 'Client',
+          'display_score': (map['score'] ?? 0).toDouble(),
+          'display_title': map['task_title'] ?? 'No Title',
+          'display_review': map['review'] ?? '',
+          'date': map['created_at'],
+          'rating_type': map['rating_type'],
+          'is_received': true,
+        };
+      }).toList();
+    } catch (e) {
+      debugPrint("❌ Error in getRatingsReceived: $e");
+      return [];
+    }
+  }
+
+  // Get ratings WHERE USER IS RATER (given to others)
+  List<Map<String, dynamic>> getRatingsGiven() {
+    try {
+      final List<Map<String, dynamic>> givenRatings = _myRatings.where((rating) {
+        final Map<String, dynamic> map = Map<String, dynamic>.from(rating as Map);
+        final ratingType = (map['rating_type']?.toString() ?? '').toLowerCase();
+        
+        // DEBUG: Print each rating to see what's in them
+        debugPrint("🔍 Checking rating - type: $ratingType, rater: ${map['rater']}, rated_user: ${map['rated_user']}");
+        
+        // Ratings given are when freelancer rates employer
+        return ratingType.contains('freelancer_to_employer');
+      }).map((rating) {
+        final Map<String, dynamic> map = Map<String, dynamic>.from(rating as Map);
+        
+        return {
+          'display_name': map['rated_user_name'] ?? 'Client',
+          'display_score': (map['score'] ?? 0).toDouble(),
+          'display_title': map['task_title'] ?? 'No Title',
+          'display_review': map['review'] ?? '',
+          'date': map['created_at'],
+          'rating_type': map['rating_type'],
+          'is_given': true,
+          'rater': map['rater'],
+          'rated_user': map['rated_user'],
+        };
+      }).toList();
+      
+      debugPrint("✅ Found ${givenRatings.length} ratings given");
+      return givenRatings;
+    } catch (e) {
+      debugPrint("❌ Error in getRatingsGiven: $e");
+      return [];
+    }
+  }
+
+  // ============ ADDED BACK: getClientRatingsGiven ============
   
-  try {
-    if (userId == 0) throw Exception("User not logged in");
+  List<dynamic> getClientRatingsGiven() {
+    try {
+      return _myRatings.where((rating) {
+        final Map<String, dynamic> map = Map<String, dynamic>.from(rating as Map);
+        final ratingType = (map['rating_type']?.toString() ?? '').toLowerCase();
+        
+        // Client ratings given are when freelancer rates employer
+        return ratingType.contains('freelancer_to_employer');
+      }).toList();
+    } catch (e) {
+      debugPrint("❌ Error in getClientRatingsGiven: $e");
+      return [];
+    }
+  }
+
+  // ============ COMBINED METHOD FOR UI ============
+
+  List<Map<String, dynamic>> getFilteredRatings(int tabIndex) {
+    debugPrint("🎯 ====== GET FILTERED RATINGS CALLED ======");
+    debugPrint("🎯 Tab index: $tabIndex (${tabIndex == 0 ? 'Received' : 'Given'})");
+    debugPrint("📦 _myRatings count: ${_myRatings.length}");
+    debugPrint("📊 Received ratings count: ${getRatingsReceived().length}");
+    debugPrint("📊 Given ratings count: ${getRatingsGiven().length}");
+    debugPrint("📊 Rateable contracts: ${_rateableContracts.length}");
     
-    debugPrint("🔍 Fetching rateable contracts for user $userId");
+    List<Map<String, dynamic>> result;
     
-    // Get rateable contracts (completed + paid) from new endpoint
-    final response = await ApiService.getRateableContracts();
-    
-    // DEBUG: Log the full response
-    debugPrint("📦 Full backend response: $response");
-    
-    // FIX: Extract the 'tasks' array from the response
-    List<dynamic> tasks = [];
-    if (response is Map && response.containsKey('tasks')) {
-      // Response is a Map with 'tasks' key
-      tasks = List<dynamic>.from(response['tasks'] ?? []);
-      debugPrint("📊 Extracted ${tasks.length} tasks from response");
-    } else    // Response is already a List (old format)
-    tasks = response;
-  
-    
-    _rateableContracts = tasks;
-    
-    debugPrint("✅ Found ${_rateableContracts.length} rateable contracts");
-    
-    if (_rateableContracts.isNotEmpty) {
-      for (var i = 0; i < _rateableContracts.length; i++) {
-        final contract = _rateableContracts[i];
-        debugPrint("📝 Contract $i: ${contract['contract_id']} - Task: ${contract['task']?['title']}");
+    if (tabIndex == 0) {
+      // Received tab - ratings from clients to freelancer
+      result = getRatingsReceived();
+      debugPrint("🎯 Returning ${result.length} received ratings");
+    } else {
+      // Given tab - ratings from freelancer to clients
+      result = getRatingsGiven();
+      debugPrint("🎯 Found ${result.length} given ratings");
+      
+      // If no ratings given, show rateable contracts
+      if (result.isEmpty && _rateableContracts.isNotEmpty) {
+        debugPrint("🎯 No ratings given yet, converting ${_rateableContracts.length} rateable contracts...");
+        result = _rateableContracts.map<Map<String, dynamic>>((contract) {
+          final Map<String, dynamic> cMap = Map<String, dynamic>.from(contract as Map);
+          final Map<String, dynamic> taskData = cMap['task'] is Map 
+              ? Map<String, dynamic>.from(cMap['task']) 
+              : {};
+          final Map<String, dynamic> clientData = cMap['client'] is Map 
+              ? Map<String, dynamic>.from(cMap['client']) 
+              : {};
+          
+          final formattedContract = {
+            'id': cMap['contract_id'],
+            'is_rateable_contract': true,
+            'contract_id': cMap['contract_id'],
+            'task_id': taskData['id'],
+            'task_title': taskData['title'] ?? 'Untitled Task',
+            'client_name': clientData['name'] ?? 'Client',
+            'client_id': clientData['user_id'] ?? clientData['user'] ?? clientData['id'],
+            'budget': taskData['budget'] ?? '0.00',
+            'status': cMap['status'] ?? 'completed',
+            'display_name': clientData['name'] ?? 'Client',
+            'display_title': taskData['title'] ?? 'Untitled Task',
+            'display_score': 0.0,
+            'display_review': 'Rate this client',
+            'date': '',
+            'rating_type': 'rateable_contract',
+          };
+          
+          debugPrint("📋 Created rateable contract item: $formattedContract");
+          return formattedContract;
+        }).toList();
       }
     }
     
-    if (_rateableContracts.isEmpty) {
-      _error = "No contracts available for rating.\n\n"
-               "To rate someone:\n"
-               "1. Complete a contract together\n"
-               "2. Ensure payment is received\n"
-               "3. Rate within 30 days of completion";
+    debugPrint("🎯 Final filtered result: ${result.length} items");
+    if (result.isEmpty) {
+      debugPrint("🎯 Result is empty!");
+    } else {
+      debugPrint("🎯 First item keys: ${result.first.keys.toList()}");
+      debugPrint("🎯 First item is_rateable_contract: ${result.first['is_rateable_contract']}");
     }
+    debugPrint("🎯 ====== END GET FILTERED RATINGS ======");
     
-  } catch (e) {
-    _error = "Failed to load rateable contracts: ${e.toString()}";
-    _rateableContracts = [];
-    debugPrint("❌ Error fetching rateable contracts: $e");
+    return result;
   }
-  
-  _isLoading = false;
-  notifyListeners();
-}
 
   // ============ SUBMIT RATING ============
 
@@ -105,14 +238,6 @@ class RatingProvider with ChangeNotifier {
     notifyListeners();
     
     try {
-      if (userId == 0) throw Exception("User not logged in");
-      if (contractId == 0) throw Exception("Invalid contract ID");
-      if (taskId == 0) throw Exception("Invalid task ID");
-      if (ratedUserId == 0) throw Exception("Invalid user to rate");
-      if (score < 1 || score > 5) throw Exception("Score must be between 1 and 5");
-      
-      debugPrint("📤 Submitting rating: Contract $contractId, Task $taskId, User $ratedUserId, Score $score");
-      
       final result = await ApiService.createRating(
         taskId: taskId,
         ratedUserId: ratedUserId,
@@ -130,8 +255,6 @@ class RatingProvider with ChangeNotifier {
         fetchRateableContracts(userId),
       ]);
       
-      debugPrint("✅ Rating submitted successfully");
-      
     } catch (e) {
       _error = "Failed to submit rating: ${e.toString()}";
       rethrow;
@@ -140,188 +263,145 @@ class RatingProvider with ChangeNotifier {
       notifyListeners();
     }
   }
-
-  // ============ SUBMIT CLIENT RATING (KEEP THIS METHOD!) ============
-
-  Future<void> submitClientRating({
-    required int userId,
-    required dynamic taskId,
-    required dynamic clientId,
-    required dynamic score,
-    String review = '',
-  }) async {
-    _isLoading = true;
-    notifyListeners();
+Future<void> submitClientRating({
+  required int userId,
+  required dynamic taskId,
+  required dynamic clientId,
+  required dynamic score,
+  String review = '', 
+  required int freelancerId, 
+  required Map<String, Object> task, 
+  required Map<String, dynamic> extendedData,
+}) async {
+  _isLoading = true;
+  notifyListeners();
+  
+  try {
+    final int pTaskId = _parseToInt(taskId) ?? 0;
+    final int pScore = _parseToInt(score) ?? 0;
     
-    try {
-      final parsedTaskId = _parseToInt(taskId) ?? 0;
-      final parsedClientId = _parseToInt(clientId) ?? 0;
-      final parsedScore = _parseToInt(score) ?? 0;
-      
-      if (parsedTaskId == 0) throw Exception("Invalid task ID");
-      if (parsedClientId == 0) throw Exception("Invalid client ID");
-      if (parsedScore == 0) throw Exception("Invalid score");
-      
-      debugPrint("🔍 Looking for contract with task: $parsedTaskId, client: $parsedClientId");
-      
-      // Find the contract for this task and client
-      Map<String, dynamic>? matchingContract;
-      for (final contract in _rateableContracts) {
-        final contractTask = contract['task'] is Map
-            ? Map<String, dynamic>.from(contract['task'])
-            : <String, dynamic>{};
-        
-        final userToRate = contract['user_to_rate'] is Map
-            ? Map<String, dynamic>.from(contract['user_to_rate'])
-            : <String, dynamic>{};
-        
-        final contractTaskId = _parseToInt(contractTask['id'] ?? contract['task_id']) ?? 0;
-        final contractClientId = _parseToInt(userToRate['id']) ?? 0;
-        
-        if (contractTaskId == parsedTaskId && contractClientId == parsedClientId) {
-          matchingContract = contract;
-          break;
-        }
-      }
-      
-      if (matchingContract == null) {
-        debugPrint("❌ No matching contract found. Available contracts:");
-        for (final contract in _rateableContracts) {
-          final task = contract['task'] is Map
-              ? Map<String, dynamic>.from(contract['task'])
-              : <String, dynamic>{};
-          final user = contract['user_to_rate'] is Map
-              ? Map<String, dynamic>.from(contract['user_to_rate'])
-              : <String, dynamic>{};
-          
-          debugPrint("   Contract ${contract['contract_id']}: Task ${task['id']} - User ${user['id']}");
-        }
-        
-        throw Exception("No eligible contract found for rating. Make sure the contract is completed and paid.");
-      }
-      
-      final contractId = _parseToInt(matchingContract['contract_id']) ?? 0;
-      
-      if (contractId == 0) {
-        throw Exception("Invalid contract ID");
-      }
-      
-      debugPrint("✅ Found matching contract $contractId");
-      
-      // Use new submitRating method
-      await submitRating(
-        userId: userId,
-        contractId: contractId,
-        taskId: parsedTaskId,
-        ratedUserId: parsedClientId,
-        score: parsedScore,
-        review: review,
-      );
-      
-    } catch (e) {
-      _error = "Failed to submit rating: ${e.toString()}";
-      rethrow;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
+    // 1. DATA MINING: Find the real Target ID
+    int contractId = 0;
+    int targetUserId = 0;
 
-  // ============ UTILITY METHODS ============
+    for (var contract in _rateableContracts) {
+      final cMap = Map<String, dynamic>.from(contract as Map);
+      final taskData = cMap['task'] is Map ? Map<String, dynamic>.from(cMap['task']) : {};
+      final int foundTaskId = _parseToInt(taskData['id'] ?? cMap['task_id']) ?? 0;
+
+      if (foundTaskId == pTaskId) {
+        contractId = _parseToInt(cMap['contract_id']) ?? 0;
+        final clientData = cMap['client'] ?? {};
+        
+        // Try every possible ID key in your JSON structure
+        targetUserId = _parseToInt(clientData['user_id'] ?? 
+                                  clientData['user_account_id'] ?? 
+                                  clientData['id']) ?? 0;
+        break;
+      }
+    }
+
+    // 2. FALLBACK: Use the clientId passed from the screen if loop fails
+    if (targetUserId == 0) {
+      targetUserId = _parseToInt(clientId) ?? 0;
+    }
+
+    // 3. THE "STOP" LOGIC: Never send 0, never send 'Me'
+    if (targetUserId == 0) throw Exception("Error: Target ID is 0. Data source is missing the Client ID.");
+    if (targetUserId == userId) throw Exception("Error: Target ID matches your ID ($userId). Cannot rate yourself.");
+
+    debugPrint("🚀 SUBMITTING TO DJANGO: Rater: $userId -> Target: $targetUserId");
+
+    // 4. API CALL
+    final result = await ApiService.createRating(
+      taskId: pTaskId,
+      ratedUserId: targetUserId, // This MUST be the Employer ID
+      contractId: contractId,
+      score: pScore,
+      review: review,
+    );
+
+    if (result['success'] == true) {
+      await Future.wait([fetchMyRatings(userId), fetchRateableContracts(userId)]);
+    } else {
+      throw Exception(result['message'] ?? 'Server error');
+    }
+  } catch (e) {
+    _error = e.toString();
+    debugPrint("❌ Rating Failure: $e");
+    rethrow;
+  } finally {
+    _isLoading = false;
+    notifyListeners();
+  }
+}
+// Get combined list of ratings given AND rateable contracts
+List<Map<String, dynamic>> getCombinedGivenRatings() {
+  try {
+    // Get actual ratings given
+    final List<Map<String, dynamic>> givenRatings = getRatingsGiven();
+    
+    // If there are actual ratings, return them
+    if (givenRatings.isNotEmpty) {
+      debugPrint("✅ Found ${givenRatings.length} actual ratings given");
+      return givenRatings;
+    }
+    
+    // If no ratings given, return rateable contracts as "to-rate" items
+    debugPrint("📊 No ratings given yet, showing ${_rateableContracts.length} rateable contracts");
+    
+    return _rateableContracts.map<Map<String, dynamic>>((contract) {
+      final Map<String, dynamic> cMap = Map<String, dynamic>.from(contract as Map);
+      final Map<String, dynamic> taskData = cMap['task'] is Map 
+          ? Map<String, dynamic>.from(cMap['task']) 
+          : {};
+      final Map<String, dynamic> clientData = cMap['client'] is Map 
+          ? Map<String, dynamic>.from(cMap['client']) 
+          : {};
+      
+      // Inside getCombinedGivenRatings, update the return map:
+// Inside getCombinedGivenRatings return map:
+return {
+  'is_rateable_contract': true,
+  'contract_id': cMap['contract_id'],
+  'task_id': taskData['id'],
+  'task_title': taskData['title'] ?? 'Untitled Task',
+  'client_name': clientData['name'] ?? 'Client',
+  
+  // 🔥 THE FIX: Prioritize the account ID that Django expects
+  'client_id': clientData['user_id'] ?? clientData['user'] ?? clientData['id'],
+  
+  'display_name': clientData['name'] ?? 'Client',
+  'display_title': taskData['title'] ?? 'Untitled Task',
+  'display_score': 0.0,
+  'display_review': 'Tap to rate this client',
+  'is_not_rated_yet': true,
+};
+    }).toList();
+  } catch (e) {
+    debugPrint(" Error in getCombinedGivenRatings: $e");
+    return [];
+  }
+}
+
+  // ============ UTILITIES ============
 
   int? _parseToInt(dynamic value) {
-    if (value == null) return null;
     if (value is int) return value;
     if (value is String) return int.tryParse(value);
     if (value is num) return value.toInt();
     return null;
   }
 
-  // ============ PUBLIC METHODS ============
-
-  List<dynamic> getRatingsReceived() {
-    return _myRatings.where((rating) {
-      try {
-        final ratedUserId = _parseToInt(rating['rated_user']);
-        final raterUserId = _parseToInt(rating['rater']);
-        return ratedUserId != raterUserId;
-      } catch (e) {
-        return false;
-      }
-    }).toList();
-  }
-
-  List<dynamic> getClientRatingsGiven() {
-    return _myRatings.where((rating) {
-      try {
-        final ratedUserId = _parseToInt(rating['rated_user']);
-        final raterUserId = _parseToInt(rating['rater']);
-        final ratingType = rating['rating_type']?.toString() ?? '';
-        
-        return ratedUserId != raterUserId && 
-               (ratingType.contains('freelancer_to_employer') || 
-                ratingType.contains('freelancer_to_client'));
-      } catch (e) {
-        return false;
-      }
-    }).toList();
-  }
-
-  List<dynamic> getEmployerRatingsGiven() {
-    return _myRatings.where((rating) {
-      try {
-        final ratedUserId = _parseToInt(rating['rated_user']);
-        final raterUserId = _parseToInt(rating['rater']);
-        final ratingType = rating['rating_type']?.toString() ?? '';
-        
-        return ratedUserId != raterUserId && 
-               (ratingType.contains('employer_to_freelancer'));
-      } catch (e) {
-        return false;
-      }
-    }).toList();
-  }
-
-  double getAverageRating(List<dynamic> ratings) {
-    if (ratings.isEmpty) return 0.0;
-    
-    int totalScore = 0;
-    int validRatings = 0;
-    
-    for (final rating in ratings) {
-      final scoreInt = _parseToInt(rating['score']);
-      
-      if (scoreInt != null && scoreInt >= 1 && scoreInt <= 5) {
-        totalScore += scoreInt;
-        validRatings++;
-      }
-    }
-    
-    return validRatings > 0 ? totalScore / validRatings : 0.0;
-  }
-
-  Map<int, int> getRatingStats(List<dynamic> ratings) {
-    final stats = <int, int>{1: 0, 2: 0, 3: 0, 4: 0, 5: 0};
-
-    for (final rating in ratings) {
-      final scoreInt = _parseToInt(rating['score']);
-
-      if (scoreInt != null && scoreInt >= 1 && scoreInt <= 5) {
-        stats[scoreInt] = stats[scoreInt]! + 1;
-      }
-    }
-
-    return stats;
-  }
-
-  void clearError() {
-    _error = null;
-    notifyListeners();
-  }
 
   void clear() {
     _myRatings = [];
     _rateableContracts = [];
+    _error = null;
+    notifyListeners();
+  }
+
+  void clearError() {
     _error = null;
     notifyListeners();
   }

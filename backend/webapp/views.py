@@ -1524,14 +1524,13 @@ def get_assigned_tasks(request):
         'tasks': tasks_data
     })        
 
-
 @api_view(['POST'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def create_employer_rating(request):
     """
     Handles rating from Employer to Freelancer.
-    Differentiates Onsite/Remote based on Task model or Extended Data.
+    Prevents duplicates, updates contract status, and packages extended data.
     """
     try:
         employer = request.user
@@ -1541,36 +1540,45 @@ def create_employer_rating(request):
         freelancer_id = data.get('rated_user')
         score = data.get('score')
         review = data.get('review', '')
-        # This matches the jsonEncode from your Flutter ApiService
         extended_data_raw = data.get('extended_data') 
 
-        # 1. Validation
+        # 1. Basic Validation
         if not all([task_id, freelancer_id, score]):
-            return Response({"success": False, "error": "Missing required fields"}, status=400)
+            return Response({"success": False, "error": "Missing required fields: task, rated_user, and score are required."}, status=400)
 
         # 2. Fetch Models
         try:
             task = Task.objects.get(task_id=task_id, employer=employer)
             freelancer = User.objects.get(user_id=freelancer_id)
         except (Task.DoesNotExist, User.DoesNotExist):
-            return Response({"success": False, "error": "Task or User not found"}, status=404)
+            return Response({"success": False, "error": "Task or Freelancer not found under your account."}, status=404)
 
-        # 3. Work Type Differentiation Logic
-        work_type = getattr(task, 'work_type', 'unknown') # onsite vs remote
-        print(f"Rating a {work_type} task for {freelancer.name}")
+        # 3. Check for Existing Rating (Prevents the IntegrityError/Duplicate Crash)
+        existing_rating = Rating.objects.filter(
+            task=task,
+            rater_employer=employer,
+            rated_user=freelancer
+        ).exists()
 
-        # 4. Process Extended Data
-        # If your Rating model doesn't have a JSONField for extended_data, 
-        # we append it to the review text so information isn't lost.
+        if existing_rating:
+            return Response({
+                "success": False, 
+                "error": "You have already submitted a rating for this task."
+            }, status=400)
+
+        # 4. Process Extended Data for the Serializer
+        # We wrap the JSON in a special tag so the Freelancer's RatingSerializer can unpack it
         if extended_data_raw:
-            review += f"\n\n[System Data]: {extended_data_raw}"
+            review_with_data = f"{review} __EXTENDED_DATA__:{json.dumps(extended_data_raw)}"
+        else:
+            review_with_data = review
 
-        # 5. Check Active Contract
+        # 5. Verify Contract exists
         contract = Contract.objects.filter(task=task, freelancer=freelancer, is_active=True).first()
         if not contract:
-            return Response({"success": False, "error": "No active contract found"}, status=400)
+            return Response({"success": False, "error": "No active contract found for this task/freelancer."}, status=400)
 
-        # 6. Create Rating
+        # 6. Create Rating Record
         submission = Submission.objects.filter(task=task, freelancer=freelancer).first()
         rating = Rating.objects.create(
             task=task,
@@ -1579,68 +1587,178 @@ def create_employer_rating(request):
             rater_employer=employer,
             rated_user=freelancer,
             score=int(score),
-            review=review,
+            review=review_with_data,
         )
 
         # 7. Finalize Project Chain Reaction
+        # Update Task
         task.status = 'completed'
         task.save()
 
+        # Update Submission (if exists)
         if submission:
             submission.status = 'accepted'
             submission.save()
 
+        # Update Contract
         contract.status = 'completed'
         contract.is_completed = True
         contract.completed_date = timezone.now()
         contract.save()
 
+        # 8. Success Response
         return Response({
             "success": True,
-            "message": f"Successfully rated {work_type} task",
-            "rating_id": rating,
+            "message": "Rating submitted successfully and project finalized.",
+            "rating_id": rating.rating_id, # Integer only to avoid Serialization error
         }, status=201)
 
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return Response({"success": False, "error": str(e)}, status=500)
+        return Response({"success": False, "error": f"Internal Server Error: {str(e)}"}, status=500)
 @api_view(['GET'])
-@authentication_classes([CustomTokenAuthentication])
+@authentication_classes([CustomTokenAuthentication]) # Ensure this matches your Auth setup
 @permission_classes([IsAuthenticated])
 def get_user_ratings(request):
     try:
-        # Get user_id from query parameter
         user_id = request.GET.get('user_id')
         
         if not user_id:
-            # If no user_id provided, return current user's ratings
             ratings = Rating.objects.filter(rated_user=request.user).order_by('-created_at')
         else:
-            # Get ratings for specific user
             ratings = Rating.objects.filter(rated_user_id=user_id).order_by('-created_at')
         
         serializer = RatingSerializer(ratings, many=True)
+        
+        # DEBUG: Print the data to terminal so we see why 'rater_name' is missing/wrong
+        import json
+        print("--- SENDING RATINGS DATA TO FLUTTER ---")
+        print(json.dumps(serializer.data, indent=2))
+        print("---------------------------------------")
+        
         return Response(serializer.data)
     
     except Exception as e:
-        return Response(
-            {"error": str(e)}, 
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        import traceback
+        traceback.print_exc() # Print full error to terminal
+        return Response({"error": str(e)}, status=500)
+
+@api_view(['POST'])    
+@authentication_classes([CustomTokenAuthentication])
+@permission_classes([IsAuthenticated])
+def create_freelancer_rating(request):
+    """
+    Handles rating from Freelancer to Employer (Client).
+    """
+    try:
+        freelancer_user = request.user
+        data = request.data
+        
+        task_id = data.get('task')
+        employer_user_id = data.get('rated_user')
+        score = data.get('score')
+        review = data.get('review', '')
+        
+        print(f"🔍 DEBUG create_freelancer_rating:")
+        print(f"   Freelancer: {freelancer_user.user_id} - {freelancer_user.email}")
+        print(f"   Task ID: {task_id}")
+        print(f"   Employer User ID: {employer_user_id}")
+        print(f"   Score: {score}")
+
+        # 1. Validation
+        if not all([task_id, employer_user_id, score]):
+            return Response({
+                "success": False, 
+                "error": "Missing task, rated_user, or score."
+            }, status=400)
+
+        # 2. Get task and contract
+        try:
+            task = Task.objects.get(task_id=task_id)
+            contract = Contract.objects.get(task=task, freelancer=freelancer_user)
+        except (Task.DoesNotExist, Contract.DoesNotExist):
+            return Response({
+                "success": False, 
+                "error": "Task or contract not found."
+            }, status=404)
+
+        # 3. Get employer user - FIXED: Don't check if they're an employer here
+        # Just get the user they want to rate
+        try:
+            employer_user = User.objects.get(user_id=employer_user_id)
+            print(f"   Found rated user: {employer_user.email}")
+        except User.DoesNotExist:
+            return Response({
+                "success": False, 
+                "error": "User to rate not found."
+            }, status=404)
+
+        # 4. Prevent duplicates
+        if Rating.objects.filter(
+            task=task, 
+            rater=freelancer_user, 
+            rated_user=employer_user
+        ).exists():
+            return Response({
+                "success": False, 
+                "error": "You have already rated this user for this task."
+            }, status=400)
+
+        # 5. Create rating - SIMPLIFIED VERSION
+        print(f"🔍 Creating rating...")
+        rating = Rating(
+            task=task,
+            contract=contract,
+            rater=freelancer_user,
+            rated_user=employer_user,  # This is the key field!
+            score=int(score),
+            review=review,
+            rating_type='freelancer_to_employer',  # Explicitly set
+            rater_employer=None  # Ensure this is None for freelancer ratings
         )
+        
+        # Save with debug
+        print(f"   Before save - rater: {rating.rater_id}, rated_user: {rating.rated_user_id}")
+        rating.save()
+        print(f"   After save - rater: {rating.rater_id}, rated_user: {rating.rated_user_id}")
+        
+        # Refresh to make sure
+        rating.refresh_from_db()
+        
+        # PRINT FOR DEBUGGING
+        print(f"✅ Rating created:")
+        print(f"   ID: {rating.rating_id}")
+        print(f"   Type: {rating.rating_type}")
+        print(f"   Rater: {rating.rater_id} - {rating.rater.email}")
+        print(f"   Rated User: {rating.rated_user_id} - {rating.rated_user.email}")
+        print(f"   Task: {rating.task_id}")
+
+        return Response({
+            "success": True,
+            "message": "Rating submitted successfully!",
+            "rating_id": rating.rating_id,
+            "rating_type": rating.rating_type,
+            "rater": rating.rater_id,
+            "rated_user": rating.rated_user_id,
+            "task": rating.task_id
+        }, status=201)
+
+    except Exception as e:
+        print(f"❌ Error in create_freelancer_rating: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return Response({"success": False, "error": str(e)}, status=500)
 from django.db.models import Q, Exists, OuterRef
 @api_view(['GET'])
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def get_rateable_contracts(request):
-   
     try:
-        # 'user' here is an instance of your 'User' model (Micah)
         user = request.user
         print(f"DEBUG: Freelancer {user.name} (ID: {user.user_id}) is fetching rateable contracts")
 
-        # We filter the Contract table where 'freelancer' matches the logged-in User
-        # We use select_related to get the Task and Employer (Client) data in one go
+        # Get all contracts where freelancer matches the logged-in User
         contracts = Contract.objects.filter(
             freelancer=user,
             is_active=True,
@@ -1652,8 +1770,18 @@ def get_rateable_contracts(request):
         rateable_list = []
         for contract in contracts:
             try:
-                # The person Micah needs to rate is the Employer linked to this contract
                 client = contract.employer 
+                
+                # ===== IMPROVED CHECK: Look for ANY rating from this freelancer for this task =====
+                already_rated = Rating.objects.filter(
+                    task=contract.task,
+                    rater=user  # The freelancer
+                ).exists()
+                
+                if already_rated:
+                    print(f"DEBUG: Contract {contract.contract_id} (Task: {contract.task.title}) already rated by {user.name}")
+                    continue  # Skip this contract - already rated
+                # ===== END FIX =====
                 
                 rateable_list.append({
                     'contract_id': contract.contract_id,
@@ -1664,7 +1792,7 @@ def get_rateable_contracts(request):
                     },
                     'client': {
                         'id': client.employer_id,
-                        'name': client.username,  # The Client's name
+                        'name': client.username,
                         'email': client.contact_email,
                     },
                     'status': contract.status,
@@ -1674,10 +1802,12 @@ def get_rateable_contracts(request):
                 print(f"DEBUG: Skipping contract {contract.contract_id} due to: {inner_e}")
                 continue
 
+        print(f"DEBUG: Returning {len(rateable_list)} rateable contracts (excluding already rated ones)")
+        
         return Response({
             'success': True,
             'count': len(rateable_list),
-            'tasks': rateable_list # Flutter expects this list
+            'tasks': rateable_list
         }, status=status.HTTP_200_OK)
 
     except Exception as e:
@@ -3489,7 +3619,7 @@ def generate_verification_code(request, contract_id=None):
             'status': True,
             'success': True,
             'message': 'Verification code generated',
-            'verification_code': code, # This goes to Peter's Flutter screen
+            'verification_code': code, 
             'contract_id': final_contract_id,
         }, status=status.HTTP_200_OK)
         
@@ -5006,49 +5136,102 @@ def pending_payment_orders(request):
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def verify_otp(request, contract_id):
+    """
+    Verifies the OTP provided by the freelancer to complete an on-site task.
+    Once verified, it marks work as complete and moves funds to the freelancer's wallet.
+    """
     contract = get_object_or_404(Contract, contract_id=contract_id)
+    
+    # Standardize both codes for a clean comparison
     entered_otp = str(request.data.get('otp_code', '')).strip()
     stored_otp = str(contract.verification_otp).strip()
 
-    if entered_otp == stored_otp and entered_otp != "":
-        # Use an atomic transaction to ensure everything saves at once
-        with django_transaction.atomic():
-            # 1. Mark Contract & Task as Finished
-            contract.status = 'completed'
-            contract.is_paid = True
-            contract.is_completed = True
-            contract.save()
+    # Basic validation
+    if not entered_otp:
+        return Response({"status": "error", "message": "Please enter a verification code."}, status=400)
+
+    if entered_otp == stored_otp:
+        try:
+            # Use an atomic transaction to ensure database integrity
+            with django_transaction.atomic():
+                # 1. Update Contract & Task Status
+                contract.status = 'completed'
+                contract.is_paid = True
+                contract.is_completed = True
+                contract.save()
+                
+                task = contract.task
+                task.status = 'completed'
+                task.save()
+
+                # 2. Get the Freelancer Profile (Crucial fix for your ValueError)
+                # contract.freelancer is a User, Transaction needs the Freelancer profile
+                try:
+                    freelancer_profile = Freelancer.objects.get(user=contract.freelancer)
+                except Freelancer.DoesNotExist:
+                    return Response({
+                        "status": "error", 
+                        "message": "Critical Error: Freelancer profile not found."
+                    }, status=404)
+
+                # 3. Calculate Financials
+                total_budget = Decimal(str(task.budget))
+                # 90% goes to worker, 10% is platform revenue
+                freelancer_share = total_budget * Decimal('0.90')
+                platform_fee = total_budget * Decimal('0.10')
+
+                # 4. Create the Transaction Record
+                Transaction.objects.create(
+                    # Relationships
+                    freelancer=freelancer_profile,
+                    task=task,
+                    contract=contract,
+                    client=contract.task.employer.user if hasattr(contract.task.employer, 'user') else None,
+                    
+                    # Transaction Details
+                    transaction_type='payment',
+                    status='completed',
+                    
+                    
+                    amount=total_budget,
+                    freelancer_share=freelancer_share,
+                    platform_fee=platform_fee,
+                    
+                    # Mapping the correct field name (notes instead of description)
+                    notes=f"Earnings for task: {task.title}",
+                    
+                    # External Reference
+                    paystack_reference=f"REL-{contract.contract_id}-{timezone.now().timestamp()}", 
+                    
+                    metadata={
+                        'contract_id': str(contract.contract_id),
+                        'task_id': str(task),
+                        'verification_method': 'otp_handshake'
+                    }
+                )
+                
+                # Optional: Update the Freelancer's running balance if you have a balance field
+                # freelancer_profile.balance += freelancer_share
+                # freelancer_profile.save()
+
+            return Response({
+                "status": "success", 
+                "message": "Verification successful! Funds have been released to your wallet."
+            }, status=200)
+
+        except Exception as e:
+            # Log the error for debugging
+            print(f"Error during OTP verification: {str(e)}")
+            return Response({
+                "status": "error", 
+                "message": "An internal error occurred while processing payment."
+            }, status=500)
             
-            task = contract.task
-            task.status = 'completed'
-            task.save()
-
-            # 2. CREATE THE WALLET RECORD (This fills the empty table)
-            total_budget = Decimal(str(task.budget))
-            # Example: 90% to Freelancer, 10% Platform Fee
-            freelancer_share = total_budget * Decimal('0.90')
-            platform_fee = total_budget * Decimal('0.10')
-
-            Transaction.objects.create(
-                freelancer=contract.freelancer,  
-                transaction_type='payment',       
-                amount=total_budget,
-                freelancer_share=freelancer_share,
-                platform_fee=platform_fee,
-                status='completed',               
-                description=f"Earnings for task: {task.title}",
-                paystack_reference=f"REL-{contract.contract_id}", 
-                metadata={
-                    'contract_id': str(contract.contract_id),
-                    'task_title': task.title
-                }
-            )
-            
-            print(f" Transaction created for {contract.freelancer.name}. Amount: {freelancer_share}")
-
-        return Response({"status": "success", "message": "Verified! Money added to wallet."}, status=200)
     else:
-        return Response({"status": "error", "message": "Invalid code."}, status=400)
+        return Response({
+            "status": "error", 
+            "message": "Invalid verification code. Please check with the client."
+        }, status=400)
 @api_view(['GET'])
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])

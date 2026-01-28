@@ -11,8 +11,11 @@ class Contract {
   final bool isActive;
   final bool isFullyAccepted;
   final String status;
-  final bool isPaid;      
-  final bool isCompleted; 
+  final bool isPaid;
+  final bool isCompleted;
+  
+  // NEW: Holds the rating details from the employer
+  final Map<String, dynamic>? employerRating;
 
   Contract({
     required this.contractId,
@@ -27,6 +30,7 @@ class Contract {
     required this.status,
     required this.isPaid,
     required this.isCompleted,
+    this.employerRating,
   });
 
   factory Contract.fromJson(Map<String, dynamic> json) {
@@ -58,6 +62,8 @@ class Contract {
       status: (json['status']?.toString() ?? 'pending').toLowerCase().trim(),
       isPaid: (json['is_paid'] ?? taskData['is_paid'] ?? false) == true,
       isCompleted: (json['is_completed'] ?? false) == true,
+      // CAPTURE THE RATING OBJECT FROM DJANGO
+      employerRating: json['employer_rating'],
     );
   }
 
@@ -67,35 +73,58 @@ class Contract {
     final type = (task['service_type'] ?? '').toString().toLowerCase();
     return type.contains('on_site') || type.contains('onsite');
   }
+
+  bool get isRemote => !isOnSite;
+
+  // IMPROVED: Check both the boolean and the string status
+  bool get isFinished => isCompleted || status == 'completed';
   
-  bool get canAccept => isPaid && !freelancerAccepted && !isCompleted;
+  bool get canAccept => isPaid && !freelancerAccepted && !isFinished;
 
   bool get isAccepted => freelancerAccepted;
 
   bool get isAwaitingPayment => isAccepted && !isPaid;
 
-  // REMOVED !isCompleted so Micah can still enter OTP after Client marks completed
-  bool get needsOtpVerification => isOnSite && isAccepted && isPaid && status != 'paid';
+  // OTP is needed if it's on-site, paid, but the handshake hasn't happened yet
+  bool get needsOtpVerification => isOnSite && isAccepted && isPaid && !isFinished;
 
-  bool get needsWorkSubmission => !isOnSite && isAccepted && isPaid && !isCompleted;
+  bool get needsWorkSubmission => isRemote && isAccepted && isPaid && !isFinished;
 
-  bool get isPaidAndCompleted => isPaid && isCompleted && status == 'paid';
+  // Matches your Django verification logic
+  bool get isPaidAndCompleted => isPaid && isFinished;
 
-  // FIXED: UI needs this getter
   bool get shouldShowInList {
     if (status == 'rejected' || status == 'cancelled') return false;
     return true;
   }
 
+  // --- RATING HELPERS ---
+
+  bool get hasRatingFromEmployer => employerRating != null;
+
+  double get ratingScore => (employerRating?['score'] ?? 0).toDouble();
+
+  String get ratingReview => employerRating?['review'] ?? '';
+
+  // This accesses the 'details' field created by your RatingSerializer.get_details
+  Map<String, dynamic> get ratingDetails => employerRating?['details'] ?? {};
+
+  int get punctualityScore => ratingDetails['punctuality'] ?? 0;
+  
+  int get qualityScore => ratingDetails['technical_quality'] ?? ratingDetails['quality'] ?? 0;
+
   // --- UI FORMATTING ---
 
   String get taskTitle => task['title']?.toString() ?? 'Untitled Task';
   
+  int get taskId => task['id'] ?? task['task_id'] ?? 0;
+  
+  int get employerId => employer['id'] ?? 0;
+
   String get employerName {
     return employer['name'] ?? employer['username'] ?? employer['company_name'] ?? 'Client';
   }
   
-  // FIXED: Restored 'budget' getter for your UI
   double get budget {
     final val = task['budget'] ?? task['amount'] ?? 0.0;
     if (val is num) return val.toDouble();
@@ -104,12 +133,11 @@ class Contract {
   }
 
   String get displayStatus {
-    // Prioritize OTP input so it doesn't disappear
-    if (needsOtpVerification) return 'Action Required: Enter OTP';
-    if (isPaidAndCompleted) return 'Completed & Paid';
-    if (canAccept) return 'Action Required: Accept Offer';
-    if (needsWorkSubmission) return 'Work in Progress';
-    if (isAwaitingPayment) return 'Waiting for Escrow Deposit';
+    if (isFinished) return 'COMPLETED';
+    if (needsOtpVerification) return 'ACTION REQUIRED: ENTER OTP';
+    if (canAccept) return 'ACTION REQUIRED: ACCEPT OFFER';
+    if (needsWorkSubmission) return 'WORK IN PROGRESS';
+    if (isAwaitingPayment) return 'WAITING FOR ESCROW';
     
     return status.replaceAll('_', ' ').toUpperCase();
   }
