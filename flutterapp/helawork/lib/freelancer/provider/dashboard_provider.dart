@@ -339,4 +339,8 @@ class DashboardProvider with ChangeNotifier {
   
   int get inProgress => ongoingTasks;
   int get completed => completedTasks;
+
+  get activeContracts => null;
+
+  get pendingTasks => null;
 }

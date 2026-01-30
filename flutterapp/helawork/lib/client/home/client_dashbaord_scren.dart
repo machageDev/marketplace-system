@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:helawork/api_service.dart';
 import 'package:helawork/client/home/client_contract_screen.dart';
-import 'package:helawork/client/home/client_submittedtask.dart';
+import 'package:helawork/client/home/client_submittedtask.dart'; // Make sure this import exists
 import 'package:helawork/client/provider/auth_provider.dart' as client_auth;
 import 'package:helawork/client/provider/client_proposal_provider.dart' as client_proposal;
 import 'package:helawork/client/provider/client_submission_provider.dart';
@@ -33,7 +33,7 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
       const DashboardTab(),
       const TasksScreen(),
       const ClientProposalsScreen(),  
-      _buildPaymentPlaceholder(), // Keep this as placeholder
+      _buildPaymentPlaceholder(),
       const ClientRatingScreen(), 
     ];
 
@@ -63,7 +63,6 @@ class _ClientDashboardScreenState extends State<ClientDashboardScreen> {
           const SizedBox(height: 20),
           ElevatedButton.icon(
             onPressed: () {
-              // Navigate to Contracts screen for payments
               final contractProvider = Provider.of<client_contract.ClientContractProvider>(context, listen: false);
               contractProvider.fetchEmployerContracts();
               Navigator.push(
@@ -223,10 +222,18 @@ class DashboardContent extends StatelessWidget {
         children: [
           _buildWelcomeCard(context),
           const SizedBox(height: 20),
-          _buildStatsGrid(context),
-          const SizedBox(height: 24),
-          // Updated Contracts & Submissions Section
-          _buildContractsAndSubmissionsSection(context),
+          
+          // QUICK ACTIONS SECTION - WITH NUMBERS
+          const Text(
+            'Quick Actions',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.blueAccent,
+            ),
+          ),
+          const SizedBox(height: 10),
+          _buildQuickActionsWithNumbers(context),
         ],
       ),
     );
@@ -288,112 +295,67 @@ class DashboardContent extends StatelessWidget {
     );
   }
 
-  Widget _buildStatsGrid(BuildContext context) {
-    return Column(
+  Widget _buildQuickActionsWithNumbers(BuildContext context) {
+    // Use 3 columns instead of 2 for better spacing
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 3, // Changed from 2 to 3
+      crossAxisSpacing: 8,
+      mainAxisSpacing: 8,
+      childAspectRatio: 0.9, // Square-ish cards
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const TasksScreen(),
-                    ),
-                  );
-                },
-                child: StatCard(
-                  title: 'Total Tasks',
-                  value: provider.totalTasks.toString(),
-                  color1: Colors.blue,
-                  color2: Colors.lightBlueAccent,
-                  icon: Icons.work_outline,
-                ),
+        // TASKS CARD
+        _buildMinimalActionCard(
+          title: 'Tasks',
+          number: provider.totalTasks.toString(),
+          icon: Icons.work_outline,
+          color: Colors.blueAccent,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const TasksScreen(),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: GestureDetector(
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Showing ${provider.ongoingTasks} active jobs')),
-                  );
-                },
-                child: StatCard(
-                  title: 'Active Jobs',
-                  value: provider.ongoingTasks.toString(),
-                  color1: Colors.teal,
-                  color2: Colors.tealAccent,
-                  icon: Icons.play_circle_fill,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: GestureDetector(
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Showing ${provider.completedTasks} completed tasks')),
-                  );
-                },
-                child: StatCard(
-                  title: 'Completed',
-                  value: provider.completedTasks.toString(),
-                  color1: Colors.green,
-                  color2: Colors.lightGreen,
-                  icon: Icons.check_circle_outline,
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const ClientProposalsScreen(),
-                    ),
-                  );
-                },
-                child: StatCard(
-                  title: 'Proposals',
-                  value: provider.pendingProposals.toString(),
-                  color1: Colors.orange,
-                  color2: Colors.deepOrangeAccent,
-                  icon: Icons.list_alt_outlined,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildContractsAndSubmissionsSection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(
-          padding: EdgeInsets.only(left: 8, bottom: 12),
-          child: Text(
-            'Contracts & Submissions',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.blueAccent,
-            ),
-          ),
+            );
+          },
         ),
         
-        // View All Contracts Card
-        GestureDetector(
+        // PROPOSALS CARD
+        _buildMinimalActionCard(
+          title: 'Proposals',
+          number: provider.pendingProposals.toString(),
+          icon: Icons.message_outlined,
+          color: Colors.orange,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const ClientProposalsScreen(),
+              ),
+            );
+          },
+        ),
+        
+        // ACTIVE JOBS CARD
+        _buildMinimalActionCard(
+          title: 'Active',
+          number: provider.ongoingTasks.toString(),
+          icon: Icons.play_circle_fill,
+          color: Colors.teal,
+          onTap: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Showing ${provider.ongoingTasks} active jobs')),
+            );
+          },
+        ),
+        
+        // CONTRACTS CARD
+        _buildMinimalActionCard(
+          title: 'Contracts',
+          number: 'View',
+          icon: Icons.assignment_outlined,
+          color: Colors.green,
           onTap: () {
             final contractProvider = Provider.of<client_contract.ClientContractProvider>(context, listen: false);
             contractProvider.fetchEmployerContracts();
@@ -404,63 +366,27 @@ class DashboardContent extends StatelessWidget {
               ),
             );
           },
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.blue[100]!),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.blue[50],
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.assignment_outlined, color: Colors.blueAccent),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'View All Contracts',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.blueAccent,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Manage your service agreements and payments',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.blueAccent),
-              ],
-            ),
-          ),
         ),
         
-        // Review Submitted Tasks Card
-        GestureDetector(
+        // COMPLETED CARD
+        _buildMinimalActionCard(
+          title: 'Completed',
+          number: provider.completedTasks.toString(),
+          icon: Icons.check_circle_outline,
+          color: Colors.purple,
+          onTap: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Showing ${provider.completedTasks} completed tasks')),
+            );
+          },
+        ),
+        
+        // SUBMISSIONS CARD
+        _buildMinimalActionCard(
+          title: 'Review',
+          number: 'Work',
+          icon: Icons.task_outlined,
+          color: Colors.red,
           onTap: () {
             Navigator.push(
               context,
@@ -472,106 +398,66 @@ class DashboardContent extends StatelessWidget {
               ),
             );
           },
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.blue[100]!),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE8F5E9),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.task_outlined, color: Colors.green),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Review Submitted Tasks',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.green,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Approve work or request revisions',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.green),
-              ],
-            ),
-          ),
         ),
       ],
     );
   }
-}
 
-class StatCard extends StatelessWidget {
-  final String title;
-  final String value;
-  final Color color1;
-  final Color color2;
-  final IconData icon;
-
-  const StatCard({
-    super.key,
-    required this.title,
-    required this.value,
-    required this.color1,
-    required this.color2,
-    required this.icon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(colors: [color1, color2]),
-          borderRadius: BorderRadius.circular(16),
+  Widget _buildMinimalActionCard({
+    required String title,
+    required String number,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
         ),
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: Colors.white),
-            const SizedBox(height: 8),
-            Text(value,
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          padding: const EdgeInsets.all(6), // Minimal padding
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Icon at the top
+              Icon(icon, color: color, size: 20),
+              const SizedBox(height: 4),
+              // Number in center
+              Text(
+                number,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                  height: 1.0,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              // Title at bottom
+              Text(
+                title,
                 style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white)),
-            Text(title, style: const TextStyle(color: Colors.white70)),
-          ],
+                  fontWeight: FontWeight.w500,
+                  color: Colors.black87,
+                  fontSize: 9,
+                  height: 1.0,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
         ),
       ),
     );
