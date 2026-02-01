@@ -1528,12 +1528,9 @@ def get_assigned_tasks(request):
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def create_employer_rating(request):
-    """
-    Handles rating from Employer to Freelancer.
-    Prevents duplicates, updates contract status, and packages extended data.
-    """
     try:
-        employer = request.user
+        # request.user is the Account, we need the Employer Profile
+        user_account = request.user 
         data = request.data
         
         task_id = data.get('task')
@@ -1542,81 +1539,64 @@ def create_employer_rating(request):
         review = data.get('review', '')
         extended_data_raw = data.get('extended_data') 
 
-        # 1. Basic Validation
+        # 1. Validation
         if not all([task_id, freelancer_id, score]):
-            return Response({"success": False, "error": "Missing required fields: task, rated_user, and score are required."}, status=400)
+            return Response({"success": False, "error": "Missing required fields."}, status=400)
 
         # 2. Fetch Models
+        # We need the Employer PROFILE instance for the rater_employer field
         try:
-            task = Task.objects.get(task_id=task_id, employer=employer)
+            employer_profile = Employer.objects.get(contact_email=user_account.email)
+            task = Task.objects.get(task_id=task_id, employer=employer_profile)
             freelancer = User.objects.get(user_id=freelancer_id)
-        except (Task.DoesNotExist, User.DoesNotExist):
-            return Response({"success": False, "error": "Task or Freelancer not found under your account."}, status=404)
+        except (Employer.DoesNotExist, Task.DoesNotExist, User.DoesNotExist):
+            return Response({"success": False, "error": "Required records not found."}, status=404)
 
-        # 3. Check for Existing Rating (Prevents the IntegrityError/Duplicate Crash)
-        existing_rating = Rating.objects.filter(
-            task=task,
-            rater_employer=employer,
-            rated_user=freelancer
-        ).exists()
+        # 3. Prevent Duplicates
+        if Rating.objects.filter(task=task, rater_employer=employer_profile).exists():
+            return Response({"success": False, "error": "Rating already submitted."}, status=400)
 
-        if existing_rating:
-            return Response({
-                "success": False, 
-                "error": "You have already submitted a rating for this task."
-            }, status=400)
-
-        # 4. Process Extended Data for the Serializer
-        # We wrap the JSON in a special tag so the Freelancer's RatingSerializer can unpack it
+        # 4. Process Extended Data
+        review_with_data = review
         if extended_data_raw:
             review_with_data = f"{review} __EXTENDED_DATA__:{json.dumps(extended_data_raw)}"
-        else:
-            review_with_data = review
 
-        # 5. Verify Contract exists
+        # 5. Get Contract & Submission
         contract = Contract.objects.filter(task=task, freelancer=freelancer, is_active=True).first()
-        if not contract:
-            return Response({"success": False, "error": "No active contract found for this task/freelancer."}, status=400)
+        submission = Submission.objects.filter(task=task, freelancer=freelancer).first()
 
         # 6. Create Rating Record
-        submission = Submission.objects.filter(task=task, freelancer=freelancer).first()
         rating = Rating.objects.create(
             task=task,
             contract=contract,
             submission=submission,
-            rater_employer=employer,
+            rater_employer=employer_profile, 
+            rater=user_account,             
             rated_user=freelancer,
             score=int(score),
             review=review_with_data,
         )
 
-        # 7. Finalize Project Chain Reaction
-        # Update Task
+        # 7. Finalize Project
         task.status = 'completed'
         task.save()
 
-        # Update Submission (if exists)
-        if submission:
-            submission.status = 'accepted'
-            submission.save()
+        if contract:
+            contract.status = 'completed'
+            contract.is_completed = True
+            contract.completed_date = timezone.now()
+            contract.save()
 
-        # Update Contract
-        contract.status = 'completed'
-        contract.is_completed = True
-        contract.completed_date = timezone.now()
-        contract.save()
-
-        # 8. Success Response
         return Response({
             "success": True,
-            "message": "Rating submitted successfully and project finalized.",
-            "rating_id": rating.rating_id, # Integer only to avoid Serialization error
+            "message": "Rating submitted successfully.",
+            "rating_id": rating.rating_id,
         }, status=201)
 
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return Response({"success": False, "error": f"Internal Server Error: {str(e)}"}, status=500)
+        return Response({"success": False, "error": f"Server Error: {str(e)}"}, status=500)
 @api_view(['GET'])
 @authentication_classes([CustomTokenAuthentication]) # Ensure this matches your Auth setup
 @permission_classes([IsAuthenticated])

@@ -1,3 +1,4 @@
+
 class ContractModel {
   final int contractId;
   final String? orderId;
@@ -15,6 +16,7 @@ class ContractModel {
   final bool employerAccepted;
   final bool freelancerAccepted;
   final String status;
+  final String rawStatus;
   final String? startDate;
   final String? endDate;
   final String? paymentDate;
@@ -27,9 +29,6 @@ class ContractModel {
   final String employerName;
   final int taskId;
   final String? completionCode;
-
-  // This field is mutable so the Provider can update it locally 
-  // immediately after generation without waiting for a full refresh.
   String? verificationOtp;
 
   ContractModel({
@@ -49,6 +48,7 @@ class ContractModel {
     required this.employerAccepted,
     required this.freelancerAccepted,
     required this.status,
+    this.rawStatus = '',
     this.startDate,
     this.endDate,
     this.paymentDate,
@@ -64,24 +64,42 @@ class ContractModel {
     this.verificationOtp,
   });
 
+  // --- THE MISSING GETTERS ---
+
+  /// Checks if the orderId exists and is properly formatted (e.g., from Paystack)
+  bool get hasValidOrderId => orderId != null && orderId!.isNotEmpty;
+
+  bool get isOnSite => serviceType == 'on_site';
+  bool get isRemote => serviceType == 'remote';
+  
+  String? get verificationOrCompletionCode => 
+      (verificationOtp != null && verificationOtp!.isNotEmpty) 
+          ? verificationOtp 
+          : (completionCode != null && completionCode!.isNotEmpty) 
+              ? completionCode 
+              : verificationCode;
+
+  // ---------------------------
+
   factory ContractModel.fromJson(Map<String, dynamic> json) {
     return ContractModel(
       contractId: json['contract_id'] as int? ?? 0,
-      orderId: json['order_id'] as String?,
-      orderStatus: json['order_status'] as String?,
-      taskTitle: json['task_title'] as String? ?? 'Unknown Task',
+      orderId: json['order_id']?.toString(),
+      orderStatus: json['order_status']?.toString(),
+      taskTitle: json['task_title'] as String? ?? 'Untitled Task',
       taskDescription: json['task_description'] as String? ?? '',
-      taskCategory: json['task_category'] as String? ?? 'other',
-      freelancerName: json['freelancer_name'] as String? ?? 'Unknown',
+      taskCategory: json['task_category'] as String? ?? 'General',
+      freelancerName: json['freelancer_name'] as String? ?? 'Unknown Freelancer',
       freelancerEmail: json['freelancer_email'] as String? ?? '',
       amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
       serviceType: json['service_type'] as String? ?? 'remote',
-      isPaid: (json['is_paid'] as bool?) ?? false,
-      isCompleted: (json['is_completed'] as bool?) ?? false,
-      isActive: (json['is_active'] as bool?) ?? false,
-      employerAccepted: (json['employer_accepted'] as bool?) ?? false,
-      freelancerAccepted: (json['freelancer_accepted'] as bool?) ?? false,
-      status: json['status'] as String? ?? 'Unknown',
+      isPaid: json['is_paid'] as bool? ?? false,
+      isCompleted: json['is_completed'] as bool? ?? false,
+      isActive: json['is_active'] as bool? ?? false,
+      employerAccepted: json['employer_accepted'] as bool? ?? true, 
+      freelancerAccepted: json['freelancer_accepted'] as bool? ?? false,
+      status: json['status'] as String? ?? 'No Status',
+      rawStatus: json['raw_status'] as String? ?? '',
       startDate: json['start_date'] as String?,
       endDate: json['end_date'] as String?,
       paymentDate: json['payment_date'] as String?,
@@ -93,9 +111,8 @@ class ContractModel {
       freelancerId: json['freelancer_id'] as int? ?? 0,
       employerName: json['employer_name'] as String? ?? '',
       taskId: json['task_id'] as int? ?? 0,
-      completionCode: json['completion_code'] as String?,
-      // Maps both potential keys from your Django backend
-      verificationOtp: (json['verification_code'] ?? json['verification_otp'])?.toString(),
+      completionCode: json['completion_code']?.toString(),
+      verificationOtp: (json['completion_code'] ?? json['verification_code'] ?? json['verification_otp'])?.toString(),
     );
   }
 
@@ -117,6 +134,7 @@ class ContractModel {
       'employer_accepted': employerAccepted,
       'freelancer_accepted': freelancerAccepted,
       'status': status,
+      'raw_status': rawStatus,
       'start_date': startDate,
       'end_date': endDate,
       'payment_date': paymentDate,
@@ -132,21 +150,4 @@ class ContractModel {
       'verification_otp': verificationOtp,
     };
   }
-
-  // --- HELPER METHODS ---
-  bool get isOnSite => serviceType == 'on_site';
-  bool get isRemote => serviceType == 'remote';
-  bool get isFullyAccepted => employerAccepted && freelancerAccepted;
-  bool get isRejected => status.toLowerCase() == 'rejected';
-  
-  /// This is the specific getter your ClientContractsScreen is calling.
-  /// It checks the local OTP first, then falls back to backend codes.
-  String? get verificationOrCompletionCode => 
-      (verificationOtp != null && verificationOtp!.isNotEmpty) 
-          ? verificationOtp 
-          : (verificationCode != null && verificationCode!.isNotEmpty) 
-              ? verificationCode 
-              : completionCode;
-
-  bool get hasValidOrderId => orderId != null && orderId!.isNotEmpty && orderId!.contains('-');
 }

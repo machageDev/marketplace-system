@@ -1,7 +1,7 @@
 class AppConfig {
   // Use Render URL for production
-  //static const String baseUrl = 'https://marketplace-system-1.onrender.com';
-  static const String baseUrl = 'http://192.168.100.188:8000';
+  static const String baseUrl = 'https://marketplace-system-1.onrender.com';
+  //static const String baseUrl = 'http://192.168.100.188:8000';
   // Local development URL (commented out)
  // static const String baseUrl = 'https://marketplace-system-1.onrender.com';
   
@@ -9,8 +9,8 @@ class AppConfig {
   static const String paystackInitializeEndpoint = '/api/payment/initialize/';
   
   // Environment URLs
-  static const String developmentBaseUrl = 'http://192.168.100.188:8000';
-  static const String productionBaseUrl = 'http://192.168.100.188:8000';
+  static const String developmentBaseUrl = 'https://marketplace-system-1.onrender.com';
+  static const String productionBaseUrl = 'https://marketplace-system-1.onrender.com';
   
   static String getBaseUrl() {
     // Always return production URL for now

@@ -4,6 +4,7 @@ from django.utils import timezone
 import uuid
 from django.db import models
 import random
+from django.contrib.auth import get_user_model
 import string
 #freelancer (for workers)
 class User(models.Model):
@@ -910,10 +911,13 @@ class Rating(models.Model):
     task = models.ForeignKey('Task', on_delete=models.CASCADE)
     contract = models.ForeignKey('Contract', on_delete=models.CASCADE, null=True, blank=True)
     submission = models.ForeignKey('Submission', on_delete=models.CASCADE, null=True, blank=True)
-    rater = models.ForeignKey('User', related_name='ratings_given', on_delete=models.CASCADE)
-    rated_user = models.ForeignKey('User', related_name='ratings_received', on_delete=models.CASCADE)
     
-    # ADD THIS FIELD: Direct reference to employer who is rating
+    # The Generic User Account doing the rating
+    rater = models.ForeignKey(get_user_model(), related_name='ratings_given', on_delete=models.CASCADE)
+    # The Generic User Account receiving the rating
+    rated_user = models.ForeignKey(get_user_model(), related_name='ratings_received', on_delete=models.CASCADE)
+    
+    # Optional direct link to Employer profile if an employer is the rater
     rater_employer = models.ForeignKey(
         'Employer', 
         on_delete=models.CASCADE, 
@@ -926,114 +930,54 @@ class Rating(models.Model):
     score = models.IntegerField(choices=[(i, i) for i in range(1, 6)])
     review = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    category_scores = models.JSONField(null=True, blank=True, help_text="Per-category rating breakdown")
     
-    # ADD THESE NEW FIELDS for work passport data
+    # Extended Data
+    category_scores = models.JSONField(null=True, blank=True)
     would_recommend = models.BooleanField(null=True, blank=True, default=None)
     would_rehire = models.BooleanField(null=True, blank=True, default=None)
-    performance_tags = models.JSONField(null=True, blank=True, help_text="List of performance tags")
-    calculated_composite = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
-    
+    performance_tags = models.JSONField(null=True, blank=True)
+
     class Meta:
-        unique_together = [['task', 'rater', 'rated_user'], ['task', 'rater_employer', 'rated_user']]
-    
+        unique_together = [['task', 'rater', 'rated_user']]
+
     def __str__(self):
-        if self.rater_employer:
-            return f"{self.rater_employer.username} → {self.rated_user.name}: {self.score}/5"
-        return f"{self.rater.name} → {self.rated_user.name}: {self.score}/5"
-    
+        return f"{self.rating_type}: {self.rater.username} -> {self.rated_user.username} ({self.score})"
+
     def save(self, *args, **kwargs):
-        print(f"🔍 DEBUG Rating.save() called")
-        print(f"   Rater: {self.rater_id} - {getattr(self.rater, 'email', 'None') if self.rater_id else 'None'}")
-        print(f"   Rated User: {self.rated_user_id} - {getattr(self.rated_user, 'email', 'None') if self.rated_user_id else 'None'}")
-        print(f"   Rater Employer: {self.rater_employer_id}")
-        print(f"   Current rating_type: {self.rating_type}")
+        User = get_user_model()
         
-        # FIXED LOGIC: Only handle rater_employer logic if this is being created from employer interface
-        if self.rater_employer and not self.rater_id:
-            # This happens when an employer creates a rating through their interface
-            # and only rater_employer is set (not rater)
+        # --- LOGIC A: Employer is rating Freelancer ---
+        if self.rater_employer:
             self.rating_type = 'employer_to_freelancer'
-            print(f"   Setting rating_type to 'employer_to_freelancer' (rater_employer set, no rater)")
             
-            try:
-                from django.contrib.auth import get_user_model
-                User = get_user_model()
-                
-                # Try to find by email
-                employer_user = User.objects.get(email=self.rater_employer.contact_email)
-                print(f"   Found existing employer user: {employer_user.user_id}")
-            except User.DoesNotExist:
-                # Create a new User for the employer
-                print(f"   Creating new user for employer: {self.rater_employer.username}")
-                employer_user = User.objects.create(
-                    name=self.rater_employer.username,
-                    email=self.rater_employer.contact_email,
-                )
-            
-            # Only set rater if it's not already set
+            # If rater (User account) isn't linked yet, find or create it via Employer email
             if not self.rater_id:
+                try:
+                    employer_user = User.objects.get(email=self.rater_employer.contact_email)
+                except User.DoesNotExist:
+                    # FIX: Use 'username' instead of 'name' to avoid the keyword argument error
+                    employer_user = User.objects.create(
+                        username=self.rater_employer.username,
+                        email=self.rater_employer.contact_email,
+                    )
                 self.rater = employer_user
-                print(f"   Set rater to employer's user account: {self.rater_id}")
-        
-        # If rater is already set, keep it as is
-        elif self.rater_employer and self.rater_id:
-            # Both rater_employer and rater are set - just ensure rating_type is correct
-            self.rating_type = 'employer_to_freelancer'
-            print(f"   Setting rating_type to 'employer_to_freelancer' (both rater_employer and rater set)")
-        
-        # If rating_type is already explicitly set, keep it
-        elif self.rating_type:
-            print(f"   Keeping existing rating_type: {self.rating_type}")
-        
-        # Auto-determine rating_type if not set (for backward compatibility)
-        else:
-            print(f"   Auto-determining rating_type...")
+
+        # --- LOGIC B: Freelancer is rating Employer ---
+        # If rater is set but rater_employer is NOT, and we know the target is an employer
+        elif self.rater_id and not self.rater_employer:
+            # We can check if the rated_user has an Employer profile to confirm type
+            from .models import Employer # Local import to avoid circular dependency
+            is_target_employer = Employer.objects.filter(contact_email=self.rated_user.email).exists()
             
-            try:
-                # Import inside the method to avoid circular imports
-                Employer = models.get_model('app', 'Employer')
-                
-                if Employer and self.rated_user_id:
-                    # Check if rated_user is an employer
-                    is_employer = Employer.objects.filter(
-                        contact_email=self.rated_user.email
-                    ).exists()
-                    
-                    if is_employer:
-                        # Freelancer rating employer
-                        self.rating_type = 'freelancer_to_employer'
-                        print(f"   Auto-set rating_type to 'freelancer_to_employer' (rated_user is employer)")
-                    else:
-                        # Default to employer rating freelancer
-                        self.rating_type = 'employer_to_freelancer'
-                        print(f"   Auto-set rating_type to 'employer_to_freelancer' (rated_user is not employer)")
-                else:
-                    # Default fallback
-                    self.rating_type = 'employer_to_freelancer'
-                    print(f"   Set default rating_type: {self.rating_type}")
-                    
-            except Exception as e:
-                print(f"   Error auto-determining: {e}")
-                # Default fallback
-                self.rating_type = 'employer_to_freelancer'
-                print(f"   Set fallback rating_type: {self.rating_type}")
-        
-        print(f"   Final state:")
-        print(f"   - rating_type: {self.rating_type}")
-        print(f"   - rater: {self.rater_id}")
-        print(f"   - rated_user: {self.rated_user_id}")
-        print(f"   - rater_employer: {self.rater_employer_id}")
-        
-        # Validate that we have all required fields
-        if not self.rater_id:
-            print(f"❌ ERROR: rater is required!")
-            raise ValueError("Rater is required")
-        
-        if not self.rated_user_id:
-            print(f"❌ ERROR: rated_user is required!")
-            raise ValueError("Rated user is required")
-        
+            if is_target_employer:
+                self.rating_type = 'freelancer_to_employer'
+            else:
+                self.rating_type = 'employer_to_freelancer' # Default fallback
+
+        # Final Validation: Prevent self-rating
+        if self.rater == self.rated_user:
+            raise ValueError("Users cannot rate themselves.")
+
         super().save(*args, **kwargs)
 class Notification(models.Model):
     NOTIFICATION_TYPES = [
