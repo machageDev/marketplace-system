@@ -901,6 +901,10 @@ class Submission(models.Model):
             self.task_id = self.task.id
         super().save(*args, **kwargs)  
 
+from django.db import models
+from django.apps import apps  # Add this import
+from django.utils import timezone
+
 class Rating(models.Model):
     RATING_TYPES = [
         ('employer_to_freelancer', 'Employer to Freelancer'),
@@ -912,12 +916,11 @@ class Rating(models.Model):
     contract = models.ForeignKey('Contract', on_delete=models.CASCADE, null=True, blank=True)
     submission = models.ForeignKey('Submission', on_delete=models.CASCADE, null=True, blank=True)
     
-    # The Generic User Account doing the rating
-    rater = models.ForeignKey(get_user_model(), related_name='ratings_given', on_delete=models.CASCADE)
-    # The Generic User Account receiving the rating
-    rated_user = models.ForeignKey(get_user_model(), related_name='ratings_received', on_delete=models.CASCADE)
+    # User accounts - these can be either employers or freelancers
+    rater = models.ForeignKey('User', related_name='ratings_given', on_delete=models.CASCADE)
+    rated_user = models.ForeignKey('User', related_name='ratings_received', on_delete=models.CASCADE)
     
-    # Optional direct link to Employer profile if an employer is the rater
+    # Optional employer reference - for tracking if rater is an employer
     rater_employer = models.ForeignKey(
         'Employer', 
         on_delete=models.CASCADE, 
@@ -926,59 +929,91 @@ class Rating(models.Model):
         related_name='ratings_given_as_employer'
     )
     
+    # Optional freelancer reference - for tracking if rated user is freelancer
+    rated_freelancer = models.ForeignKey(
+        'Freelancer',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='ratings_received_as_freelancer'
+    )
+    
     rating_type = models.CharField(max_length=25, choices=RATING_TYPES)
     score = models.IntegerField(choices=[(i, i) for i in range(1, 6)])
     review = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    
-    # Extended Data
-    category_scores = models.JSONField(null=True, blank=True)
-    would_recommend = models.BooleanField(null=True, blank=True, default=None)
-    would_rehire = models.BooleanField(null=True, blank=True, default=None)
-    performance_tags = models.JSONField(null=True, blank=True)
 
     class Meta:
         unique_together = [['task', 'rater', 'rated_user']]
+        ordering = ['-created_at']
 
-    def __str__(self):
-        return f"{self.rating_type}: {self.rater.username} -> {self.rated_user.username} ({self.score})"
+    def clean(self):
+        """Validate rating logic before saving"""
+        from django.core.exceptions import ValidationError
+        
+        # Check if task is completed
+        if self.task.status != 'completed':
+            raise ValidationError("Can only rate completed tasks")
+        
+        # Check if users are different
+        if self.rater == self.rated_user:
+            raise ValidationError("Cannot rate yourself")
+        
+        super().clean()
 
     def save(self, *args, **kwargs):
-        User = get_user_model()
+        """Auto-determine rating type based on user roles"""
+        # Get Employer and Freelancer models
+        EmployerModel = apps.get_model('webapp', 'Employer')  # Replace 'webapp' with your app name
+        FreelancerModel = apps.get_model('webapp', 'Freelancer')
         
-        # --- LOGIC A: Employer is rating Freelancer ---
-        if self.rater_employer:
+        # Try to determine if rater is an employer
+        try:
+            employer = EmployerModel.objects.get(contact_email=self.rater.email)
+            self.rater_employer = employer
             self.rating_type = 'employer_to_freelancer'
-            
-            # If rater (User account) isn't linked yet, find or create it via Employer email
-            if not self.rater_id:
-                try:
-                    employer_user = User.objects.get(email=self.rater_employer.contact_email)
-                except User.DoesNotExist:
-                    # FIX: Use 'username' instead of 'name' to avoid the keyword argument error
-                    employer_user = User.objects.create(
-                        username=self.rater_employer.username,
-                        email=self.rater_employer.contact_email,
-                    )
-                self.rater = employer_user
-
-        # --- LOGIC B: Freelancer is rating Employer ---
-        # If rater is set but rater_employer is NOT, and we know the target is an employer
-        elif self.rater_id and not self.rater_employer:
-            # We can check if the rated_user has an Employer profile to confirm type
-            from .models import Employer # Local import to avoid circular dependency
-            is_target_employer = Employer.objects.filter(contact_email=self.rated_user.email).exists()
-            
-            if is_target_employer:
+        except (EmployerModel.DoesNotExist, AttributeError):
+            # If not employer, then rater must be a freelancer
+            try:
+                freelancer = FreelancerModel.objects.get(user=self.rater)
                 self.rating_type = 'freelancer_to_employer'
-            else:
-                self.rating_type = 'employer_to_freelancer' # Default fallback
-
-        # Final Validation: Prevent self-rating
-        if self.rater == self.rated_user:
-            raise ValueError("Users cannot rate themselves.")
-
+            except FreelancerModel.DoesNotExist:
+                # Default fallback - try to infer from context
+                if self.rater_employer:
+                    self.rating_type = 'employer_to_freelancer'
+                else:
+                    # Last resort: check task relationship
+                    if hasattr(self.task, 'employer') and self.task.employer.contact_email == self.rater.email:
+                        self.rating_type = 'employer_to_freelancer'
+                    else:
+                        self.rating_type = 'freelancer_to_employer'
+        
+        # Set rated_freelancer if applicable
+        if self.rating_type == 'employer_to_freelancer':
+            try:
+                freelancer = FreelancerModel.objects.get(user=self.rated_user)
+                self.rated_freelancer = freelancer
+            except FreelancerModel.DoesNotExist:
+                pass
+        
         super().save(*args, **kwargs)
+
+    def get_rater_name(self):
+        """Get display name of the rater"""
+        if self.rater_employer:
+            return self.rater_employer.username
+        return self.rater.name if hasattr(self.rater, 'name') else str(self.rater)
+
+    def get_rated_user_name(self):
+        """Get display name of the rated user"""
+        if self.rated_freelancer:
+            return self.rated_freelancer.get_full_name
+        return self.rated_user.name if hasattr(self.rated_user, 'name') else str(self.rated_user)
+
+    def __str__(self):
+        return f"{self.get_rater_name()} → {self.get_rated_user_name()}: {self.score}/5"
+    
+    
 class Notification(models.Model):
     NOTIFICATION_TYPES = [
         ('contract_completed', 'Contract Completed'),

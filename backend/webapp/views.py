@@ -1524,12 +1524,20 @@ def get_assigned_tasks(request):
         'tasks': tasks_data
     })        
 
+from django.utils import timezone
+import json
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.authentication import TokenAuthentication
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from django.db.models import Q
+
 @api_view(['POST'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
 def create_employer_rating(request):
     try:
-        # request.user is the Account, we need the Employer Profile
+        # request.user should be a User instance from authentication
         user_account = request.user 
         data = request.data
         
@@ -1543,29 +1551,95 @@ def create_employer_rating(request):
         if not all([task_id, freelancer_id, score]):
             return Response({"success": False, "error": "Missing required fields."}, status=400)
 
-        # 2. Fetch Models
-        # We need the Employer PROFILE instance for the rater_employer field
         try:
+            score = int(score)
+            if score < 1 or score > 5:
+                return Response({"success": False, "error": "Score must be between 1 and 5."}, status=400)
+        except ValueError:
+            return Response({"success": False, "error": "Invalid score format."}, status=400)
+
+        # 2. Fetch Models - Find employer by matching email
+        try:
+            # Since Employer has contact_email field, find by matching with user's email
             employer_profile = Employer.objects.get(contact_email=user_account.email)
+        except Employer.DoesNotExist:
+            # If no employer found with that email, check if user has an employer profile
+            try:
+                # Alternative: check if there's an EmployerProfile linked to user
+                from .models import EmployerProfile
+                employer_profile = EmployerProfile.objects.get(contact_email=user_account.email)
+                # Get the employer from the profile
+                employer_profile = employer_profile.employer
+            except EmployerProfile.DoesNotExist:
+                return Response({
+                    "success": False, 
+                    "error": "Employer profile not found for this account."
+                }, status=404)
+
+        try:
             task = Task.objects.get(task_id=task_id, employer=employer_profile)
             freelancer = User.objects.get(user_id=freelancer_id)
-        except (Employer.DoesNotExist, Task.DoesNotExist, User.DoesNotExist):
-            return Response({"success": False, "error": "Required records not found."}, status=404)
+        except Task.DoesNotExist:
+            return Response({"success": False, "error": "Task not found or not owned by this employer."}, status=404)
+        except User.DoesNotExist:
+            return Response({"success": False, "error": "Freelancer not found."}, status=404)
 
-        # 3. Prevent Duplicates
-        if Rating.objects.filter(task=task, rater_employer=employer_profile).exists():
+        # 3. Validate task can be rated
+        if task.status == 'cancelled':
+            return Response({"success": False, "error": "Cannot rate cancelled tasks."}, status=400)
+        
+        if task.assigned_user != freelancer:
+            return Response({"success": False, "error": "This freelancer is not assigned to this task."}, status=400)
+
+        # 4. Prevent Duplicates - check both rater_employer and rater
+        duplicate_exists = Rating.objects.filter(
+            Q(task=task) & 
+            (Q(rater_employer=employer_profile) | Q(rater=user_account))
+        ).exists()
+        
+        if duplicate_exists:
             return Response({"success": False, "error": "Rating already submitted."}, status=400)
 
-        # 4. Process Extended Data
+        # 5. Process Extended Data
         review_with_data = review
         if extended_data_raw:
-            review_with_data = f"{review} __EXTENDED_DATA__:{json.dumps(extended_data_raw)}"
+            try:
+                # Parse and validate extended data
+                if isinstance(extended_data_raw, str):
+                    extended_data = json.loads(extended_data_raw)
+                else:
+                    extended_data = extended_data_raw
+                
+                # Add as separate field or append to review
+                review_with_data = f"{review}\n\n[Extended Data]: {json.dumps(extended_data, indent=2)}"
+            except json.JSONDecodeError:
+                review_with_data = f"{review}\n\n[Extended Data (Raw)]: {extended_data_raw}"
 
-        # 5. Get Contract & Submission
-        contract = Contract.objects.filter(task=task, freelancer=freelancer, is_active=True).first()
-        submission = Submission.objects.filter(task=task, freelancer=freelancer).first()
+        # 6. Get Contract & Submission
+        contract = Contract.objects.filter(
+            task=task, 
+            freelancer=freelancer, 
+            employer=employer_profile,
+            is_active=True
+        ).first()
+        
+        submission = Submission.objects.filter(
+            task=task, 
+            freelancer=freelancer
+        ).order_by('-submitted_at').first()
 
-        # 6. Create Rating Record
+        # 7. Get or create Freelancer profile
+        freelancer_profile = None
+        try:
+            freelancer_profile = Freelancer.objects.get(user=freelancer)
+        except Freelancer.DoesNotExist:
+            # Create a basic freelancer profile if it doesn't exist
+            freelancer_profile = Freelancer.objects.create(
+                user=freelancer,
+                is_verified=False
+            )
+
+        # 8. Create Rating Record
         rating = Rating.objects.create(
             task=task,
             contract=contract,
@@ -1573,30 +1647,71 @@ def create_employer_rating(request):
             rater_employer=employer_profile, 
             rater=user_account,             
             rated_user=freelancer,
-            score=int(score),
+            rated_freelancer=freelancer_profile,  # Add this
+            score=score,
             review=review_with_data,
+            rating_type='employer_to_freelancer'  # Explicitly set type
         )
 
-        # 7. Finalize Project
-        task.status = 'completed'
-        task.save()
+        # 9. Update freelancer's average rating
+        if freelancer_profile:
+            # Calculate new average rating
+            ratings = Rating.objects.filter(
+                rated_freelancer=freelancer_profile,
+                rating_type='employer_to_freelancer'
+            )
+            if ratings.exists():
+                avg_rating = ratings.aggregate(avg_score=models.Avg('score'))['avg_score']
+                # Update employer profile's avg_freelancer_rating if needed
+                # Or create a new field in Freelancer model
+                pass
 
-        if contract:
+        # 10. Finalize Project (only if it's not already completed)
+        if task.status != 'completed':
+            task.status = 'completed'
+            task.save()
+
+        if contract and contract.status != 'completed':
             contract.status = 'completed'
             contract.is_completed = True
             contract.completed_date = timezone.now()
             contract.save()
 
+        # 11. Create notification for freelancer
+        try:
+            from .models import Notification
+            Notification.objects.create(
+                user=freelancer,
+                title="New Rating Received",
+                message=f"{employer_profile.username} rated you {score}/5 stars for task: {task.title}",
+                notification_type='rating_received',
+                related_id=rating.rating_id
+            )
+        except Exception as e:
+            # Don't fail if notification fails
+            print(f"Failed to create notification: {e}")
+
         return Response({
             "success": True,
             "message": "Rating submitted successfully.",
             "rating_id": rating.rating_id,
+            "task_status": task.status,
+            "rating_details": {
+                "rater": employer_profile.username,
+                "rated_user": freelancer.name,
+                "score": score,
+                "task_title": task.title
+            }
         }, status=201)
 
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return Response({"success": False, "error": f"Server Error: {str(e)}"}, status=500)
+        return Response({
+            "success": False, 
+            "error": f"Server Error: {str(e)}",
+            "traceback": traceback.format_exc() if settings.DEBUG else None
+        }, status=500)
 @api_view(['GET'])
 @authentication_classes([CustomTokenAuthentication]) # Ensure this matches your Auth setup
 @permission_classes([IsAuthenticated])
