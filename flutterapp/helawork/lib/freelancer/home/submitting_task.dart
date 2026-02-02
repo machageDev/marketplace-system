@@ -4,17 +4,15 @@ import 'package:file_picker/file_picker.dart';
 import 'package:helawork/freelancer/provider/submission_provider.dart';
 
 class SubmitTaskScreen extends StatefulWidget {
-  final String taskId; 
+  final String taskId;
   final String taskTitle;
-  final String? contractId;
   final String budget;
-  
+
   const SubmitTaskScreen({
-    super.key, 
+    super.key,
     required this.taskId,
     required this.taskTitle,
-    this.contractId,
-    required this.budget,
+    required this.budget, required contractId,
   });
 
   @override
@@ -24,65 +22,71 @@ class SubmitTaskScreen extends StatefulWidget {
 class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  // ========== REQUIRED FIELDS ==========
-  TextEditingController titleController = TextEditingController();
-  TextEditingController descriptionController = TextEditingController();
-
-  // ========== OPTIONAL FIELDS ==========
-  TextEditingController repoUrlController = TextEditingController();
-  TextEditingController commitHashController = TextEditingController();
-  TextEditingController stagingUrlController = TextEditingController();
-  TextEditingController liveDemoController = TextEditingController();
-  TextEditingController apkUrlController = TextEditingController();
-  TextEditingController testflightController = TextEditingController();
-  TextEditingController adminUsernameController = TextEditingController();
-  TextEditingController adminPasswordController = TextEditingController();
-  TextEditingController accessInstructionsController = TextEditingController();
-  TextEditingController deploymentInstructionsController = TextEditingController();
-  TextEditingController testInstructionsController = TextEditingController();
-  TextEditingController releaseNotesController = TextEditingController();
-  TextEditingController revisionNotesController = TextEditingController();
-
-  bool checklistTestsPassing = false;
-  bool checklistDeployedStaging = false;
-  bool checklistDocumentation = false;
-  bool checklistNoCriticalBugs = false;
+  // Consolidate controllers to match simplified API
+  final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _descriptionController = TextEditingController();
+  final TextEditingController _urlController = TextEditingController();
 
   PlatformFile? zipFile;
-  PlatformFile? screenshots;
-  PlatformFile? videoDemo;
+  PlatformFile? document;
 
   @override
   void initState() {
     super.initState();
-    
-    // Pre-fill title with task title
-    titleController.text = "Submission for: ${widget.taskTitle}";
-    
-    // Validate taskId
-    if (widget.taskId.isEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Task ID is missing. Please go back and select a task.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      });
+    _titleController.text = "Submission: ${widget.taskTitle}";
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
+    _urlController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleSubmit() async {
+    final provider = Provider.of<SubmissionProvider>(context, listen: false);
+
+    if (!_formKey.currentState!.validate()) return;
+
+    // Custom Logic: User must provide either a Link OR a Zip file
+    if (_urlController.text.isEmpty && zipFile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please provide at least a project URL or a ZIP file.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    await provider.submitTask(
+      taskId: widget.taskId,
+      title: _titleController.text,
+      description: _descriptionController.text,
+      url: _urlController.text,
+      zipFile: zipFile,
+      document: document,
+    );
+
+    if (provider.errorMessage.isEmpty && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Task submitted successfully!'), backgroundColor: Colors.green),
+      );
+      Navigator.pop(context, true);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final submissionProvider = Provider.of<SubmissionProvider>(context);
+    final provider = Provider.of<SubmissionProvider>(context);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text("Submit Task"),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        automaticallyImplyLeading: true,
+        elevation: 0,
       ),
-      body: submissionProvider.isLoading
+      body: provider.isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
               padding: const EdgeInsets.all(16),
@@ -91,274 +95,45 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // ========== TASK INFO CARD ==========
-                    Card(
-                      elevation: 3,
-                      color: Colors.blue[50],
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              "Task Information",
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.blue,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text("Task: ${widget.taskTitle}"),
-                            Text("Task ID: ${widget.taskId}"),
-                            if (widget.contractId != null && widget.contractId!.isNotEmpty)
-                              Text("Contract ID: ${widget.contractId}"),
-                            if (widget.budget.isNotEmpty)
-                              Text("Budget: \$${widget.budget}"),
-                          ],
-                        ),
-                      ),
-                    ),
-                    
-                    const SizedBox(height: 20),
-                    
-                    // ========== REQUIRED SECTION ==========
-                    const Text(
-                      "Required Information",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.red,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    
-                    // Title (REQUIRED)
-                    _buildRequiredTextField(
-                      titleController,
-                      'Submission Title *',
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Title is required';
-                        }
-                        if (value.length < 5) {
-                          return 'Title must be at least 5 characters';
-                        }
-                        return null;
-                      },
-                    ),
-                    
-                    // Description (REQUIRED)
-                    _buildRequiredTextField(
-                      descriptionController,
-                      'Description *',
-                      maxLines: 4,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Description is required';
-                        }
-                        if (value.length < 20) {
-                          return 'Description must be at least 20 characters';
-                        }
-                        return null;
-                      },
-                    ),
-                    
-                    const SizedBox(height: 16),
-                    
-                    // ========== OPTIONAL SECTION ==========
-                    const Text(
-                      "Optional Submission Details",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    
-                    // Repository Section
-                    const Text(
-                      "Code Repository",
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                    ),
-                    _buildTextField(repoUrlController, 'Repository URL (optional)'),
-                    _buildTextField(commitHashController, 'Commit Hash (optional)'),
-                    
-                    const SizedBox(height: 12),
-                    
-                    // Deployment URLs Section
-                    const Text(
-                      "Deployment URLs",
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                    ),
-                    _buildTextField(stagingUrlController, 'Staging URL (optional)'),
-                    _buildTextField(liveDemoController, 'Live Demo URL (optional)'),
-                    _buildTextField(apkUrlController, 'APK Download URL (optional)'),
-                    _buildTextField(testflightController, 'TestFlight Link (optional)'),
-                    
-                    const SizedBox(height: 12),
-                    
-                    // Admin Access Section
-                    const Text(
-                      "Admin Access (Optional)",
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                    ),
-                    _buildTextField(adminUsernameController, 'Admin Username'),
-                    _buildTextField(adminPasswordController, 'Admin Password', obscure: true),
-                    
-                    // Instructions Section
-                    const SizedBox(height: 12),
-                    const Text(
-                      "Instructions & Notes",
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                    ),
-                    _buildTextField(accessInstructionsController, 'Access Instructions', maxLines: 3),
-                    _buildTextField(deploymentInstructionsController, 'Deployment Instructions', maxLines: 3),
-                    _buildTextField(testInstructionsController, 'Test Instructions', maxLines: 3),
-                    _buildTextField(releaseNotesController, 'Release Notes', maxLines: 3),
-                    _buildTextField(revisionNotesController, 'Revision Notes (if resubmitting)', maxLines: 3),
-                    
-                    const SizedBox(height: 16),
-                    
-                    // ========== FILE UPLOADS ==========
-                    Row(
-                      children: [
-                        const Text(
-                          "Upload Files",
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          "(At least one method required: URL or File)",
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    
-                    _buildFilePicker(
-                      "ZIP File (Source Code)",
-                      zipFile,
-                      (file) => setState(() => zipFile = file),
-                    ),
-                    _buildFilePicker(
-                      "Screenshots",
-                      screenshots,
-                      (file) => setState(() => screenshots = file),
-                    ),
-                    _buildFilePicker(
-                      "Video Demo",
-                      videoDemo,
-                      (file) => setState(() => videoDemo = file),
-                    ),
-                    
-                    // File upload status
-                    if (zipFile != null || screenshots != null || videoDemo != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8, bottom: 16),
-                        child: Text(
-                          "Files ready: ${[
-                            if (zipFile != null) zipFile!.name,
-                            if (screenshots != null) screenshots!.name,
-                            if (videoDemo != null) videoDemo!.name,
-                          ].join(', ')}",
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.green,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ),
-                    
-                    // ========== CHECKLIST ==========
-                    const SizedBox(height: 16),
-                    const Text(
-                      "Checklist",
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    
-                    // Checklist items with improved styling
-                    _buildCheckboxItem(
-                      "All tests passing",
-                      checklistTestsPassing,
-                      (val) => setState(() => checklistTestsPassing = val ?? false),
-                    ),
-                    _buildCheckboxItem(
-                      "Deployed to staging",
-                      checklistDeployedStaging,
-                      (val) => setState(() => checklistDeployedStaging = val ?? false),
-                    ),
-                    _buildCheckboxItem(
-                      "Documentation complete",
-                      checklistDocumentation,
-                      (val) => setState(() => checklistDocumentation = val ?? false),
-                    ),
-                    _buildCheckboxItem(
-                      "No critical bugs",
-                      checklistNoCriticalBugs,
-                      (val) => setState(() => checklistNoCriticalBugs = val ?? false),
-                    ),
-                    
-                    // Checklist summary
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Row(
-                        children: [
-                          Icon(
-                            _isChecklistComplete() ? Icons.check_circle : Icons.error,
-                            color: _isChecklistComplete() ? Colors.green : Colors.orange,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            _isChecklistComplete() 
-                                ? "All checklist items completed" 
-                                : "Some checklist items pending",
-                            style: TextStyle(
-                              color: _isChecklistComplete() ? Colors.green : Colors.orange,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    
-                    // ========== SUBMIT BUTTON ==========
+                    _buildTaskHeader(),
                     const SizedBox(height: 24),
+                    
+                    _buildSectionTitle("Work Details"),
+                    _buildTextField(_titleController, "Submission Title", isRequired: true),
+                    _buildTextField(_urlController, "Main Project Link (GitHub / Live Demo)", 
+                      hint: "https://..."),
+                    _buildTextField(
+                      _descriptionController, 
+                      "Description & Instructions", 
+                      isRequired: true, 
+                      maxLines: 5,
+                      hint: "Describe what you've completed. Include any credentials or testing notes here."
+                    ),
+                    
+                    const SizedBox(height: 24),
+                    _buildSectionTitle("Attachments"),
+                    _buildFileTile("Source Code (ZIP)", zipFile, (file) => setState(() => zipFile = file)),
+                    _buildFileTile("Documentation / Proof (PDF/Image)", document, (file) => setState(() => document = file)),
+
+                    const SizedBox(height: 40),
+                    
+                    if (provider.errorMessage.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Text(provider.errorMessage, style: const TextStyle(color: Colors.red)),
+                      ),
+
                     SizedBox(
                       width: double.infinity,
+                      height: 55,
                       child: ElevatedButton(
+                        onPressed: _handleSubmit,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Theme.of(context).colorScheme.primary,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          elevation: 4,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                        onPressed: () => _submitTask(context, submissionProvider),
-                        child: const Text(
-                          "Submit Task",
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                        ),
+                        child: const Text("SUBMIT WORK", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                       ),
                     ),
-                    
-                    // Error message
-                    if (submissionProvider.errorMessage.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 16),
-                        child: Text(
-                          submissionProvider.errorMessage,
-                          style: const TextStyle(color: Colors.red),
-                        ),
-                      ),
                   ],
                 ),
               ),
@@ -366,294 +141,70 @@ class _SubmitTaskScreenState extends State<SubmitTaskScreen> {
     );
   }
 
-  // ========== HELPER METHODS ==========
-  
-  bool _isChecklistComplete() {
-    return checklistTestsPassing && 
-           checklistDeployedStaging && 
-           checklistDocumentation && 
-           checklistNoCriticalBugs;
-  }
+  // --- UI Components ---
 
-  void _submitTask(BuildContext context, SubmissionProvider submissionProvider) async {
-    // Validate taskId
-    if (widget.taskId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Cannot submit: Task ID is missing. Please go back and try again.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-    
-    // Validate required fields
-    if (titleController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Title is required')),
-      );
-      return;
-    }
-    
-    if (descriptionController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Description is required')),
-      );
-      return;
-    }
-    
-    // Validate at least one submission method
-    bool hasUrl = repoUrlController.text.isNotEmpty ||
-                  stagingUrlController.text.isNotEmpty ||
-                  liveDemoController.text.isNotEmpty ||
-                  apkUrlController.text.isNotEmpty ||
-                  testflightController.text.isNotEmpty;
-    
-    bool hasFile = zipFile != null || screenshots != null || videoDemo != null;
-    
-    if (!hasUrl && !hasFile) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please provide at least one: URL or file upload'),
-        ),
-      );
-      return;
-    }
-    
-    // Form validation
-    if (_formKey.currentState!.validate()) {
-      try {
-        await submissionProvider.submitTask(
-          taskId: widget.taskId,
-          title: titleController.text,
-          description: descriptionController.text,
-          repoUrl: repoUrlController.text.isNotEmpty ? repoUrlController.text : null,
-          commitHash: commitHashController.text.isNotEmpty ? commitHashController.text : null,
-          stagingUrl: stagingUrlController.text.isNotEmpty ? stagingUrlController.text : null,
-          liveDemoUrl: liveDemoController.text.isNotEmpty ? liveDemoController.text : null,
-          apkUrl: apkUrlController.text.isNotEmpty ? apkUrlController.text : null,
-          testflightLink: testflightController.text.isNotEmpty ? testflightController.text : null,
-          adminUsername: adminUsernameController.text.isNotEmpty ? adminUsernameController.text : null,
-          adminPassword: adminPasswordController.text.isNotEmpty ? adminPasswordController.text : null,
-          accessInstructions: accessInstructionsController.text.isNotEmpty ? accessInstructionsController.text : null,
-          deploymentInstructions: deploymentInstructionsController.text.isNotEmpty ? deploymentInstructionsController.text : null,
-          testInstructions: testInstructionsController.text.isNotEmpty ? testInstructionsController.text : null,
-          releaseNotes: releaseNotesController.text.isNotEmpty ? releaseNotesController.text : null,
-          revisionNotes: revisionNotesController.text.isNotEmpty ? revisionNotesController.text : null,
-          checklistTestsPassing: checklistTestsPassing,
-          checklistDeployedStaging: checklistDeployedStaging,
-          checklistDocumentation: checklistDocumentation,
-          checklistNoCriticalBugs: checklistNoCriticalBugs,
-          zipFile: zipFile,
-          screenshots: screenshots,
-          videoDemo: videoDemo,
-        );
-
-        // Check if submission was successful
-        if (submissionProvider.errorMessage.isEmpty) {
-          // Show success message
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Task submitted successfully!'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 3),
-            ),
-          );
-          
-          // Navigate back after a short delay
-          await Future.delayed(const Duration(seconds: 1));
-          
-          // Check if widget is still mounted before navigating
-          if (mounted) {
-            Navigator.pop(context, true); // Pass true to indicate success
-          }
-        } else {
-          // Show error from provider
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error: ${submissionProvider.errorMessage}'),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 5),
-            ),
-          );
-        }
-      } catch (e) {
-        // Handle any unexpected errors
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Submission failed: ${e.toString()}'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
-          ),
-        );
-      }
-    }
-  }
-
-  // ========== WIDGET BUILDERS ==========
-  
-  Widget _buildRequiredTextField(
-    TextEditingController controller,
-    String label, {
-    int maxLines = 1,
-    String? Function(String?)? validator,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+  Widget _buildTaskHeader() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).primaryColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(
-                label,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w500,
-                  color: Colors.blue,
-                ),
-              ),
-              const SizedBox(width: 4),
-              const Text(
-                '*',
-                style: TextStyle(
-                  color: Colors.red,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
+          Text(widget.taskTitle, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
           const SizedBox(height: 4),
-          TextFormField(
-            controller: controller,
-            maxLines: maxLines,
-            validator: validator,
-            decoration: InputDecoration(
-              hintText: 'Enter your $label',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.blue),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.blue, width: 2),
-              ),
-              filled: true,
-              fillColor: Colors.blue[50],
-            ),
-          ),
+          Text("Budget: \$${widget.budget}", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.w600)),
         ],
       ),
     );
   }
 
-  Widget _buildTextField(
-    TextEditingController controller,
-    String label, {
-    bool obscure = false,
-    int maxLines = 1,
-  }) {
+  Widget _buildSectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+    );
+  }
+
+  Widget _buildTextField(TextEditingController controller, String label, {bool isRequired = false, int maxLines = 1, String? hint}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
       child: TextFormField(
         controller: controller,
-        obscureText: obscure,
         maxLines: maxLines,
         decoration: InputDecoration(
-          labelText: label,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-          hintText: 'Optional',
-          hintStyle: const TextStyle(fontStyle: FontStyle.italic),
+          labelText: isRequired ? "$label *" : label,
+          hintText: hint,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          filled: true,
+          fillColor: Colors.grey[50],
         ),
+        validator: isRequired ? (value) => (value == null || value.isEmpty) ? "Field required" : null : null,
       ),
     );
   }
 
-  Widget _buildCheckboxItem(String title, bool value, Function(bool?) onChanged) {
+  Widget _buildFileTile(String label, PlatformFile? selectedFile, Function(PlatformFile) onPicked) {
     return Card(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      elevation: 1,
-      child: CheckboxListTile(
-        value: value,
-        title: Text(title),
-        onChanged: onChanged,
-        activeColor: Theme.of(context).colorScheme.primary,
-        secondary: Icon(
-          value ? Icons.check_circle : Icons.radio_button_unchecked,
-          color: value ? Colors.green : Colors.grey,
-        ),
-        tileColor: value ? Colors.green[50] : null,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
+      margin: const EdgeInsets.only(bottom: 10),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      child: ListTile(
+        leading: Icon(selectedFile == null ? Icons.upload_file : Icons.check_circle, 
+             color: selectedFile == null ? Colors.grey : Colors.green),
+        title: Text(selectedFile?.name ?? label),
+        subtitle: selectedFile != null ? Text("${(selectedFile.size / 1024).toStringAsFixed(1)} KB") : const Text("Tap to select"),
+        trailing: selectedFile != null 
+          ? IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => setState(() {
+              if (label.contains("Source")) zipFile = null; else document = null;
+            }))
+          : null,
+        onTap: () async {
+          FilePickerResult? result = await FilePicker.platform.pickFiles();
+          if (result != null) onPicked(result.files.first);
+        },
       ),
     );
-  }
-
-  Widget _buildFilePicker(String label, PlatformFile? file, Function(PlatformFile) onPicked) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Card(
-        elevation: 2,
-        child: ListTile(
-          leading: Icon(
-            Icons.attach_file,
-            color: Theme.of(context).colorScheme.primary,
-          ),
-          title: Text(
-            file != null ? file.name : label,
-            style: TextStyle(
-              fontWeight: file != null ? FontWeight.bold : FontWeight.normal,
-              color: file != null ? Colors.green : Colors.black87,
-            ),
-          ),
-          subtitle: file != null
-              ? Text(
-                  '${(file.size / 1024).toStringAsFixed(1)} KB',
-                  style: const TextStyle(fontSize: 12),
-                )
-              : null,
-          trailing: file != null
-              ? IconButton(
-                  icon: const Icon(Icons.close, color: Colors.red),
-                  onPressed: () => setState(() {
-                    if (label.contains('ZIP')) zipFile = null;
-                    if (label.contains('Screenshot')) screenshots = null;
-                    if (label.contains('Video')) videoDemo = null;
-                  }),
-                )
-              : null,
-          onTap: () async {
-            final result = await FilePicker.platform.pickFiles();
-            if (result != null && result.files.isNotEmpty) {
-              onPicked(result.files.first);
-            }
-          },
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-        ),
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    // Clean up controllers
-    titleController.dispose();
-    descriptionController.dispose();
-    repoUrlController.dispose();
-    commitHashController.dispose();
-    stagingUrlController.dispose();
-    liveDemoController.dispose();
-    apkUrlController.dispose();
-    testflightController.dispose();
-    adminUsernameController.dispose();
-    adminPasswordController.dispose();
-    accessInstructionsController.dispose();
-    deploymentInstructionsController.dispose();
-    testInstructionsController.dispose();
-    releaseNotesController.dispose();
-    revisionNotesController.dispose();
-    super.dispose();
   }
 }

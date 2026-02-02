@@ -366,66 +366,42 @@ class PaymentRecordAdmin(admin.ModelAdmin):
 # Submission Admin
 @admin.register(Submission)
 class SubmissionAdmin(admin.ModelAdmin):
+    # These names match your model's exact fields
     list_display = (
-        'submission_id', 'task', 'freelancer', 'title', 
-        'status', 'submitted_at', 'checklist_tests_passing'
+        'submission_id', 
+        'task', 
+        'freelancer', 
+        'title', 
+        'status', 
+        'submitted_at'
     )
-    list_filter = ('status', 'submitted_at')
-    search_fields = ('task__title', 'freelancer__name', 'title', 'description')
-    readonly_fields = ('submitted_at', 'resubmitted_at')
-    list_editable = ('status',)
     
+    list_filter = ('status', 'submitted_at')
+    search_fields = ('task__title', 'title', 'description')
+    
+    # submitted_at is auto_now_add, so it must be readonly
+    readonly_fields = ('submitted_at',)
+    
+    list_editable = ('status',)
+
     fieldsets = (
         ('Basic Info', {
             'fields': ('task', 'freelancer', 'contract', 'title', 'description', 'status')
         }),
-        ('Technical Details', {
-            'fields': (
-                'repo_url', 'commit_hash', 'staging_url', 'live_demo_url',
-                'apk_download_url', 'testflight_link'
-            ),
-            'classes': ('collapse',)
-        }),
-        ('Access Credentials', {
-            'fields': ('admin_username', 'admin_password', 'access_instructions'),
-            'classes': ('collapse',)
-        }),
-        ('Files', {
-            'fields': ('zip_file', 'screenshots', 'video_demo'),
-            'classes': ('collapse',)
-        }),
-        ('Additional Info', {
-            'fields': ('deployment_instructions', 'test_instructions', 'release_notes'),
-            'classes': ('collapse',)
-        }),
-        ('Checklist', {
-            'fields': (
-                'checklist_tests_passing', 'checklist_deployed_staging',
-                'checklist_documentation', 'checklist_no_critical_bugs'
-            )
-        }),
-        ('Revision Tracking', {
-            'fields': ('revision_notes', 'resubmitted_at'),
-            'classes': ('collapse',)
+        ('Files & Links', {
+            'fields': ('url', 'zip_file', 'document'),
         }),
         ('Timestamps', {
             'fields': ('submitted_at',),
             'classes': ('collapse',)
         }),
     )
-    
-    actions = ['approve_submissions', 'request_revision']
 
-    def approve_submissions(self, request, queryset):
-        for submission in queryset:
-            submission.approve()
-    approve_submissions.short_description = "Approve selected submissions"
+    actions = ['approve_selected']
 
-    def request_revision(self, request, queryset):
-        for submission in queryset:
-            submission.request_revision("Please revise as requested by admin.")
-    request_revision.short_description = "Request revision for selected submissions"
-
+    @admin.action(description="Approve selected submissions")
+    def approve_selected(self, request, queryset):
+        queryset.update(status='approved')
 # Rating Admin
 @admin.register(Rating)
 class RatingAdmin(admin.ModelAdmin):

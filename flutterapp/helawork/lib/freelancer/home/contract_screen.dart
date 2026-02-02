@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:helawork/freelancer/home/task_detail.dart';
+import 'package:helawork/freelancer/home/submitting_rating.dart';
 import 'package:helawork/freelancer/model/contract_model.dart';
 import 'package:helawork/freelancer/provider/contract_provider.dart';
 import 'package:provider/provider.dart';
@@ -64,7 +64,6 @@ class _ContractScreenState extends State<ContractScreen> {
         color: Colors.grey[850],
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          // Visual cue: Green border if Peter has paid but you haven't accepted
           color: contract.canAccept ? Colors.green : Colors.grey[800]!,
           width: contract.canAccept ? 2 : 1,
         ),
@@ -83,107 +82,88 @@ class _ContractScreenState extends State<ContractScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          
           _buildInfoRow(Icons.person, "Client: ${contract.employerName}"),
           _buildInfoRow(Icons.calendar_today, "Started: ${contract.formattedStartDate}"),
-          
           _buildInfoRow(Icons.payments, "Budget: KES ${contract.budget.toStringAsFixed(2)}", color: Colors.green),
-          
           _buildInfoRow(
             contract.isOnSite ? Icons.location_on : Icons.computer,
             "Type: ${contract.isOnSite ? 'On-Site' : 'Remote'}",
             color: contract.isOnSite ? Colors.orange : Colors.blue
           ),
-
-          // --- DEBUG LINE: REMOVE THIS AFTER TESTING ---
-          // Padding(
-          //   padding: const EdgeInsets.only(top: 8.0),
-          //   child: Text("Paid: ${contract.isPaid}, Accepted: ${contract.isAccepted}", 
-          //   style: TextStyle(color: Colors.white38, fontSize: 10)),
-          // ),
-          
           const Divider(height: 32, color: Colors.grey),
-
           _buildActionButtons(context, contract, provider),
         ],
       ),
     );
   }
+
   Widget _buildActionButtons(BuildContext context, Contract contract, ContractProvider provider) {
-  // 1. HIGH PRIORITY: If it's done, show the completed status immediately
-  // This is where the "Mark Completed" visual happens
-  if (contract.isCompleted || contract.status.toLowerCase() == 'completed') {
-    return _buildCompletedStatus(contract);
-  }
-
-  // 2. Check Acceptance
-  if (contract.canAccept) {
-    return _buildAcceptRejectSection(context, contract, provider);
-  } 
-  
-  // 3. If already accepted and NOT completed, show active workflow
-  if (contract.isAccepted) {
-    // Only show OTP button if NOT completed
-    if (contract.isOnSite && !contract.isCompleted) {
-       return _buildOnSiteOTPButton(context, contract, provider);
-    }
-    
-    if (contract.isRemote && !contract.isCompleted) {
-       return _buildRemoteTaskButton(context, contract);
+    if (contract.isCompleted || contract.status.toLowerCase() == 'completed') {
+      return _buildCompletedStatus(contract);
     }
 
-    if (contract.isAwaitingPayment) return _buildAwaitingPaymentStatus();
+    if (contract.canAccept) {
+      return _buildAcceptRejectSection(context, contract, provider);
+    } 
     
-    return _buildInProgressStatus();
+    if (contract.isAccepted) {
+      if (contract.isOnSite && !contract.isCompleted) {
+         return _buildOnSiteOTPButton(context, contract, provider);
+      }
+      
+      if (contract.isRemote && !contract.isCompleted) {
+         return _buildRemoteTaskButton(context, contract);
+      }
+
+      if (contract.isAwaitingPayment) return _buildAwaitingPaymentStatus();
+      
+      return _buildInProgressStatus();
+    }
+
+    return Center(
+      child: Text(
+        contract.displayStatus.toUpperCase(),
+        style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
+      ),
+    );
   }
 
-  // 4. Fallback
-  return Center(
-    child: Text(
-      contract.displayStatus.toUpperCase(),
-      style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
-    ),
-  );
+  Widget _buildStatusBadge(Contract contract) {
+    Color color;
+    String text;
 
+    if (contract.isCompleted || contract.status == 'completed') {
+      color = Colors.grey;
+      text = 'COMPLETED';
+    } else if (contract.canAccept) {
+      color = Colors.green;
+      text = 'PAID & READY';
+    } else if (contract.isAccepted) {
+      color = Colors.cyan;
+      text = 'IN PROGRESS';
+    } else {
+      color = Colors.grey;
+      text = contract.status.toUpperCase();
+    }
 
-}
-Widget _buildStatusBadge(Contract contract) {
-  Color color;
-  String text;
-
-  // 1. Check for completion first to override "In Progress"
-  if (contract.isCompleted || contract.status == 'completed') {
-    color = Colors.grey; // Or blueGrey
-    text = 'COMPLETED';
-  } else if (contract.canAccept) {
-    color = Colors.green;
-    text = 'PAID & READY';
-  } else if (contract.isAccepted) {
-    color = Colors.cyan;
-    text = 'IN PROGRESS';
-  } else {
-    color = Colors.grey;
-    text = contract.status.toUpperCase();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.5)),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color),
+      ),
+    );
   }
-
-  return Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-    decoration: BoxDecoration(
-      color: color.withOpacity(0.1),
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: color.withOpacity(0.5)),
-    ),
-    child: Text(
-      text,
-      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color),
-    ),
-  );
-}
 
   Widget _buildAcceptRejectSection(BuildContext context, Contract contract, ContractProvider provider) {
     return Column(
       children: [
-        const Text("✅ Peter has paid for this task. Accept to start.",
+        const Text("✅ Employer has paid. Accept to start.",
             style: TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.bold)),
         const SizedBox(height: 12),
         Row(
@@ -209,7 +189,6 @@ Widget _buildStatusBadge(Contract contract) {
     );
   }
 
-  // --- Utility Widgets ---
   Widget _buildOnSiteOTPButton(BuildContext context, Contract contract, ContractProvider provider) {
     return SizedBox(width: double.infinity, child: ElevatedButton.icon(
       icon: const Icon(Icons.vpn_key),
@@ -223,11 +202,33 @@ Widget _buildStatusBadge(Contract contract) {
     return SizedBox(width: double.infinity, child: ElevatedButton.icon(
       icon: const Icon(Icons.upload_file),
       label: const Text("Submit Work Files"),
-      onPressed: () => _navigateToTaskPage(context, contract),
+      onPressed: () => _navigateToSubmitPage(context, contract),
       style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
     ));
   }
 
+  // --- Navigation Fix ---
+  void _navigateToSubmitPage(BuildContext context, Contract contract) {
+    // Safely extract IDs
+    final rawTaskId = contract.task['task_id'] ?? contract.task['id'];
+    final int taskId = rawTaskId is int ? rawTaskId : int.tryParse(rawTaskId.toString()) ?? 0;
+    
+    final dynamic clientId = contract.employer['id'] ?? contract.employer['user_id'];
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SubmitRatingScreen(
+          taskId: taskId,
+          clientId: clientId,
+          clientName: contract.employerName,
+          taskTitle: contract.taskTitle,
+        ),
+      ),
+    );
+  }
+
+  // --- Utility Widgets ---
   Widget _buildAwaitingPaymentStatus() => const Center(child: Text("Awaiting Payment...", style: TextStyle(color: Colors.orange)));
   Widget _buildCompletedStatus(Contract contract) => const Center(child: Text("✅ Task Completed", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)));
   Widget _buildInProgressStatus() => const Center(child: Text("🔄 Work in Progress", style: TextStyle(color: Colors.cyan)));
@@ -285,13 +286,5 @@ Widget _buildStatusBadge(Contract contract) {
         }, child: const Text("Verify")),
       ],
     ));
-  }
-
-  void _navigateToTaskPage(BuildContext context, Contract contract) {
-    final rawId = contract.task['task_id'] ?? contract.task['id'];
-    final int parsedId = rawId is int ? rawId : int.tryParse(rawId.toString()) ?? 0;
-    Navigator.push(context, MaterialPageRoute(builder: (context) => TaskDetailScreen(
-      taskId: parsedId, task: contract.task, employer: contract.employer, isTaken: true, isFromContract: true,
-    )));
   }
 }

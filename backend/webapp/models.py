@@ -800,110 +800,46 @@ class Wallet(models.Model):
         return f"{self.user.name}'s Wallet - Balance: {self.balance}"  
 
 
+from django.db import models
+
 class Submission(models.Model):
     submission_id = models.AutoField(primary_key=True)
-    task = models.ForeignKey(Task, on_delete=models.CASCADE)
-    freelancer = models.ForeignKey(User, on_delete=models.CASCADE)
-    contract = models.ForeignKey(Contract, on_delete=models.CASCADE)
+    task = models.ForeignKey('Task', on_delete=models.CASCADE, related_name="submissions")
+    freelancer = models.ForeignKey('User', on_delete=models.CASCADE)
+    contract = models.ForeignKey('Contract', on_delete=models.CASCADE)
     
-    
-    title = models.CharField(max_length=200)
+    # Textual Info
+    title = models.CharField(max_length=255)
     description = models.TextField()
+    
+    # The 3 core delivery types
+    url = models.URLField(blank=True, null=True, help_text="Link to Repo or Live Site")
+    
+    def submission_path(instance, filename):
+        return f'submissions/task_{instance.task.task_id}/{filename}'
+        
+    zip_file = models.FileField(upload_to=submission_path, blank=True, null=True)
+    document = models.FileField(upload_to=submission_path, blank=True, null=True)
+    
+    # Status
+    status = models.CharField(
+        max_length=20, 
+        choices=[
+            ('submitted', 'Submitted'),
+            ('approved', 'Approved'),
+            ('rejected', 'Rejected'),
+        ], 
+        default='submitted'
+    )
     submitted_at = models.DateTimeField(auto_now_add=True)
-    
-   
-    repo_url = models.URLField(blank=True, null=True)
-    commit_hash = models.CharField(max_length=100, blank=True, null=True)
-    staging_url = models.URLField(blank=True, null=True)
-    live_demo_url = models.URLField(blank=True, null=True)
-    apk_download_url = models.URLField(blank=True, null=True)  
-    testflight_link = models.URLField(blank=True, null=True)  
-    
-    
-    admin_username = models.CharField(max_length=100, blank=True, null=True)
-    admin_password = models.CharField(max_length=100, blank=True, null=True)
-    access_instructions = models.TextField(blank=True, null=True)
-    
-    
-    STATUS_CHOICES = [
-        ('submitted', 'Submitted'),
-        ('under_review', 'Under Review'),
-        ('approved', 'Approved'),
-        ('rejected', 'Rejected'),
-        ('revisions_requested', 'Revisions Requested'),
-    ]
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='submitted')
-    
-    # FIXED: File storage path function
-    def submission_files_path(instance, filename):
-        
-        # First try to use task_id directly (most reliable)
-        if instance.task_id:
-            return f'submissions/task_{instance.task_id}/{filename}'
-        
-        # If task_id is not set yet, check if task object has id
-        elif instance.task and hasattr(instance.task, 'id') and instance.task.id:
-            return f'submissions/task_{instance.task.id}/{filename}'
-        
-        # Fallback: use timestamp or unique ID for new submissions
-        else:
-            timestamp = timezone.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]
-            return f'submissions/temp_{timestamp}/{filename}'
-    
-    zip_file = models.FileField(upload_to=submission_files_path, blank=True, null=True)
-    screenshots = models.FileField(upload_to=submission_files_path, blank=True, null=True)
-    video_demo = models.FileField(upload_to=submission_files_path, blank=True, null=True)
-    
-    # Additional info
-    deployment_instructions = models.TextField(blank=True, null=True)
-    test_instructions = models.TextField(blank=True, null=True)
-    release_notes = models.TextField(blank=True, null=True)
-    
-    
-    # Acceptance checklist (freelancer self-verification)
-    checklist_tests_passing = models.BooleanField(default=False)
-    checklist_deployed_staging = models.BooleanField(default=False)
-    checklist_documentation = models.BooleanField(default=False)
-    checklist_no_critical_bugs = models.BooleanField(default=False)
-    
-    # Revision tracking
-    revision_notes = models.TextField(blank=True, null=True)
-    resubmitted_at = models.DateTimeField(blank=True, null=True)
-    
+
     def __str__(self):
-        return f"Submission for {self.task.title} by {self.freelancer.username}"
-    
-    @property
-    def is_approved(self):
-        return self.status == 'approved'
-    
-    @property
-    def needs_revision(self):
-        return self.status == 'revisions_requested'
-    
-    def approve(self):
-        self.status = 'approved'
-        self.save()
-        
-    def request_revision(self, notes):
-        self.status = 'revisions_requested'
-        self.revision_notes = notes
-        self.save()
-    
-    def mark_under_review(self):
-        self.status = 'under_review'
-        self.save()
-    
-    
-    def save(self, *args, **kwargs):
-        # Ensure task_id is set if we have a task object
-        if self.task and not self.task_id:
-            self.task_id = self.task.id
-        super().save(*args, **kwargs)  
+        return f"Submission for {self.task.title}"
 
 from django.db import models
-from django.apps import apps  # Add this import
+from django.apps import apps
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 
 class Rating(models.Model):
     RATING_TYPES = [
@@ -949,52 +885,64 @@ class Rating(models.Model):
 
     def clean(self):
         """Validate rating logic before saving"""
-        from django.core.exceptions import ValidationError
-        
         # Check if task is completed
-        if self.task.status != 'completed':
+        if self.task and self.task.status != 'completed':
             raise ValidationError("Can only rate completed tasks")
         
         # Check if users are different
-        if self.rater == self.rated_user:
+        if self.rater and self.rated_user and self.rater == self.rated_user:
             raise ValidationError("Cannot rate yourself")
         
         super().clean()
 
     def save(self, *args, **kwargs):
         """Auto-determine rating type based on user roles"""
+        # Clean first
+        self.clean()
+        
         # Get Employer and Freelancer models
-        EmployerModel = apps.get_model('webapp', 'Employer')  # Replace 'webapp' with your app name
+        EmployerModel = apps.get_model('webapp', 'Employer')
         FreelancerModel = apps.get_model('webapp', 'Freelancer')
         
-        # Try to determine if rater is an employer
-        try:
-            employer = EmployerModel.objects.get(contact_email=self.rater.email)
-            self.rater_employer = employer
+        # LOGIC: Check rater_employer FIRST (for employer ratings)
+        if self.rater_employer:
+            # CASE 1: Employer is rating freelancer
             self.rating_type = 'employer_to_freelancer'
-        except (EmployerModel.DoesNotExist, AttributeError):
-            # If not employer, then rater must be a freelancer
+            
+            # Try to set rated_freelancer if rated_user exists
+            if self.rated_user:
+                try:
+                    freelancer = FreelancerModel.objects.get(user=self.rated_user)
+                    self.rated_freelancer = freelancer
+                except FreelancerModel.DoesNotExist:
+                    # Rated user is not a freelancer (might be employer)
+                    pass
+                    
+        else:
+            # CASE 2: No rater_employer set, check if rater is a freelancer
             try:
                 freelancer = FreelancerModel.objects.get(user=self.rater)
+                # Rater is a freelancer, so must be rating an employer
                 self.rating_type = 'freelancer_to_employer'
             except FreelancerModel.DoesNotExist:
-                # Default fallback - try to infer from context
-                if self.rater_employer:
+                # Rater is not a freelancer, check if they're an employer
+                try:
+                    employer = EmployerModel.objects.get(contact_email=self.rater.email)
+                    # Found employer by email, set rater_employer
+                    self.rater_employer = employer
                     self.rating_type = 'employer_to_freelancer'
-                else:
-                    # Last resort: check task relationship
-                    if hasattr(self.task, 'employer') and self.task.employer.contact_email == self.rater.email:
-                        self.rating_type = 'employer_to_freelancer'
-                    else:
-                        self.rating_type = 'freelancer_to_employer'
-        
-        # Set rated_freelancer if applicable
-        if self.rating_type == 'employer_to_freelancer':
-            try:
-                freelancer = FreelancerModel.objects.get(user=self.rated_user)
-                self.rated_freelancer = freelancer
-            except FreelancerModel.DoesNotExist:
-                pass
+                    
+                    # Try to set rated_freelancer
+                    if self.rated_user:
+                        try:
+                            freelancer = FreelancerModel.objects.get(user=self.rated_user)
+                            self.rated_freelancer = freelancer
+                        except FreelancerModel.DoesNotExist:
+                            pass
+                            
+                except (EmployerModel.DoesNotExist, AttributeError):
+                    # Default fallback: assume freelancer rating employer
+                    self.rating_type = 'freelancer_to_employer'
         
         super().save(*args, **kwargs)
 
@@ -1009,6 +957,14 @@ class Rating(models.Model):
         if self.rated_freelancer:
             return self.rated_freelancer.get_full_name
         return self.rated_user.name if hasattr(self.rated_user, 'name') else str(self.rated_user)
+
+    def is_employer_rating(self):
+        """Check if this is an employer rating freelancer"""
+        return self.rating_type == 'employer_to_freelancer'
+    
+    def is_freelancer_rating(self):
+        """Check if this is a freelancer rating employer"""
+        return self.rating_type == 'freelancer_to_employer'
 
     def __str__(self):
         return f"{self.get_rater_name()} → {self.get_rated_user_name()}: {self.score}/5"

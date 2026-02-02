@@ -91,52 +91,37 @@ class TaskProvider with ChangeNotifier {
 
   /// 3. THE LOGIC BRAIN (Formatted Getter)
   /// This fixes the Remote vs On-Site display issue for Freelancers.
+  /// 3. THE LOGIC BRAIN (Formatted Getter)
+  /// Now it FILTERS so On-site tasks don't show up where they don't belong.
   List<Map<String, dynamic>> get availableTasks {
-    return _tasks.map((task) {
-      
-      // 1. Get raw values and clean them
-      String rawType = (task['service_type'] ?? '').toString().toLowerCase().trim();
-      String location = (task['location_address'] ?? '').toString().trim();
-      (task['service_type_display'] ?? '').toString();
+    return _tasks
+        .map((task) {
+          // Keep your existing cleaning logic
+          String rawType = (task['service_type'] ?? '').toString().toLowerCase().trim();
+          String location = (task['location_address'] ?? '').toString().trim();
 
-      // 2. Strong Logic Check
-      // A task is On-Site if: 
-      // - The server explicitly says 'on_site' 
-      // - OR there is a real address that isn't 'None', 'null', etc.
-      bool isOnSite = rawType == 'on_site' || 
-                     (location.isNotEmpty && 
-                      location.toLowerCase() != 'none' && 
-                      location.toLowerCase() != 'null' && 
-                      location != 'No location provided' &&
-                      location != 'Remote' &&
-                      location != 'Remote Task');
+          bool isOnSite = rawType == 'on_site' || 
+                         (location.isNotEmpty && 
+                          location.toLowerCase() != 'none' && 
+                          location.toLowerCase() != 'null' && 
+                          location != 'No location provided' &&
+                          location != 'Remote' &&
+                          location != 'Remote Task');
 
-      // 3. Determine Clean Strings
-      String cleanDisplayType = isOnSite ? 'On-Site' : 'Remote';
-      String cleanLocation = isOnSite ? location : 'Remote / Online';
+          String cleanDisplayType = isOnSite ? 'On-Site' : 'Remote';
+          String cleanLocation = isOnSite ? location : 'Remote / Online';
 
-      // 4. Return the cleaned object
-      return {
-        'id': task['task_id'] ?? task['id'],
-        'title': task['title'] ?? 'Untitled Task',
-        'description': task['description'] ?? '',
-        'employer': task['employer'] ?? {},
-        'is_taken': task['is_taken'] ?? false,
-        'has_contract': task['has_contract'] ?? false,
-        'assigned_freelancer': task['assigned_freelancer'],
-        
-        // HYBRID FIELDS (Fixed)
-        'service_type': isOnSite ? 'on_site' : 'remote',
-        'display_type': cleanDisplayType,        // USE THIS IN UI FOR LABEL
-        'location_address': cleanLocation,       // USE THIS IN UI FOR LOCATION TEXT
-        
-        'budget': task['budget'] ?? '0.00',
-        'payment_type': task['payment_type'] ?? 'fixed',
-        'is_urgent': task['is_urgent'] ?? false,
-        'skills': task['required_skills'] ?? task['skills'] ?? '',
-        'deadline': task['deadline'],
-      };
-    }).toList();
+          return {
+            ...task, // Keep original data
+            'id': task['task_id'] ?? task['id'],
+            'service_type': isOnSite ? 'on_site' : 'remote',
+            'display_type': cleanDisplayType,
+            'location_address': cleanLocation,
+          };
+        })
+        // THIS IS THE FIX: Only return Remote tasks in this list
+        .where((task) => task['service_type'] == 'remote') 
+        .toList();
   }
 
   /// 4. HELPER METHODS

@@ -127,15 +127,51 @@ class DashboardProvider with ChangeNotifier {
   }
 
   String _determineTaskStatus(Contract contract) {
-    if (!contract.isActive) return 'Cancelled';
-    if (contract.isFullyAccepted) {
-      if (contract.endDate != null) return 'Completed';
-      return 'In Progress';
+  if (!contract.isActive) return 'Cancelled';
+  
+  // Use the actual task status from the backend if available
+  final backendStatus = (contract.task['status'] ?? '').toString().toLowerCase();
+  if (backendStatus == 'completed') return 'Completed';
+  if (backendStatus == 'awaiting_confirmation') return 'Submitted';
+
+  if (contract.isFullyAccepted) {
+    return 'In Progress'; // Don't look at the endDate here!
+  }
+  
+  if (contract.employerAccepted && !contract.freelancerAccepted) {
+    return 'Pending Acceptance';
+  }
+  return contract.status;
+}
+bool canSubmitTask(String taskId) {
+    // 1. Find the task in our local list
+    final task = getTaskById(taskId);
+    if (task == null) {
+      print('DEBUG: Task $taskId not found in activeTasks');
+      return false;
     }
-    if (contract.employerAccepted && !contract.freelancerAccepted) {
-      return 'Pending Acceptance';
-    }
-    return contract.status;
+
+    // 2. Extract and normalize the status and service type
+    final status = (task['status'] ?? '').toString().toLowerCase();
+    final serviceType = (task['service_type'] ?? 'remote').toString().toLowerCase();
+    
+    // 3. Logic: 
+    // - Must be a REMOTE task
+    // - Status must be 'in progress', 'active', 'accepted', or 'assigned'
+    bool isRemote = serviceType.contains('remote');
+    bool isWorkable = status.contains('progress') || 
+                      status.contains('active') || 
+                      status.contains('accepted') || 
+                      status.contains('assigned');
+    
+    // 4. Block already submitted or finished tasks
+    bool isFinished = status.contains('complete') || 
+                      status.contains('submitted') || 
+                      status.contains('confirmation');
+
+    print('DEBUG: Task $taskId | Status: $status | Remote: $isRemote | Allowed: ${isRemote && isWorkable && !isFinished}');
+
+    return isRemote && isWorkable && !isFinished;
   }
 
   void _calculateDashboardStats() {
@@ -197,23 +233,7 @@ class DashboardProvider with ChangeNotifier {
     return null;
   }
 
-  bool canSubmitTask(String taskId) {
-    final task = getTaskById(taskId);
-    if (task == null) return false;
-    
-    final status = (task['status']?.toString() ?? '').toLowerCase();
-    final isAccepted = task['is_accepted'] == true || 
-                      task['is_fully_accepted'] == true;
-    final isActive = task['is_active'] != false;
-    
-    return isActive && 
-           isAccepted &&
-           (status.contains('progress') || 
-            status.contains('active')) &&
-           !status.contains('complete') &&
-           !status.contains('cancelled');
-  }
-
+ 
   Map<String, dynamic>? getTaskDetailsForSubmission(String taskId) {
     final task = getTaskById(taskId);
     if (task == null) return null;

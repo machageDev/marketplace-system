@@ -2479,277 +2479,60 @@ Future<List<dynamic>> getFreelancerReceivedRatings(int freelancerId) async {
       return null;
     }
   }
-    Future<Map<String, dynamic>> submitTask({
-    required String taskId,
-    required String title,
-    required String description,
-    String? repoUrl,
-    String? commitHash,
-    String? stagingUrl,
-    String? liveDemoUrl,
-    String? apkUrl,
-    String? testflightLink,
-    String? adminUsername,
-    String? adminPassword,
-    String? accessInstructions,
-    String? deploymentInstructions,
-    String? testInstructions,
-    String? releaseNotes,
-    String? revisionNotes,
-    required bool checklistTestsPassing,
-    required bool checklistDeployedStaging,
-    required bool checklistDocumentation,
-    required bool checklistNoCriticalBugs,
-    PlatformFile? zipFile,
-    PlatformFile? screenshots,
-    PlatformFile? videoDemo,
-  }) async {
-    try {
-      // Get authentication token
-      final String? token = await _getUserToken();
-      
-      if (token == null) {
-        throw Exception('No authentication token found. Please log in.');
-      }
+  Future<Map<String, dynamic>> submitTask({
+  required String taskId,
+  required String title,
+  required String description,
+  String? url,
+  PlatformFile? zipFile,
+  PlatformFile? document,
+}) async {
+  try {
+    final String? token = await _getUserToken();
+    if (token == null) throw Exception('Please log in first.');
 
-      // Validate taskId is not empty
-      if (taskId.isEmpty) {
-        throw Exception('Task ID cannot be empty');
-      }
+    // Endpoint must match your simplified Django URL
+    var uri = Uri.parse("$baseUrl/api/submissions/create/");
+    var request = http.MultipartRequest("POST", uri);
 
-      // CORRECTED URL - Must match Django endpoint
-      var uri = Uri.parse("$baseUrl/api/submissions/create/");
-      
-      var request = http.MultipartRequest("POST", uri);
-
-      // ========== FORM FIELDS - FIXED ==========
-      // Django expects 'task_id' (not 'task')
-      request.fields['task_id'] = taskId.toString();
-      request.fields['title'] = title;
-      request.fields['description'] = description;
-      
-      // Optional URL fields
-      if (repoUrl != null && repoUrl.isNotEmpty) {
-        request.fields['repo_url'] = repoUrl;
-      }
-      if (commitHash != null && commitHash.isNotEmpty) {
-        request.fields['commit_hash'] = commitHash;
-      }
-      if (stagingUrl != null && stagingUrl.isNotEmpty) {
-        request.fields['staging_url'] = stagingUrl;
-      }
-      if (liveDemoUrl != null && liveDemoUrl.isNotEmpty) {
-        request.fields['live_demo_url'] = liveDemoUrl;
-      }
-      if (apkUrl != null && apkUrl.isNotEmpty) {
-        request.fields['apk_download_url'] = apkUrl;
-      }
-      if (testflightLink != null && testflightLink.isNotEmpty) {
-        request.fields['testflight_link'] = testflightLink;
-      }
-      
-      // Admin credentials (optional)
-      if (adminUsername != null && adminUsername.isNotEmpty) {
-        request.fields['admin_username'] = adminUsername;
-      }
-      if (adminPassword != null && adminPassword.isNotEmpty) {
-        request.fields['admin_password'] = adminPassword;
-      }
-      
-      // Instructions (optional)
-      if (accessInstructions != null && accessInstructions.isNotEmpty) {
-        request.fields['access_instructions'] = accessInstructions;
-      }
-      if (deploymentInstructions != null && deploymentInstructions.isNotEmpty) {
-        request.fields['deployment_instructions'] = deploymentInstructions;
-      }
-      if (testInstructions != null && testInstructions.isNotEmpty) {
-        request.fields['test_instructions'] = testInstructions;
-      }
-      
-      // Notes (optional)
-      if (releaseNotes != null && releaseNotes.isNotEmpty) {
-        request.fields['release_notes'] = releaseNotes;
-      }
-      if (revisionNotes != null && revisionNotes.isNotEmpty) {
-        request.fields['revision_notes'] = revisionNotes;
-      }
-
-      // Checklist fields - must be boolean strings
-      request.fields['checklist_tests_passing'] = checklistTestsPassing.toString();
-      request.fields['checklist_deployed_staging'] = checklistDeployedStaging.toString();
-      request.fields['checklist_documentation'] = checklistDocumentation.toString();
-      request.fields['checklist_no_critical_bugs'] = checklistNoCriticalBugs.toString();
-
-      // ========== FILE UPLOADS ==========
-      if (zipFile != null && zipFile.path != null) {
-        try {
-          final file = File(zipFile.path!);
-          if (await file.exists()) {
-            request.files.add(await http.MultipartFile.fromPath(
-              'zip_file',
-              zipFile.path!
-            ));
-          }
-        } catch (e) {
-          print('Warning: Failed to attach zip file: $e');
-        }
-      }
-      
-      if (screenshots != null && screenshots.path != null) {
-        try {
-          final file = File(screenshots.path!);
-          if (await file.exists()) {
-            request.files.add(await http.MultipartFile.fromPath(
-              'screenshots',
-              screenshots.path!
-            ));
-          }
-        } catch (e) {
-          print('Warning: Failed to attach screenshots: $e');
-        }
-      }
-      
-      if (videoDemo != null && videoDemo.path != null) {
-        try {
-          final file = File(videoDemo.path!);
-          if (await file.exists()) {
-            request.files.add(await http.MultipartFile.fromPath(
-              'video_demo',
-              videoDemo.path!
-            ));
-          }
-        } catch (e) {
-          print('Warning: Failed to attach video demo: $e');
-        }
-      }
-
-      // ========== AUTHENTICATION ==========
-      request.headers['Authorization'] = 'Bearer $token';
-      request.headers['Accept'] = 'application/json';
-
-      print('=================================');
-      print('SUBMITTING TASK TO DJANGO');
-      print('=================================');
-      print('Endpoint: ${uri.toString()}');
-      print('Task ID: $taskId');
-      print('Title: $title');
-      print('Description length: ${description.length}');
-      print('Has files: ${zipFile != null || screenshots != null || videoDemo != null}');
-      print('Authorization: Bearer ${token.length > 20 ? '${token.substring(0, 20)}...' : token}');
-      
-      // Log all fields being sent
-      print('\nFields being sent:');
-      request.fields.forEach((key, value) {
-        print('  $key: ${value.length > 50 ? '${value.substring(0, 50)}...' : value}');
-      });
-      
-      if (request.files.isNotEmpty) {
-        print('\nFiles being sent:');
-        for (var file in request.files) {
-          print('  ${file.field}: ${file.filename}');
-        }
-      }
-
-      // ========== SEND REQUEST ==========
-      var streamedResponse = await request.send();
-      var response = await http.Response.fromStream(streamedResponse);
-
-      print('\n=================================');
-      print('RESPONSE FROM DJANGO');
-      print('=================================');
-      print('Status Code: ${response.statusCode}');
-      print('Response Body: ${response.body}');
-
-      // ========== HANDLE RESPONSE ==========
-      if (response.statusCode == 201 || response.statusCode == 200) {
-        // Success - submission created
-        final responseData = json.decode(response.body);
-        print('✅ Submission successful!');
-        
-        if (responseData['success'] == true) {
-          return {
-            'success': true,
-            'message': responseData['message'] ?? 'Submission created successfully',
-            'submission_id': responseData['submission_id'],
-            'data': responseData
-          };
-        } else {
-          throw Exception(responseData['error'] ?? 'Submission failed');
-        }
-        
-      } else if (response.statusCode == 400) {
-        // Validation errors
-        final errorData = json.decode(response.body);
-        print('❌ Validation failed');
-        
-        String errorMessage = 'Validation failed';
-        if (errorData is Map) {
-          if (errorData.containsKey('error')) {
-            errorMessage = errorData['error'];
-          } else if (errorData.containsKey('details')) {
-            errorMessage = 'Validation errors: ${errorData['details']}';
-          } else if (errorData.containsKey('message')) {
-            errorMessage = errorData['message'];
-          } else {
-            // Try to extract field-specific errors
-            errorMessage = '';
-            errorData.forEach((key, value) {
-              if (value is List && value.isNotEmpty) {
-                errorMessage += '$key: ${value[0]}\n';
-              } else if (value is String) {
-                errorMessage += '$key: $value\n';
-              }
-            });
-            errorMessage = errorMessage.trim();
-            if (errorMessage.isEmpty) {
-              errorMessage = response.body;
-            }
-          }
-        }
-        
-        throw Exception(errorMessage);
-        
-      } else if (response.statusCode == 403) {
-        // Permission denied
-        print('❌ Permission denied');
-        throw Exception('Permission denied. Please check if you have an active contract for this task.');
-        
-      } else if (response.statusCode == 404) {
-        // Task not found
-        print('❌ Task not found');
-        throw Exception('Task not found or you are not assigned to it.');
-        
-      } else if (response.statusCode == 401) {
-        // Unauthorized
-        print('❌ Unauthorized - token may be invalid');
-        throw Exception('Session expired. Please log in again.');
-        
-      } else {
-        // Other errors
-        print('❌ Server error: ${response.statusCode}');
-        throw Exception('Failed to submit task. Server returned ${response.statusCode}');
-      }
-      
-    } catch (e) {
-      print('\n=================================');
-      print('EXCEPTION IN submitTask()');
-      print('=================================');
-      print('Error: $e');
-      print('Error type: ${e.runtimeType}');
-      
-      // Rethrow with clearer message
-      if (e is http.ClientException) {
-        throw Exception('Network error: Please check your internet connection');
-      } else if (e is FormatException) {
-        throw Exception('Invalid server response');
-      } else if (e is SocketException) {
-        throw Exception('Cannot connect to server. Please check your internet connection.');
-      } else {
-        throw Exception('Submission failed: $e');
-      }
+    // 1. Text Fields
+    request.fields['task_id'] = taskId;
+    request.fields['title'] = title;
+    request.fields['description'] = description;
+    
+    if (url != null && url.isNotEmpty) {
+      request.fields['url'] = url;
     }
+
+    // 2. The 2 File Fields
+    if (zipFile != null && zipFile.path != null) {
+      request.files.add(await http.MultipartFile.fromPath('zip_file', zipFile.path!));
+    }
+    
+    if (document != null && document.path != null) {
+      request.files.add(await http.MultipartFile.fromPath('document', document.path!));
+    }
+
+    // 3. Headers
+    request.headers['Authorization'] = 'Bearer $token';
+    request.headers['Accept'] = 'application/json';
+
+    // 4. Send & Handle
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 201 || response.statusCode == 200) {
+      final data = json.decode(response.body);
+      return {'success': true, 'data': data};
+    } else {
+      final errorData = json.decode(response.body);
+      throw Exception(errorData['error'] ?? errorData['detail'] ?? 'Submission failed');
+    }
+  } catch (e) {
+    throw Exception(e.toString());
   }
+}
+    
   // In your ApiService class, add this ONE method:
 Future<List<Map<String, dynamic>>> getAssignedTasks() async {
   try {

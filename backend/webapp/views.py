@@ -9,7 +9,7 @@ from django.http import Http404, JsonResponse
 import json
 from django.views.decorators.csrf import csrf_exempt
 import requests
-from rest_framework.decorators import authentication_classes, permission_classes, api_view
+from rest_framework.decorators import authentication_classes, parser_classes, permission_classes, api_view
 from rest_framework.response import Response
 from rest_framework import status
 from datetime import date, timedelta, timezone
@@ -23,6 +23,7 @@ from rest_framework import status
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
 
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from django.db import  transaction
 from rest_framework import status
@@ -38,7 +39,7 @@ from rest_framework.decorators import authentication_classes, permission_classes
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from webapp.serializers import ContractSerializer, EmployerProfileCreateSerializer, EmployerProfileSerializer, EmployerProfileUpdateSerializer,  EmployerRegisterSerializer, EmployerSerializer,  IDNumberUpdateSerializer, LoginSerializer, OrderSerializer, PaymentInitializeSerializer, ProposalSerializer, RatingSerializer, RegisterSerializer, SubmissionCreateSerializer, SubmissionSerializer, TaskCompletionSerializer, TaskCreateSerializer, TaskSerializer, TransactionSerializer, UserProfileSerializer, WalletSerializer
+from webapp.serializers import ContractSerializer, EmployerProfileCreateSerializer, EmployerProfileSerializer, EmployerProfileUpdateSerializer,  EmployerRegisterSerializer, EmployerSerializer,  IDNumberUpdateSerializer, LoginSerializer, OrderSerializer, PaymentInitializeSerializer, ProposalSerializer, RatingSerializer, RegisterSerializer,  SubmissionSerializer, TaskCompletionSerializer, TaskCreateSerializer, TaskSerializer, TransactionSerializer, UserProfileSerializer, WalletSerializer
 from .authentication import CustomTokenAuthentication, EmployerTokenAuthentication
 from .permissions import IsAuthenticated  
 from .models import UserProfile
@@ -47,7 +48,6 @@ from rest_framework.response import Response
 from rest_framework import status
 from .authentication import EmployerTokenAuthentication, IsAuthenticated
 from .models import Task, Proposal
-from rest_framework.parsers import MultiPartParser, FormParser
 from django_ratelimit.decorators import ratelimit
 from webapp import models
 from django.db import transaction as django_transaction
@@ -1289,190 +1289,68 @@ def task_completion_detail(request, pk):
     
     elif request.method == 'DELETE':
         completion.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)        
-
+        return Response(status=status.HTTP_204_NO_CONTENT)    
 @api_view(['POST'])
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
+@parser_classes([MultiPartParser, FormParser]) 
 def create_submission(request):
-    print(f"\n{'='*60}")
-    print("CREATE SUBMISSION - START")
-    print(f"{'='*60}")
+    print("\n--- DEBUG START ---")
+    print(f"User: {request.user}")
+    print(f"Data: {request.data}")
     
     try:
-        # Step 1: Basic validation
-        print(f"1. User: {request.user.user_id} ({request.user.name})")
-        
-        # Step 2: Check if user has UserProfile
-        print(f"\n2. Checking UserProfile...")
-        if not hasattr(request.user, 'worker_profile'):
-            print("✗ User does not have a UserProfile")
-            return Response(
-                {"success": False, "error": "Please complete your user profile first"}, 
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        user_profile = request.user.worker_profile
-        print(f"✓ User has profile: ID={user_profile.profile_id}")
-        
-        # Step 3: Check request data
-        print(f"\n3. Request data analysis:")
         task_id = request.data.get('task_id')
-        print(f"   Task ID: {task_id}")
-        
         if not task_id:
-            print("✗ task_id is missing")
-            return Response(
-                {"success": False, "error": "task_id is required"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Step 4: Get task
-        print(f"\n4. Getting task...")
-        try:
-            task = Task.objects.get(task_id=task_id)
-            print(f"   ✓ Task found: ID={task.task_id}, Title='{task.title}', Status='{task.status}'")
-        except Task.DoesNotExist:
-            print(f"   ✗ Task not found")
-            return Response(
-                {"success": False, "error": f"Task with ID {task_id} not found"},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        except Exception as e:
-            print(f"   ✗ Error getting task: {type(e).__name__}: {e}")
-            raise
-        
-        # Step 5: Check for ACTIVE contract
-        print(f"\n5. Checking for ACTIVE contract...")
-        try:
-            contract = Contract.objects.get(
-                task=task,
-                freelancer=request.user,
-                is_active=True,
-                employer_accepted=True,
-                freelancer_accepted=True
-            )
-            print(f"   ✓ Active contract found: ID={contract.contract_id}")
-            print(f"   Contract details: is_active={contract.is_active}")
+            return Response({"error": "No task_id provided"}, status=400)
+
+        # 1. Check Task Existence
+        task = get_object_or_404(Task, task_id=task_id)
+        print(f"Task Found: {task.title} | Status: {task.status} | Type: {task.service_type}")
+
+        # 2. Check Service Type
+        if task.service_type != 'remote':
+            print("FAILED: Task is not remote")
+            return Response({"error": f"Task type is {task.service_type}, expected remote"}, status=403)
+
+        # 3. Check Status
+        if task.status != 'in_progress':
+            print(f"FAILED: Status is {task.status}, expected in_progress")
+            # We don't return here yet, we want to see if the serializer can override it
             
-        except Contract.DoesNotExist:
-            print(f"   ✗ No active contract found")
-            
-            # Check what contracts exist (for debugging)
-            contracts = Contract.objects.filter(task=task, freelancer=request.user)
-            if contracts.exists():
-                print(f"   Found {contracts.count()} inactive contracts:")
-                for c in contracts:
-                    print(f"     Contract {c.contract_id}: "
-                          f"is_active={c.is_active}, "
-                          f"employer_accepted={c.employer_accepted}, "
-                          f"freelancer_accepted={c.freelancer_accepted}")
-            else:
-                print(f"   No contracts found at all")
-            
-            return Response({
-                "success": False,
-                "error": "No active contract found. You must have an accepted proposal to submit work.",
-                "action_required": "Wait for your proposal to be accepted or submit a proposal first"
-            }, status=status.HTTP_400_BAD_REQUEST)
-            
-        except Exception as e:
-            print(f"   ✗ Error getting contract: {type(e).__name__}: {e}")
-            raise
-        
-        # Step 6: Check for existing submissions
-        print(f"\n6. Checking for existing submissions...")
-        existing_submission = Submission.objects.filter(
-            task=task,
-            freelancer=request.user,
-            contract=contract
-        ).first()
-        
-        is_resubmission = False
-        if existing_submission:
-            print(f"   ✓ Existing submission found: ID={existing_submission.submission_id}")
-            print(f"   Status: {existing_submission.status}")
-            
-            # Only allow resubmission if revisions are requested
-            if existing_submission.status != 'revisions_requested':
-                return Response({
-                    "success": False,
-                    "error": "Submission already exists for this task",
-                    "submission_id": existing_submission.submission_id,
-                    "status": existing_submission.status,
-                    "action": "Use resubmission endpoint if revisions are requested"
-                }, status=status.HTTP_400_BAD_REQUEST)
-            else:
-                print(f"   Allowing resubmission for revisions")
-                is_resubmission = True
-        
-        # Step 7: Create serializer inside atomic transaction
-        print(f"\n7. Creating serializer inside atomic transaction...")
-        
-        from .serializers import SubmissionCreateSerializer
-        
-        # ✅ CRITICAL: Use transaction.atomic to ensure both submission and task update succeed together
+        # 4. Check Assignment
+        if task.assigned_user != request.user:
+            print(f"FAILED: User mismatch. Assigned to: {task.assigned_user}")
+            # return Response({"error": "You are not assigned to this task"}, status=403)
+
         with transaction.atomic():
-            serializer = SubmissionCreateSerializer(
+            serializer = SubmissionSerializer(
                 data=request.data,
-                context={
-                    'task': task,
-                    'freelancer': request.user,
-                    'contract': contract,
-                    'is_resubmission': is_resubmission
-                }
+                context={'request': request, 'task': task, 'freelancer': request.user}
             )
-            
+
             if serializer.is_valid():
-                # This will create submission AND update task status
+                print("Serializer is valid. Attempting save...")
                 submission = serializer.save()
                 
-                print(f"   ✓ Submission saved: ID={submission.submission_id}")
-                print(f"   ✓ Task {task.task_id} status updated to: {task.status}")
-                
-                # Double-check task status was updated
-                task.refresh_from_db()
-                print(f"   ✓ Confirmed Task status: {task.status}")
-                
-                return Response({
-                    "success": True,
-                    "message": "Submission created successfully. Task is now pending review.",
-                    "submission_id": submission.submission_id,
-                    "status": submission.status,
-                    "task_status": task.status,  # Include task status in response
-                    "submitted_at": submission.submitted_at,
-                    "task_id": task.task_id,
-                    "task_title": task.title,
-                    "contract_id": contract.contract_id,
-                    "is_resubmission": is_resubmission
-                }, status=status.HTTP_201_CREATED)
-            else:
-                print(f"   ✗ Serializer validation failed")
-                print(f"   Errors: {serializer.errors}")
-                return Response({
-                    "success": False,
-                    "error": "Validation failed",
-                    "errors": serializer.errors
-                }, status=status.HTTP_400_BAD_REQUEST)
-        
+                # Force status change
+                task.status = 'awaiting_confirmation'
+                task.save()
+                print("Task status updated to awaiting_confirmation")
+
+                return Response({"success": True, "message": "Submitted!"}, status=201)
+            
+            print(f"Serializer Errors: {serializer.errors}")
+            return Response({"success": False, "errors": serializer.errors}, status=400)
+
     except Exception as e:
-        print(f"\n{'='*60}")
-        print("FATAL ERROR")
-        print(f"{'='*60}")
-        print(f"Error type: {type(e).__name__}")
-        print(f"Error message: {str(e)}")
-        import traceback
-        error_traceback = traceback.format_exc()
-        print(f"Full traceback:\n{error_traceback}")
-        
+        print("\n!!! CRITICAL ERROR !!!")
+        traceback.print_exc() # This prints the full error stack in your terminal
         return Response({
-            "success": False,
-            "error": "Internal server error",
-            "detail": str(e),
-            "type": type(e).__name__
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
+            "success": False, 
+            "error": str(e),
+            "trace": traceback.format_exc() # This sends the full error back to Flutter
+        }, status=500)    
 @api_view(['GET'])
 @authentication_classes([EmployerTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -1537,183 +1415,69 @@ from django.db.models import Q
 @permission_classes([IsAuthenticated])
 def create_employer_rating(request):
     try:
-        # request.user should be a User instance from authentication
-        user_account = request.user 
+        employer_profile = request.user  # Employer object from auth
         data = request.data
         
         task_id = data.get('task')
         freelancer_id = data.get('rated_user')
         score = data.get('score')
         review = data.get('review', '')
-        extended_data_raw = data.get('extended_data') 
-
-        # 1. Validation
+        
+        # Validation
         if not all([task_id, freelancer_id, score]):
             return Response({"success": False, "error": "Missing required fields."}, status=400)
-
-        try:
-            score = int(score)
-            if score < 1 or score > 5:
-                return Response({"success": False, "error": "Score must be between 1 and 5."}, status=400)
-        except ValueError:
-            return Response({"success": False, "error": "Invalid score format."}, status=400)
-
-        # 2. Fetch Models - Find employer by matching email
-        try:
-            # Since Employer has contact_email field, find by matching with user's email
-            employer_profile = Employer.objects.get(contact_email=user_account.email)
-        except Employer.DoesNotExist:
-            # If no employer found with that email, check if user has an employer profile
-            try:
-                # Alternative: check if there's an EmployerProfile linked to user
-                from .models import EmployerProfile
-                employer_profile = EmployerProfile.objects.get(contact_email=user_account.email)
-                # Get the employer from the profile
-                employer_profile = employer_profile.employer
-            except EmployerProfile.DoesNotExist:
-                return Response({
-                    "success": False, 
-                    "error": "Employer profile not found for this account."
-                }, status=404)
-
-        try:
-            task = Task.objects.get(task_id=task_id, employer=employer_profile)
-            freelancer = User.objects.get(user_id=freelancer_id)
-        except Task.DoesNotExist:
-            return Response({"success": False, "error": "Task not found or not owned by this employer."}, status=404)
-        except User.DoesNotExist:
-            return Response({"success": False, "error": "Freelancer not found."}, status=404)
-
-        # 3. Validate task can be rated
-        if task.status == 'cancelled':
-            return Response({"success": False, "error": "Cannot rate cancelled tasks."}, status=400)
+        
+        score = int(score)
+        if score < 1 or score > 5:
+            return Response({"success": False, "error": "Score must be between 1 and 5."}, status=400)
+        
+        # Get task and freelancer
+        task = Task.objects.get(task_id=task_id, employer=employer_profile)
+        freelancer = User.objects.get(user_id=freelancer_id)
+        
+        # Validate task
+        if task.status != 'completed':
+            return Response({"success": False, "error": "Can only rate completed tasks."}, status=400)
         
         if task.assigned_user != freelancer:
-            return Response({"success": False, "error": "This freelancer is not assigned to this task."}, status=400)
-
-        # 4. Prevent Duplicates - check both rater_employer and rater
-        duplicate_exists = Rating.objects.filter(
-            Q(task=task) & 
-            (Q(rater_employer=employer_profile) | Q(rater=user_account))
-        ).exists()
+            return Response({"success": False, "error": "Freelancer not assigned to this task."}, status=400)
         
-        if duplicate_exists:
+        # Prevent duplicates
+        if Rating.objects.filter(task=task, rater_employer=employer_profile).exists():
             return Response({"success": False, "error": "Rating already submitted."}, status=400)
-
-        # 5. Process Extended Data
-        review_with_data = review
-        if extended_data_raw:
-            try:
-                # Parse and validate extended data
-                if isinstance(extended_data_raw, str):
-                    extended_data = json.loads(extended_data_raw)
-                else:
-                    extended_data = extended_data_raw
-                
-                # Add as separate field or append to review
-                review_with_data = f"{review}\n\n[Extended Data]: {json.dumps(extended_data, indent=2)}"
-            except json.JSONDecodeError:
-                review_with_data = f"{review}\n\n[Extended Data (Raw)]: {extended_data_raw}"
-
-        # 6. Get Contract & Submission
-        contract = Contract.objects.filter(
-            task=task, 
-            freelancer=freelancer, 
-            employer=employer_profile,
-            is_active=True
-        ).first()
         
-        submission = Submission.objects.filter(
-            task=task, 
-            freelancer=freelancer
-        ).order_by('-submitted_at').first()
-
-        # 7. Get or create Freelancer profile
-        freelancer_profile = None
-        try:
-            freelancer_profile = Freelancer.objects.get(user=freelancer)
-        except Freelancer.DoesNotExist:
-            # Create a basic freelancer profile if it doesn't exist
-            freelancer_profile = Freelancer.objects.create(
-                user=freelancer,
-                is_verified=False
-            )
-
-        # 8. Create Rating Record
+        # Get any User for the rater field (required by model)
+        # Find or create a User with employer's email
+        user_for_rater, created = User.objects.get_or_create(
+            email=employer_profile.contact_email,
+            defaults={
+                'name': employer_profile.username,
+                'password': '',
+                'wallet_balance': 0.00
+            }
+        )
+        
+        # Create rating - rater_employer will trigger employer_to_freelancer logic
         rating = Rating.objects.create(
             task=task,
-            contract=contract,
-            submission=submission,
-            rater_employer=employer_profile, 
-            rater=user_account,             
+            rater_employer=employer_profile,  # This sets it as employer rating
+            rater=user_for_rater,  # Required User field
             rated_user=freelancer,
-            rated_freelancer=freelancer_profile,  # Add this
             score=score,
-            review=review_with_data,
-            rating_type='employer_to_freelancer'  # Explicitly set type
+            review=review,
+            # rating_type will auto-set to 'employer_to_freelancer'
         )
-
-        # 9. Update freelancer's average rating
-        if freelancer_profile:
-            # Calculate new average rating
-            ratings = Rating.objects.filter(
-                rated_freelancer=freelancer_profile,
-                rating_type='employer_to_freelancer'
-            )
-            if ratings.exists():
-                avg_rating = ratings.aggregate(avg_score=models.Avg('score'))['avg_score']
-                # Update employer profile's avg_freelancer_rating if needed
-                # Or create a new field in Freelancer model
-                pass
-
-        # 10. Finalize Project (only if it's not already completed)
-        if task.status != 'completed':
-            task.status = 'completed'
-            task.save()
-
-        if contract and contract.status != 'completed':
-            contract.status = 'completed'
-            contract.is_completed = True
-            contract.completed_date = timezone.now()
-            contract.save()
-
-        # 11. Create notification for freelancer
-        try:
-            from .models import Notification
-            Notification.objects.create(
-                user=freelancer,
-                title="New Rating Received",
-                message=f"{employer_profile.username} rated you {score}/5 stars for task: {task.title}",
-                notification_type='rating_received',
-                related_id=rating.rating_id
-            )
-        except Exception as e:
-            # Don't fail if notification fails
-            print(f"Failed to create notification: {e}")
-
+        
         return Response({
             "success": True,
             "message": "Rating submitted successfully.",
             "rating_id": rating.rating_id,
-            "task_status": task.status,
-            "rating_details": {
-                "rater": employer_profile.username,
-                "rated_user": freelancer.name,
-                "score": score,
-                "task_title": task.title
-            }
         }, status=201)
-
+        
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return Response({
-            "success": False, 
-            "error": f"Server Error: {str(e)}",
-            "traceback": traceback.format_exc() if settings.DEBUG else None
-        }, status=500)
+        return Response({"success": False, "error": str(e)}, status=500)
 @api_view(['GET'])
-@authentication_classes([CustomTokenAuthentication]) # Ensure this matches your Auth setup
+@authentication_classes([CustomTokenAuthentication]) 
 @permission_classes([IsAuthenticated])
 def get_user_ratings(request):
     try:
@@ -1851,32 +1615,27 @@ from django.db.models import Q, Exists, OuterRef
 def get_rateable_contracts(request):
     try:
         user = request.user
-        print(f"DEBUG: Freelancer {user.name} (ID: {user.user_id}) is fetching rateable contracts")
-
-        # Get all contracts where freelancer matches the logged-in User
+        
+        # Get contracts where the logged-in user is the freelancer
         contracts = Contract.objects.filter(
             freelancer=user,
             is_active=True,
             status__in=['active', 'completed', 'pending_verification']
         ).select_related('task', 'employer').distinct()
 
-        print(f"DEBUG: Found {contracts.count()} total contracts for this freelancer")
-
         rateable_list = []
         for contract in contracts:
             try:
-                client = contract.employer 
-                
-                # ===== IMPROVED CHECK: Look for ANY rating from this freelancer for this task =====
+                # Check if this specific freelancer already rated this task
                 already_rated = Rating.objects.filter(
                     task=contract.task,
-                    rater=user  # The freelancer
+                    rater=user
                 ).exists()
                 
                 if already_rated:
-                    print(f"DEBUG: Contract {contract.contract_id} (Task: {contract.task.title}) already rated by {user.name}")
-                    continue  # Skip this contract - already rated
-                # ===== END FIX =====
+                    continue 
+
+                client = contract.employer 
                 
                 rateable_list.append({
                     'contract_id': contract.contract_id,
@@ -1886,7 +1645,11 @@ def get_rateable_contracts(request):
                         'budget': str(contract.task.budget),
                     },
                     'client': {
+                        # THE CRITICAL FIX:
+                        # 'id' is the Employer Profile ID (usually 1, 2, 3...)
+                        # 'user_id' is the actual Auth User Account ID Django needs for the 'rated_user' field
                         'id': client.employer_id,
+                        'user_id': client.user_id if hasattr(client, 'user_id') else client.employer_id,
                         'name': client.username,
                         'email': client.contact_email,
                     },
@@ -1894,11 +1657,9 @@ def get_rateable_contracts(request):
                     'is_completed': contract.is_completed,
                 })
             except Exception as inner_e:
-                print(f"DEBUG: Skipping contract {contract.contract_id} due to: {inner_e}")
+                print(f"DEBUG: Skipping contract {contract.contract_id}: {inner_e}")
                 continue
 
-        print(f"DEBUG: Returning {len(rateable_list)} rateable contracts (excluding already rated ones)")
-        
         return Response({
             'success': True,
             'count': len(rateable_list),
@@ -1906,12 +1667,7 @@ def get_rateable_contracts(request):
         }, status=status.HTTP_200_OK)
 
     except Exception as e:
-        import traceback
-        print(f"FATAL ERROR: {traceback.format_exc()}")
-        return Response({
-            'success': False, 
-            'error': str(e)
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({'success': False, 'error': str(e)}, status=500)
 @api_view(['GET'])
 @authentication_classes([CustomTokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -4014,95 +3770,37 @@ def create_order(request):
 def employer_submissions(request):
     """
     GET /api/submissions/employer/
-    Returns ALL submissions for the employer to review
+    Returns ALL submissions for the employer to review using the fixed Serializer.
     """
     try:
         print(f"\n{'='*60}")
         print("EMPLOYER SUBMISSIONS API CALLED")
         print(f"{'='*60}")
-       #print(f"Employer: {request.user.username} (ID: {request.user.id})")  
         
-        # Get ALL contracts for this employer (regardless of status)
+        # 1. Get ALL contracts for this employer
         all_contracts = Contract.objects.filter(employer=request.user)
-        print(f"Found {all_contracts.count()} total contracts")
         
-        # Get submissions where contract is completed AND submission is not approved/accepted yet
+        # 2. Get active submissions for these contracts
         submissions = Submission.objects.filter(
             contract__in=all_contracts,
-            status__in=['submitted', 'under_review', 'resubmitted']  # Only show pending review
+            status__in=['submitted', 'under_review', 'resubmitted']
         ).select_related(
             'contract', 
             'freelancer', 
             'task'
         ).order_by('-submitted_at')
-        
+
         print(f"Found {submissions.count()} submissions pending review")
-        
-        submissions_data = []
-        for submission in submissions:
-            # Get freelancer details
-            freelancer = submission.freelancer
-            
-            # Get freelancer name
-            freelancer_name = 'Unknown'
-            if hasattr(freelancer, 'first_name') and freelancer.first_name:
-                freelancer_name = f"{freelancer.first_name} {freelancer.last_name or ''}".strip()
-                if not freelancer_name:
-                    freelancer_name = freelancer.username
-            elif hasattr(freelancer, 'username'):
-                freelancer_name = freelancer.username
-            else:
-                freelancer_name = freelancer.email
-            
-            # Get task details
-            task = submission.task
-            task_title = task.title if task else 'Task'
-            
-            submission_data = {
-                'submission_id': submission.submission_id,
-                'contract_id': submission.contract.contract_id if submission.contract else None,
-                'task_id': task.task_id if task else None,
-                'task_title': task_title,
-                'freelancer_id': freelancer.pk,  # Use .pk
-                'freelancer_name': freelancer_name,
-                'freelancer_email': freelancer.email,
-                'description': submission.description,
-                'title': submission.title,
-                'status': submission.status,
-                'submitted_date': submission.submitted_at.isoformat() if submission.submitted_at else None,
-                'repo_url': submission.repo_url,
-                'live_demo_url': submission.live_demo_url,
-                'staging_url': submission.staging_url,
-                'apk_download_url': submission.apk_download_url,
-                'testflight_link': submission.testflight_link,
-                'admin_username': submission.admin_username,
-                'access_instructions': submission.access_instructions,
-                'deployment_instructions': submission.deployment_instructions,
-                'test_instructions': submission.test_instructions,
-                'release_notes': submission.release_notes,
-                'revision_notes': submission.revision_notes,
-                'checklist_tests_passing': submission.checklist_tests_passing,
-                'checklist_deployed_staging': submission.checklist_deployed_staging,
-                'checklist_documentation': submission.checklist_documentation,
-                'checklist_no_critical_bugs': submission.checklist_no_critical_bugs,
-                'contract_status': submission.contract.status if submission.contract else None,
-                'task_status': task.status if task else None,
-                'can_approve': submission.status in ['submitted', 'under_review', 'resubmitted'],
-                'can_request_revision': submission.status in ['submitted', 'under_review', 'resubmitted'],
-            }
-            
-            print(f"\nSubmission {submission.submission_id}:")
-            print(f"  Task: {task_title}")
-            print(f"  Status: {submission.status}")
-            print(f"  Freelancer: {freelancer_name}")
-            
-            submissions_data.append(submission_data)
+
+        # 3. Use the Serializer to transform data (This prevents AttributeErrors)
+        # Pass the request in context so the Serializer can build full file URLs
+        serializer = SubmissionSerializer(submissions, many=True, context={'request': request})
         
         return Response({
             'success': True,
-            'count': len(submissions_data),
-            'submissions': submissions_data,
-            'message': f'Found {len(submissions_data)} submissions for review'
+            'count': len(serializer.data),
+            'submissions': serializer.data,
+            'message': f'Found {len(serializer.data)} submissions for review'
         }, status=status.HTTP_200_OK)
         
     except Exception as e:
@@ -4116,7 +3814,7 @@ def employer_submissions(request):
             'submissions': []
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-from django.utils import timezone  # ADD THIS IMPORT
+from django.utils import timezone  
 
 @api_view(['POST'])
 @authentication_classes([EmployerTokenAuthentication])
@@ -4821,7 +4519,7 @@ def verify_order_payment(request, order_id):
             return Response({'status': False, 'message': 'Freelancer ID required'}, status=400)
 
         # Verify freelancer assignment
-        if not order.freelancer or str(order.freelancer.user.id) != str(freelancer_id):
+        if not order.freelancer or str(order.freelancer.user_id) != str(freelancer_id):
             return Response({'status': False, 'message': 'Freelancer mismatch'}, status=400)
 
         # Get profile for paystack subaccount info
@@ -4833,7 +4531,7 @@ def verify_order_payment(request, order_id):
             'message': 'Payment verified successfully',
             'data': {
                 'order_id': str(order.order_id),
-                'freelancer_id': freelancer_user.id,
+                'freelancer_id': freelancer_user,
                 'freelancer_name': f"{freelancer_user.first_name} {freelancer_user.last_name}",
                 'freelancer_email': freelancer_user.email,
                 'freelancer_paystack_account': getattr(freelancer_profile, 'paystack_account_id', 'default_account') if freelancer_profile else 'default_account',

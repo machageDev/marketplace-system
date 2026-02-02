@@ -5,8 +5,6 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'dart:convert';
 
-
-
 enum ClientRatingCategory {
   communication,
   paymentPromptness,
@@ -196,44 +194,45 @@ class _RatingsScreenState extends State<RatingsScreen> {
       return 0;
     }
   }
+
   List<dynamic> _getFilteredRatings(RatingProvider provider) {
-  debugPrint('🎯 ====== GET FILTERED RATINGS CALLED ======');
-  debugPrint('🎯 Tab index: $_selectedTab (${_selectedTab == 0 ? 'Received' : 'Given'})');
-  
-  List<dynamic> result;
-  
-  if (_selectedTab == 0) {
-    // Received tab - ratings from clients to freelancer
-    result = provider.getRatingsReceived();
-    debugPrint('🎯 Received ratings count: ${result.length}');
-  } else {
-    // Given tab - use the NEW combined method
-    result = provider.getCombinedGivenRatings();
-    debugPrint('🎯 Combined given ratings count: ${result.length}');
-  }
-  
-  // Debug log the first few items
-  if (result.isNotEmpty) {
-    for (int i = 0; i < (result.length < 2 ? result.length : 2); i++) {
-      try {
-        if (result[i] is Map) {
-          final rating = _safeMapConvert(result[i] as Map);
-          debugPrint('🎯 Item $i - is_rateable_contract: ${rating['is_rateable_contract'] ?? false}');
-          debugPrint('🎯 Item $i - display_score: ${rating['display_score']}');
-          debugPrint('🎯 Item $i - display_name: ${rating['display_name']}');
-        }
-      } catch (e) {
-        debugPrint('❌ Error logging item $i: $e');
-      }
+    debugPrint('🎯 ====== GET FILTERED RATINGS CALLED ======');
+    debugPrint('🎯 Tab index: $_selectedTab (${_selectedTab == 0 ? 'Received' : 'Given'})');
+    
+    List<dynamic> result;
+    
+    if (_selectedTab == 0) {
+      // Received tab - ratings from clients to freelancer
+      result = provider.getRatingsReceived();
+      debugPrint('🎯 Received ratings count: ${result.length}');
+    } else {
+      // Given tab - use the NEW combined method
+      result = provider.getCombinedGivenRatings();
+      debugPrint('🎯 Combined given ratings count: ${result.length}');
     }
-  } else {
-    debugPrint('🎯 Result is empty!');
-  }
-  
-  debugPrint('🎯 ====== END GET FILTERED RATINGS ======\n');
-  
-  return result;
-} 
+    
+    // Debug log the first few items
+    if (result.isNotEmpty) {
+      for (int i = 0; i < (result.length < 2 ? result.length : 2); i++) {
+        try {
+          if (result[i] is Map) {
+            final rating = _safeMapConvert(result[i] as Map);
+            debugPrint('🎯 Item $i - is_rateable_contract: ${rating['is_rateable_contract'] ?? false}');
+            debugPrint('🎯 Item $i - display_score: ${rating['display_score']}');
+            debugPrint('🎯 Item $i - display_name: ${rating['display_name']}');
+          }
+        } catch (e) {
+          debugPrint('❌ Error logging item $i: $e');
+        }
+      }
+    } else {
+      debugPrint('🎯 Result is empty!');
+    }
+    
+    debugPrint('🎯 ====== END GET FILTERED RATINGS ======\n');
+    
+    return result;
+  } 
 
   double _extractScore(Map<String, dynamic> rating) {
     if (rating.isEmpty) return 0.0;
@@ -418,6 +417,7 @@ class _RatingsScreenState extends State<RatingsScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 40),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
             Icons.work_outline,
@@ -507,155 +507,160 @@ class _RatingsScreenState extends State<RatingsScreen> {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: Colors.grey[800]!),
           ),
-          child: Row(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: Color(0xFF2563EB).withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(
-                    color: Color(0xFF2563EB).withOpacity(0.4),
-                  ),
-                ),
-                child: Center(
-                  child: Text(
-                    username.isNotEmpty ? username[0].toUpperCase() : 'C',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF2563EB),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            username,
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.grey[800],
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            '#$contractId',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey[400],
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    
-                    Text(
-                      taskTitle,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.grey[300],
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: Color(0xFF2563EB).withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: Color(0xFF2563EB).withOpacity(0.4),
                       ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 8),
-                    
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: isCompleted 
-                                ? Colors.green.withOpacity(0.2)
-                                : Colors.orange.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                isCompleted ? Icons.check_circle : Icons.pending,
-                                size: 12,
-                                color: isCompleted ? Colors.green : Colors.orange,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                status,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: isCompleted ? Colors.green : Colors.orange,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
+                    child: Center(
+                      child: Text(
+                        username.isNotEmpty ? username[0].toUpperCase() : 'C',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF2563EB),
                         ),
-                        
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.attach_money_rounded,
-                                size: 12,
-                                color: Colors.blue,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                budgetText,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                username,
                                 style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.blue,
-                                  fontWeight: FontWeight.w500,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
-                            ],
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[800],
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                '#$contractId',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey[400],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        
+                        Text(
+                          taskTitle,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey[300],
                           ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 8),
+                        
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: isCompleted 
+                                    ? Colors.green.withOpacity(0.2)
+                                    : Colors.orange.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    isCompleted ? Icons.check_circle : Icons.pending,
+                                    size: 12,
+                                    color: isCompleted ? Colors.green : Colors.orange,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    status,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: isCompleted ? Colors.green : Colors.orange,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.attach_money_rounded,
+                                    size: 12,
+                                    color: Colors.blue,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    budgetText,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.blue,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
-                ),
-              ),
-              
-              const Padding(
-                padding: EdgeInsets.only(left: 8, top: 4),
-                child: Icon(
-                  Icons.chevron_right_rounded,
-                  color: Colors.grey,
-                  size: 20,
-                ),
+                  ),
+                  
+                  const Padding(
+                    padding: EdgeInsets.only(left: 8, top: 4),
+                    child: Icon(
+                      Icons.chevron_right_rounded,
+                      color: Colors.grey,
+                      size: 20,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -848,9 +853,6 @@ class _RatingsScreenState extends State<RatingsScreen> {
                   ),
                 ),
 
-                // REMOVED the direct display of rateable contracts banner
-                // They will now show up in the filteredRatings list
-
                 if (ratingProvider.error != null && filteredRatings.isEmpty && !ratingProvider.isLoading)
                   SliverToBoxAdapter(
                     child: Container(
@@ -890,7 +892,7 @@ class _RatingsScreenState extends State<RatingsScreen> {
                   ),
 
                 if (ratingProvider.isLoading)
-                  SliverFillRemaining(
+                  const SliverFillRemaining(
                     child: Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -898,12 +900,11 @@ class _RatingsScreenState extends State<RatingsScreen> {
                           CircularProgressIndicator(
                             valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF2563EB)),
                           ),
-                          const SizedBox(height: 16),
+                          SizedBox(height: 16),
                           Text(
                             'Loading ratings...',
                             style: TextStyle(
-                              color: Colors.grey[400],
-                              fontSize: 14,
+                              color: Colors.grey,
                             ),
                           ),
                         ],
@@ -911,65 +912,18 @@ class _RatingsScreenState extends State<RatingsScreen> {
                     ),
                   )
                 else if (ratingProvider.error != null && filteredRatings.isEmpty)
-                  SliverFillRemaining(
+                  const SliverFillRemaining(
                     child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              width: 80,
-                              height: 80,
-                              decoration: BoxDecoration(
-                                color: Colors.redAccent.withOpacity(0.1),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                Icons.error_outline,
-                                size: 40,
-                                color: Colors.redAccent,
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            Text(
-                              'Something went wrong',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 32),
-                              child: Text(
-                                ratingProvider.error!,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey[400],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 24),
-                            ElevatedButton(
-                              onPressed: () {
-                                ratingProvider.clearError();
-                                _initializeData();
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Color(0xFF2563EB),
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-                              ),
-                              child: const Text('Try Again'),
-                            ),
-                          ],
-                        ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.error, color: Colors.red, size: 48),
+                          SizedBox(height: 16),
+                          Text(
+                            'Failed to load ratings',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ],
                       ),
                     ),
                   )
@@ -1021,13 +975,11 @@ class _RatingsScreenState extends State<RatingsScreen> {
               ],
             ),
           ),
-          // REMOVED: FloatingActionButton (debug button)
         );
       },
     );
   }
 
-  // NEW: Widget for rateable contract cards
   Widget _buildRateableContractCard(Map<String, dynamic> contract) {
     final taskTitle = contract['task_title'] ?? 'Untitled Task';
     final clientName = contract['client_name'] ?? 'Client';
@@ -1059,7 +1011,7 @@ class _RatingsScreenState extends State<RatingsScreen> {
                           colors: [
                             Color(0xFF2563EB),
                             Color(0xFF60A5FA),
-                        ],
+                          ],
                         ),
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -1090,7 +1042,7 @@ class _RatingsScreenState extends State<RatingsScreen> {
                                     fontWeight: FontWeight.w700,
                                     color: Colors.white,
                                   ),
-                                  maxLines: 2,
+                                  maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
@@ -1136,7 +1088,9 @@ class _RatingsScreenState extends State<RatingsScreen> {
                           ),
                           const SizedBox(height: 8),
                           
-                          Row(
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
                             children: [
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1152,7 +1106,6 @@ class _RatingsScreenState extends State<RatingsScreen> {
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 8),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
@@ -1177,7 +1130,6 @@ class _RatingsScreenState extends State<RatingsScreen> {
                 
                 const SizedBox(height: 12),
                 
-                // "Rate Now" button for rateable contracts
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
@@ -1388,6 +1340,7 @@ class _RatingsScreenState extends State<RatingsScreen> {
             ),
           ),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
                 icon,
@@ -1409,174 +1362,175 @@ class _RatingsScreenState extends State<RatingsScreen> {
       ),
     );
   }
+
   Widget _buildRatingCard(Map<String, dynamic> rating) {
-  final dynamic scoreData = rating['display_score'] ?? rating['score'] ?? 0;
-  double score = 0.0;
-  if (scoreData is num) {
-    score = scoreData.toDouble();
-  } else if (scoreData is String) {
-    score = double.tryParse(scoreData) ?? 0.0;
-  }
-  
-  final String displayName = (rating['display_name'] ?? 'Unknown').toString();
-  final bool isRateableContract = rating['is_rateable_contract'] == true;
-  
-  String taskTitle = 'Task';
-  final dynamic titleData = rating['display_title'] ?? rating['task_title'];
-  if (titleData != null) {
-    taskTitle = titleData.toString();
-  }
-  
-  final String review = (rating['display_review'] ?? rating['review'] ?? '').toString();
-  
-  String dateStr = 'Recent';
-  final dynamic dateData = rating['date'] ?? rating['created_at'];
-  if (dateData != null && dateData.toString().isNotEmpty) {
-    try {
-      final date = DateTime.parse(dateData.toString());
-      dateStr = DateFormat('MMM dd, yyyy').format(date);
-    } catch (e) {
-      dateStr = dateData.toString();
+    final dynamic scoreData = rating['display_score'] ?? rating['score'] ?? 0;
+    double score = 0.0;
+    if (scoreData is num) {
+      score = scoreData.toDouble();
+    } else if (scoreData is String) {
+      score = double.tryParse(scoreData) ?? 0.0;
     }
-  }
-  
-  return Container(
-    decoration: BoxDecoration(
-      color: Colors.grey[900],
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: Colors.grey[800]!),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: isRateableContract
-                            ? [Colors.orange, Colors.amber]
-                            : [Color(0xFF2563EB), Color(0xFF60A5FA)],
+    
+    final String displayName = (rating['display_name'] ?? 'Unknown').toString();
+    final bool isRateableContract = rating['is_rateable_contract'] == true;
+    
+    String taskTitle = 'Task';
+    final dynamic titleData = rating['display_title'] ?? rating['task_title'];
+    if (titleData != null) {
+      taskTitle = titleData.toString();
+    }
+    
+    final String review = (rating['display_review'] ?? rating['review'] ?? '').toString();
+    
+    String dateStr = 'Recent';
+    final dynamic dateData = rating['date'] ?? rating['created_at'];
+    if (dateData != null && dateData.toString().isNotEmpty) {
+      try {
+        final date = DateTime.parse(dateData.toString());
+        dateStr = DateFormat('MMM dd, yyyy').format(date);
+      } catch (e) {
+        dateStr = dateData.toString();
+      }
+    }
+    
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey[900],
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey[800]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: isRateableContract
+                              ? [Colors.orange, Colors.amber]
+                              : [Color(0xFF2563EB), Color(0xFF60A5FA)],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Center(
-                      child: Icon(
-                        isRateableContract ? Icons.person_add : Icons.person,
-                        size: 20,
-                        color: Colors.white,
+                      child: Center(
+                        child: Icon(
+                          isRateableContract ? Icons.person_add : Icons.person,
+                          size: 20,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                displayName,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: isRateableContract
-                                    ? Colors.orange.withOpacity(0.2)
-                                    : Color(0xFF2563EB).withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    isRateableContract 
-                                        ? Icons.star_outline 
-                                        : Icons.star_rounded,
-                                    size: 14,
-                                    color: isRateableContract 
-                                        ? Colors.orange 
-                                        : Color(0xFF2563EB),
+                    const SizedBox(width: 12),
+                    
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  displayName,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
                                   ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    isRateableContract 
-                                        ? 'Rate Now'
-                                        : score.toStringAsFixed(1),
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w700,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: isRateableContract
+                                      ? Colors.orange.withOpacity(0.2)
+                                      : Color(0xFF2563EB).withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      isRateableContract 
+                                          ? Icons.star_outline 
+                                          : Icons.star_rounded,
+                                      size: 14,
                                       color: isRateableContract 
                                           ? Colors.orange 
                                           : Color(0xFF2563EB),
                                     ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        
-                        Text(
-                          taskTitle,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[300],
-                            fontWeight: FontWeight.w500,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 8),
-                        
-                        Row(
-                          children: [
-                            if (!isRateableContract) ...[
-                              Wrap(
-                                spacing: 0,
-                                runSpacing: 0,
-                                children: List.generate(5, (starIndex) {
-                                  final isFilled = starIndex < score.floor();
-                                  final isHalf = starIndex == score.floor() && (score % 1) >= 0.5;
-                                  
-                                  return Padding(
-                                    padding: const EdgeInsets.only(right: 2),
-                                    child: Icon(
-                                      isFilled 
-                                        ? Icons.star_rounded
-                                        : isHalf
-                                          ? Icons.star_half_rounded
-                                          : Icons.star_border_rounded,
-                                      size: 16,
-                                      color: Color(0xFFFFB020),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      isRateableContract 
+                                          ? 'Rate Now'
+                                          : score.toStringAsFixed(1),
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                        color: isRateableContract 
+                                            ? Colors.orange 
+                                            : Color(0xFF2563EB),
+                                      ),
                                     ),
-                                  );
-                                }),
+                                  ],
+                                ),
                               ),
-                              const SizedBox(width: 8),
                             ],
-                            
-                            Expanded(
-                              child: Text(
+                          ),
+                          const SizedBox(height: 6),
+                          
+                          Text(
+                            taskTitle,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[300],
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 8),
+                          
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (!isRateableContract)
+                                Wrap(
+                                  spacing: 0,
+                                  runSpacing: 0,
+                                  children: List.generate(5, (starIndex) {
+                                    final isFilled = starIndex < score.floor();
+                                    final isHalf = starIndex == score.floor() && (score % 1) >= 0.5;
+                                    
+                                    return Padding(
+                                      padding: const EdgeInsets.only(right: 2),
+                                      child: Icon(
+                                        isFilled 
+                                          ? Icons.star_rounded
+                                          : isHalf
+                                            ? Icons.star_half_rounded
+                                            : Icons.star_border_rounded,
+                                        size: 16,
+                                        color: Color(0xFFFFB020),
+                                      ),
+                                    );
+                                  }),
+                                ),
+                              const SizedBox(height: 4),
+                              Text(
                                 isRateableContract 
                                     ? 'Ready to rate • Completed'
                                     : dateStr,
@@ -1589,121 +1543,120 @@ class _RatingsScreenState extends State<RatingsScreen> {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                
+                // For rateable contracts, show a prominent "Rate Now" button
+                if (isRateableContract) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        _navigateToSubmitRating({
+                          'contract_id': rating['contract_id'],
+                          'task': {
+                            'id': rating['task_id'],
+                            'title': rating['task_title'],
+                            'budget': rating['budget'],
+                          },
+                          'client': {
+                            'id': rating['client_id'],
+                            'name': rating['client_name'],
+                          },
+                          'status': rating['status'],
+                        });
+                      },
+                      icon: const Icon(Icons.star, size: 18),
+                      label: const Text('Rate This Client'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                      ],
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
                     ),
                   ),
                 ],
-              ),
-              
-              // For rateable contracts, show a prominent "Rate Now" button
-              if (isRateableContract) ...[
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      _navigateToSubmitRating({
-                        'contract_id': rating['contract_id'],
-                        'task': {
-                          'id': rating['task_id'],
-                          'title': rating['task_title'],
-                          'budget': rating['budget'],
-                        },
-                        'client': {
-                          'id': rating['client_id'],
-                          'name': rating['client_name'],
-                        },
-                        'status': rating['status'],
-                      });
-                    },
-                    icon: const Icon(Icons.star, size: 18),
-                    label: const Text('Rate This Client'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                
+                // Review text (only for actual ratings)
+                if (!isRateableContract && review.isNotEmpty && review != 'null' && review != 'No review provided') ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[800],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      review,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[200],
+                        height: 1.5,
                       ),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                   ),
-                ),
+                ],
               ],
-              
-              // Review text (only for actual ratings)
-              if (!isRateableContract && review.isNotEmpty && review != 'null' && review != 'No review provided') ...[
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[800],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    review,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[200],
-                      height: 1.5,
-                    ),
-                  ),
-                ),
-              ],
-            ],
+            ),
           ),
-        ),
-      ],
-    ),
-  );
-} 
-
-
-  Widget _buildRatingStats(RatingProvider provider, List<dynamic> ratings) {
-    double totalScore = 0.0;
-    int count = 0;
-    Map<int, int> starCounts = {5: 0, 4: 0, 3: 0, 2: 0, 1: 0};
-    
-    for (final rawRating in ratings) {
-      try {
-        Map<String, dynamic> rating;
-        if (rawRating is Map) {
-          rating = _safeMapConvert(rawRating);
-        } else {
-          continue;
-        }
-        
-        final score = _extractScore(rating);
-        totalScore += score;
-        count++;
-        
-        final int starRating = score.round();
-        if (starRating >= 1 && starRating <= 5) {
-          starCounts[starRating] = (starCounts[starRating] ?? 0) + 1;
-        }
-      } catch (e) {
-        debugPrint('❌ Error processing rating in stats: $e');
-      }
-    }
-    
-    final double averageRating = count > 0 ? totalScore / count : 0.0;
-    final int totalRatings = count;
-    
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.black,
-        border: Border(
-          bottom: BorderSide(color: Colors.grey[900]!, width: 1),
-        ),
+        ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    );
+  }
+  Widget _buildRatingStats(RatingProvider provider, List<dynamic> ratings) {
+  double totalScore = 0.0;
+  int count = 0;
+  Map<int, int> starCounts = {5: 0, 4: 0, 3: 0, 2: 0, 1: 0};
+  
+  for (final rawRating in ratings) {
+    try {
+      Map<String, dynamic> rating;
+      if (rawRating is Map) {
+        rating = _safeMapConvert(rawRating);
+      } else {
+        continue;
+      }
+      
+      final score = _extractScore(rating);
+      totalScore += score;
+      count++;
+      
+      final int starRating = score.round();
+      if (starRating >= 1 && starRating <= 5) {
+        starCounts[starRating] = (starCounts[starRating] ?? 0) + 1;
+      }
+    } catch (e) {
+      debugPrint('❌ Error processing rating in stats: $e');
+    }
+  }
+  
+  final double averageRating = count > 0 ? totalScore / count : 0.0;
+  final int totalRatings = count;
+  
+  return Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: Colors.black,
+      border: Border(
+        bottom: BorderSide(color: Colors.grey[900]!, width: 1),
+      ),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Using IntrinsicHeight to make both cards the same height
+        IntrinsicHeight(
+          child: Row(
             children: [
               Expanded(
                 child: Container(
@@ -1719,6 +1672,7 @@ class _RatingsScreenState extends State<RatingsScreen> {
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Row(
                         children: [
@@ -1751,6 +1705,7 @@ class _RatingsScreenState extends State<RatingsScreen> {
                   ),
                 ),
               ),
+              
               const SizedBox(width: 16),
               
               Expanded(
@@ -1767,6 +1722,7 @@ class _RatingsScreenState extends State<RatingsScreen> {
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Row(
                         children: [
@@ -1801,95 +1757,98 @@ class _RatingsScreenState extends State<RatingsScreen> {
               ),
             ],
           ),
-          
+        ),
+        
+        if (totalRatings > 0) ...[
           const SizedBox(height: 24),
-          
-          if (totalRatings > 0) ...[
-            Text(
-              'Star Breakdown',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-              ),
+          Text(
+            'Star Breakdown',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
             ),
-            const SizedBox(height: 12),
-            
-            Column(
-              children: List.generate(5, (index) {
-                final starRating = 5 - index;
-                final count = starCounts[starRating] ?? 0;
-                final percentage = totalRatings > 0 ? (count / totalRatings * 100) : 0;
-                
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 24,
-                        child: Text(
-                          '$starRating',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey[300],
-                          ),
+          ),
+          const SizedBox(height: 12),
+          
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: List.generate(5, (index) {
+              final starRating = 5 - index;
+              final count = starCounts[starRating] ?? 0;
+              final percentage = totalRatings > 0 ? (count / totalRatings * 100) : 0;
+              
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 24,
+                      child: Text(
+                        '$starRating',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey[300],
                         ),
                       ),
-                      const SizedBox(width: 4),
-                      Icon(
-                        Icons.star_rounded,
-                        size: 16,
-                        color: _getStarColor(starRating),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Container(
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: Colors.grey[800],
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: FractionallySizedBox(
-                            alignment: Alignment.centerLeft,
-                            widthFactor: percentage / 100,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    _getStarColor(starRating),
-                                    _getStarColor(starRating).withOpacity(0.8),
-                                  ],
-                                ),
-                                borderRadius: BorderRadius.circular(4),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.star_rounded,
+                      size: 16,
+                      color: _getStarColor(starRating),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Container(
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[800],
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: FractionallySizedBox(
+                          alignment: Alignment.centerLeft,
+                          widthFactor: percentage / 100,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  _getStarColor(starRating),
+                                  _getStarColor(starRating).withOpacity(0.8),
+                                ],
                               ),
+                              borderRadius: BorderRadius.circular(4),
                             ),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      SizedBox(
-                        width: 30,
-                        child: Text(
-                          '$count',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey[300],
-                          ),
-                          textAlign: TextAlign.right,
+                    ),
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      width: 30,
+                      child: Text(
+                        '$count',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey[300],
                         ),
+                        textAlign: TextAlign.right,
                       ),
-                    ],
-                  ),
-                );
-              }).reversed.toList(),
-            ),
-          ],
+                    ),
+                  ],
+                ),
+              );
+            }).reversed.toList(),
+          ),
         ],
-      ),
-    );
-  }
+      ],
+    ),
+  );
+}
+
+  
 
   Color _getStarColor(int starRating) {
     switch (starRating) {
@@ -1994,6 +1953,7 @@ class _DetailedClientRatingDialogState extends State<_DetailedClientRatingDialog
                 ),
               ),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     _stepTitles[_currentStep],
@@ -2138,6 +2098,7 @@ class _DetailedClientRatingDialogState extends State<_DetailedClientRatingDialog
   Widget _buildOverallExperienceStep() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
         const Text(
           "Overall Experience",
@@ -2211,6 +2172,7 @@ class _DetailedClientRatingDialogState extends State<_DetailedClientRatingDialog
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
         const Text(
           "Detailed Assessment",
@@ -2273,6 +2235,7 @@ class _DetailedClientRatingDialogState extends State<_DetailedClientRatingDialog
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               category.displayName,
@@ -2289,16 +2252,15 @@ class _DetailedClientRatingDialogState extends State<_DetailedClientRatingDialog
             ),
             const SizedBox(height: 12),
             
-            SizedBox(
-              height: 60,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                shrinkWrap: true,
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: List.generate(5, (index) {
                   final rating = index + 1;
                   return Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    width: 50,
+                    margin: const EdgeInsets.only(right: 8),
+                    constraints: const BoxConstraints(minWidth: 50),
                     child: InkWell(
                       onTap: _isSubmitting ? null : () {
                         setState(() {
@@ -2320,6 +2282,7 @@ class _DetailedClientRatingDialogState extends State<_DetailedClientRatingDialog
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Column(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
                               Icons.star,
@@ -2404,6 +2367,7 @@ class _DetailedClientRatingDialogState extends State<_DetailedClientRatingDialog
   Widget _buildStrengthsStep() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
         const Text(
           "Strengths & Recommendations",
@@ -2463,6 +2427,7 @@ class _DetailedClientRatingDialogState extends State<_DetailedClientRatingDialog
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
                   "Would you work with this client again?",
@@ -2572,6 +2537,7 @@ class _DetailedClientRatingDialogState extends State<_DetailedClientRatingDialog
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
         const Text(
           "Review Your Feedback",
@@ -2593,6 +2559,7 @@ class _DetailedClientRatingDialogState extends State<_DetailedClientRatingDialog
           child: Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   "Overall Performance Score",
@@ -2630,9 +2597,8 @@ class _DetailedClientRatingDialogState extends State<_DetailedClientRatingDialog
           ),
         ),
         
-        const SizedBox(height: 16),
-        
         if (ratedCategories > 0) ...[
+          const SizedBox(height: 16),
           const Text(
             "Category Breakdown",
             style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white),
@@ -2641,10 +2607,10 @@ class _DetailedClientRatingDialogState extends State<_DetailedClientRatingDialog
           ..._categoryRatings.entries
               .where((entry) => entry.value > 0)
               .map((entry) => _buildReviewCategoryItem(entry.key, entry.value)),
-          const SizedBox(height: 16),
         ],
         
         if (_selectedTags.isNotEmpty) ...[
+          const SizedBox(height: 16),
           const Text(
             "Client Strengths",
             style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white),
@@ -2661,10 +2627,10 @@ class _DetailedClientRatingDialogState extends State<_DetailedClientRatingDialog
               );
             }).toList(),
           ),
-          const SizedBox(height: 16),
         ],
         
         if (_wouldWorkAgain != null) ...[
+          const SizedBox(height: 16),
           Card(
             color: Colors.grey[900],
             shape: RoundedRectangleBorder(
@@ -2675,6 +2641,7 @@ class _DetailedClientRatingDialogState extends State<_DetailedClientRatingDialog
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   const Text(
                     "Recommendation",
@@ -2698,9 +2665,9 @@ class _DetailedClientRatingDialogState extends State<_DetailedClientRatingDialog
               ),
             ),
           ),
-          const SizedBox(height: 16),
         ],
         
+        const SizedBox(height: 16),
         const Text(
           "Additional Comments (Optional):",
           style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.white),

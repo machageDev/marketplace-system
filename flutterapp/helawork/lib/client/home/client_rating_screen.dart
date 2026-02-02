@@ -191,6 +191,8 @@ class _ClientRatingScreenState extends State<ClientRatingScreen> with SingleTick
   bool _isTabControllerInitialized = false;
   int? _employerId;
   bool _isLoadingUser = true;
+  
+  get baseUrl => null;
 
   @override
   void initState() {
@@ -292,7 +294,8 @@ class _ClientRatingScreenState extends State<ClientRatingScreen> with SingleTick
         // Test if ID 1 works by checking ratings
         try {
           final testResponse = await http.get(
-            Uri.parse('https://marketplace-system-1.onrender.com/api/employers/1/ratings/'),
+            //Uri.parse('https://marketplace-system-1.onrender.com/api/$employerId/ratings/'),
+            Uri.parse('$baseUrl/api/employers/$_employerId/ratings/'),            
             headers: {
               'Authorization': 'Bearer $token',
               'Content-Type': 'application/json',
@@ -301,10 +304,10 @@ class _ClientRatingScreenState extends State<ClientRatingScreen> with SingleTick
           
           if (testResponse.statusCode == 200) {
             foundId = 1;
-            print("✅ ID 1 works! Using employer ID: 1");
+            print(" ID 1 works! Using employer ID: 1");
           }
         } catch (e) {
-          print("❌ ID 1 test failed: $e");
+          print(" ID 1 test failed: $e");
         }
       }
       
