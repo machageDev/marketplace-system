@@ -106,7 +106,7 @@ import dj_database_url
 
 DATABASES = {
     'default': dj_database_url.parse(
-        "postgresql://helawork_db_user:Xgfo1L6B59XyVQ3AnpDoJxCmp0hU4r2M@dpg-d5ob3mpr0fns73d4u8eg-a.oregon-postgres.render.com/helawork_db",
+        "postgresql://systemdb_gtpt_user:Zzyktn2MRRtnNKCpLEg1xHQ7KJgK38kN@dpg-d66luug6fj8s7398i7og-a.oregon-postgres.render.com/systemdb_gtpt",
         conn_max_age=600,
         ssl_require=True
     )
