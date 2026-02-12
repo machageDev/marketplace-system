@@ -276,25 +276,22 @@ bool canSubmitTask(String taskId) {
       return null;
     }
   }
-
-  Future<void> _loadProfilePictureFromAPI() async {
-    try {
-      final token = await _secureStorage.read(key: "auth_token");
-      if (token == null) return;
-      
-      final response = await ApiService.getUserProfile(token);
-      if (response != null && response['success'] == true) {
-        final profile = response['profile'];
-        if (profile != null && profile['profile_picture'] != null) {
-          profilePictureUrl = profile['profile_picture'];
-          await _saveUserData();
-        }
+Future<void> _loadProfilePictureFromAPI() async {
+  try {
+    final token = await _secureStorage.read(key: "auth_token");
+    if (token == null) return;
+    final response = await ApiService().getUserProfile(token);
+    if (response != null && response['success'] == true) {
+      final profile = response['profile'];
+      if (profile != null && profile['profile_picture'] != null) {
+        profilePictureUrl = profile['profile_picture'];
+        await _saveUserData();
       }
-    } catch (e) {
-      print('Error loading profile picture: $e');
     }
+  } catch (e) {
+    print('Error loading profile picture: $e');
   }
-
+}
   Future<void> refreshProfilePicture() async {
     await _loadProfilePictureFromAPI();
     notifyListeners();

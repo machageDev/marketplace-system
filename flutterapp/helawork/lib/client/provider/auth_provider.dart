@@ -56,16 +56,21 @@ class AuthProvider with ChangeNotifier {
           // Force disk sync so the Dashboard sees it immediately
           await prefs.reload(); 
           print('✅ Auth: Token saved: ${token.substring(0, 10)}...');
+          
+          // 6. Fetch full user profile to get email and other details
+          await fetchUserProfile();
         } else {
           print('⚠️ Auth: No token found in response data');
         }
         
-        // 6. Save User Details
+        // 7. Save User Details from login response (fallback)
         final email = userData['email'] ?? '';
         if (email.isNotEmpty) {
           await prefs.setString('user_email', email);
+          print('✅ Auth: Email saved from login: $email');
         } else if (username.contains('@')) {
           await prefs.setString('user_email', username);
+          print('✅ Auth: Username used as email: $username');
         }
         
         final userId = userData['id']?.toString() ?? '';
@@ -92,12 +97,70 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  // ✅ FETCH USER PROFILE - FIXED VERSION
+  Future<void> fetchUserProfile() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('user_token');
+      
+      if (token == null || token.isEmpty) {
+        debugPrint("❌ fetchUserProfile: No token found");
+        return;
+      }
+      
+      debugPrint("🔄 fetchUserProfile: Fetching profile...");
+      final response = await apiService.getUserProfile(token);
+      
+      if (response?["success"] == true) {
+        final userData = response?["data"];
+        final String? email = userData["email"];
+        final String? name = userData["name"] ?? userData["username"];
+        final String? userId = userData["id"]?.toString();
+        
+        if (email != null && email.isNotEmpty) {
+          await prefs.setString('user_email', email);
+          debugPrint("✅ fetchUserProfile: Saved email: $email");
+        }
+        
+        if (name != null && name.isNotEmpty) {
+          await prefs.setString('user_name', name);
+          debugPrint("✅ fetchUserProfile: Saved name: $name");
+        }
+        
+        if (userId != null && userId.isNotEmpty) {
+          await prefs.setString('user_id', userId);
+          debugPrint("✅ fetchUserProfile: Saved user_id: $userId");
+        }
+        
+        await prefs.reload();
+      } else {
+        debugPrint("❌ fetchUserProfile: Failed - ${response?['message']}");
+      }
+    } catch (e) {
+      debugPrint("❌ fetchUserProfile: Error - $e");
+    }
+  }
+
   // ✅ AUTH STATUS CHECK
   Future<bool> isLoggedIn() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.reload(); // Always reload before checking status
     final token = prefs.getString('user_token');
     return token != null && token.isNotEmpty;
+  }
+
+  // ✅ GET USER EMAIL - Helper method
+  Future<String?> getUserEmail() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+    return prefs.getString('user_email');
+  }
+
+  // ✅ GET USER TOKEN - Helper method
+  Future<String?> getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+    return prefs.getString('user_token');
   }
 
   // ✅ LOGOUT
@@ -137,6 +200,9 @@ class AuthProvider with ChangeNotifier {
         if (token != null) {
           await prefs.setString('user_token', token);
           await prefs.reload();
+          
+          // Fetch full profile after registration
+          await fetchUserProfile();
         }
         
         notifyListeners();

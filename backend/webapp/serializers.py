@@ -989,7 +989,6 @@ from .models import Rating, Contract
 import json
 from rest_framework import serializers
 from .models import Rating, Contract, Employer, User, EmployerProfile
-
 class RatingSerializer(serializers.ModelSerializer):
     """
     Handles name resolution by checking Employer, User, and Profile models.
@@ -1000,6 +999,7 @@ class RatingSerializer(serializers.ModelSerializer):
     contract = serializers.PrimaryKeyRelatedField(queryset=Contract.objects.all(), required=False)
     can_rate = serializers.SerializerMethodField(read_only=True)
     details = serializers.SerializerMethodField(read_only=True)
+    category_scores = serializers.SerializerMethodField()
 
     class Meta:
         model = Rating
@@ -1007,32 +1007,25 @@ class RatingSerializer(serializers.ModelSerializer):
             'rating_id', 'task', 'contract', 'task_title', 
             'rater', 'rater_name', 'rated_user', 'rated_user_name',
             'rating_type', 'score', 'review', 'created_at', 'can_rate',
-            'details'
+            'details', 'category_scores'
         ]
         read_only_fields = ['rating_id', 'created_at', 'rating_type', 'can_rate']
 
     def get_rater_name(self, obj):
         try:
-            # 1. Identify the rater object (Employer or User)
-            # Your Rating model likely has a ForeignKey to either Employer or User
             rater_obj = getattr(obj, 'rater_employer', None) or getattr(obj, 'rater', None)
             
             if not rater_obj:
                 return "Client"
 
-            # 2. Check if it's an Employer instance (from your shared models)
             if isinstance(rater_obj, Employer):
-                # Try to get the name from the linked EmployerProfile
                 if hasattr(rater_obj, 'profile') and rater_obj.profile:
                     p_name = rater_obj.profile.full_name
                     if p_name and p_name != 'Not provided':
                         return p_name
-                # Fallback to the Employer's username
                 return rater_obj.username
 
-            # 3. Check if it's a User instance (Freelancer)
             if isinstance(rater_obj, User):
-                # Your User model has a 'name' field
                 return rater_obj.name if rater_obj.name else "Freelancer"
 
             return "Anonymous"
@@ -1044,7 +1037,6 @@ class RatingSerializer(serializers.ModelSerializer):
         try:
             user = obj.rated_user
             if user:
-                # Use the 'name' field from your User model
                 return user.name if user.name else "User"
             return "User"
         except Exception:
@@ -1061,6 +1053,24 @@ class RatingSerializer(serializers.ModelSerializer):
                 return None
         return None
 
+    def get_category_scores(self, obj):
+        """
+        Returns category scores if they exist in the extended data,
+        otherwise returns empty dict.
+        """
+        details = self.get_details(obj)
+        if details and 'category_scores' in details:
+            return details['category_scores']
+        return {}
+
+    def get_can_rate(self, obj):
+        try:
+            if not obj.contract:
+                return False
+            return (obj.contract.is_completed and obj.contract.is_paid)
+        except:
+            return False
+
     def to_representation(self, instance):
         """Clean the review text for the UI response"""
         data = super().to_representation(instance)
@@ -1068,14 +1078,6 @@ class RatingSerializer(serializers.ModelSerializer):
         if review and "__EXTENDED_DATA__:" in review:
             data['review'] = review.split("__EXTENDED_DATA__:")[0].strip()
         return data
-
-    def get_can_rate(self, obj):
-        try:
-            if not obj.contract: return False
-            # Matching the field names in your Contract model
-            return (obj.contract.is_completed and obj.contract.is_paid)
-        except:
-            return False
 # serializers.py - Add this
 class CreateRatingSerializer(serializers.ModelSerializer):
     rated_user = serializers.PrimaryKeyRelatedField(

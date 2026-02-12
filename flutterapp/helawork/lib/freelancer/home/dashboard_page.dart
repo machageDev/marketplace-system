@@ -21,7 +21,7 @@ class _DashboardPageState extends State<DashboardPage> {
   final List<Widget> _pages = [
     const SizedBox(),
     const TaskPage(),
-    const WalletScreen(token: ''),
+    const WalletScreen(),
   ];
 
   @override
@@ -406,7 +406,7 @@ class _DashboardPageState extends State<DashboardPage> {
             
             // WALLET
             GestureDetector(
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const WalletScreen(token: ''))),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const WalletScreen())),
               child: _buildActionCard(
                 title: "Wallet",
                 icon: Icons.account_balance_wallet,

@@ -167,7 +167,7 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
                 final success = await provider.acceptProposal(proposal.id);
                 
                 if (!mounted) return;
-                Navigator.pop(context); // Close loading indicator
+                Navigator.pop(context);
 
                 if (success) {
                   final response = provider.lastResponse;
@@ -175,8 +175,8 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
                   await prefs.reload(); 
 
                   final String? token = prefs.getString('user_token');
-                  final String email = prefs.getString('user_email') ?? "kihara@gmail.com";
                   final String name = prefs.getString('user_name') ?? "Client";
+                  final String email = "machagefranklyn@gmail.com";
 
                   if (token == null || token.isEmpty) {
                     _showErrorSnackBar("Session expired. Please login again.");
@@ -204,8 +204,8 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
     await prefs.reload(); 
 
     final String? token = prefs.getString('user_token');
-    final String email = prefs.getString('user_email') ?? "kihara@gmail.com";
     final String name = prefs.getString('user_name') ?? "Client";
+    final String email = "machagefranklyn@gmail.com";
 
     if (token == null || token.isEmpty) {
       _showErrorSnackBar("Session error: Please login again.");
@@ -215,7 +215,14 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
     _navigateToPayment(context, proposal, null, email, name, token);
   }
 
-  void _navigateToPayment(BuildContext context, ClientProposal proposal, Map? response, String email, String name, String token) {
+  void _navigateToPayment(
+    BuildContext context, 
+    ClientProposal proposal, 
+    Map? response, 
+    String email, 
+    String name, 
+    String token
+  ) {
     final String orderUuid = response?['order_id']?.toString() ?? 
                              proposal.orderId ?? 
                              proposal.id;
@@ -239,8 +246,6 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
         ),
       ),
     ).then((wasSuccessful) {
-      // Logic for status update:
-      // If wasSuccessful is true, the database has been updated by the PaymentScreen verification
       if (wasSuccessful == true) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -250,28 +255,35 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
           ),
         );
       }
-      // Reload proposals regardless to ensure UI is in sync
       if (mounted) {
         context.read<ClientProposalProvider>().loadProposals();
       }
     });
   }
 
-  // --- UI Helper Methods ---
-
   void _showLoading() {
-    showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
+    showDialog(
+      context: context, 
+      barrierDismissible: false, 
+      builder: (_) => const Center(child: CircularProgressIndicator())
+    );
   }
 
   void _showErrorSnackBar(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg), 
+        backgroundColor: Colors.red
+      )
+    );
   }
 
   Widget _buildStatusBadge(String status) {
+    final isPaid = status.toLowerCase() == 'paid';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: status.toLowerCase() == 'paid' ? Colors.green.shade50 : Colors.blue.shade50, 
+        color: isPaid ? Colors.green.shade50 : Colors.blue.shade50, 
         borderRadius: BorderRadius.circular(20)
       ),
       child: Text(
@@ -279,14 +291,19 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
         style: TextStyle(
           fontSize: 12, 
           fontWeight: FontWeight.bold, 
-          color: status.toLowerCase() == 'paid' ? Colors.green : Colors.blue
+          color: isPaid ? Colors.green : Colors.blue
         )
       ),
     );
   }
 
   Widget _buildEmptyState() {
-    return const Center(child: Text("No Proposals Yet", style: TextStyle(fontSize: 18, color: Colors.grey)));
+    return const Center(
+      child: Text(
+        "No Proposals Yet", 
+        style: TextStyle(fontSize: 18, color: Colors.grey)
+      )
+    );
   }
 
   Widget _buildErrorState(ClientProposalProvider provider) {
@@ -296,20 +313,36 @@ class _ClientProposalsScreenState extends State<ClientProposalsScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Text(provider.errorMessage, textAlign: TextAlign.center),
+            child: Text(
+              provider.errorMessage, 
+              textAlign: TextAlign.center
+            ),
           ),
           const SizedBox(height: 10),
-          ElevatedButton(onPressed: () => provider.loadProposals(), child: const Text("Retry"))
+          ElevatedButton(
+            onPressed: () => provider.loadProposals(), 
+            child: const Text("Retry")
+          )
         ],
       )
     );
   }
 
   void _viewProposalDetails(BuildContext context, ClientProposal proposal) {
-    Navigator.push(context, MaterialPageRoute(builder: (context) => ProposalViewScreen(proposal: proposal)));
+    Navigator.push(
+      context, 
+      MaterialPageRoute(
+        builder: (context) => ProposalViewScreen(proposal: proposal)
+      )
+    );
   }
 
   void _viewFreelancerProfile(BuildContext context, String freelancerId) {
-    Navigator.push(context, MaterialPageRoute(builder: (context) => FreelancerProfileScreen(freelancerId: freelancerId)));
+    Navigator.push(
+      context, 
+      MaterialPageRoute(
+        builder: (context) => FreelancerProfileScreen(freelancerId: freelancerId)
+      )
+    );
   }
 }

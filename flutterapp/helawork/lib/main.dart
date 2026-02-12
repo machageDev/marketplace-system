@@ -32,26 +32,23 @@ void main() async {
       providers: [
         // 1. First, provide the AuthProvider
         ChangeNotifierProvider(create: (_) => auth.AuthProvider()),
-        
-        // 2. Use ProxyProvider for Wallet to "steal" the token from AuthProvider
-        ChangeNotifierProxyProvider<auth.AuthProvider, WalletProvider>(
-          create: (context) => WalletProvider.create(
-            walletService: WalletService(),
-            token: '', 
-          ),
-          update: (context, authProvider, previousWallet) {
-            // This runs whenever authProvider.notifyListeners() is called
-            if (previousWallet == null) {
-              return WalletProvider.create(
-                walletService: WalletService(),
-                token: authProvider.token ?? '',
-              );
-            }
-            // Update the existing wallet provider with the new token
-            previousWallet.updateToken(authProvider.token ?? '');
-            return previousWallet;
-          },
-        ),
+
+ChangeNotifierProxyProvider<auth.AuthProvider, WalletProvider>(
+  create: (context) => WalletProvider(
+    walletService: WalletService(),
+    // REMOVE token: '' from here
+  ),
+  update: (context, authProvider, previousWallet) {
+    if (previousWallet == null) {
+      return WalletProvider(
+        walletService: WalletService(),
+        // REMOVE token: authProvider.token ?? '' from here
+      )..updateToken(authProvider.token ?? ''); // CALL updateToken instead
+    }
+    previousWallet.updateToken(authProvider.token ?? '');
+    return previousWallet;
+  },
+),
 
         // ... Keep all your other providers below ...
         ChangeNotifierProvider(create: (_) => ForgotPasswordProvider()),

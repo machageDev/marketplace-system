@@ -2256,53 +2256,160 @@ def verify_payment_api(request, reference):
             'message': f'Error: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 @api_view(['POST'])
-@authentication_classes([EmployerTokenAuthentication])
-@permission_classes([IsAuthenticated])
+@csrf_exempt
 def payment_webhook_api(request):
-    if request.method == 'POST':
-        try:
-            payload = request.data
-            event = payload.get('event')
+    try:
+        payload = json.loads(request.body)
+        event = payload.get('event')
+        
+        if event == 'charge.success':
+            data = payload.get('data')
+            reference = data.get('reference')
             
-            if event == 'charge.success':
-                data = payload.get('data')
-                reference = data.get('reference')
+            paystack = PaystackService()
+            verification = paystack.verify_transaction(reference)
+            
+            if verification and verification.get('status'):
+                transaction_data = verification['data']
                 
-                paystack = PaystackService()
-                verification = paystack.verify_transaction(reference)
-                
-                if verification and verification.get('status'):
-                    transaction_data = verification['data']
-                    
-                    if transaction_data['status'] == 'success':
-                        # 1. Update the Transaction record
-                        transaction = Transaction.objects.get(paystack_reference=reference)
-                        transaction.status = 'completed'
-                        transaction.save()
-                        
-                        # 2. Update the Task (Assuming Transaction has a FK to Task)
-                        task = transaction.task
-                        task.is_paid = True
-                        task.amount_held_in_escrow = transaction.amount
-                        task.payment_status = 'escrowed'
-                        
-                        # 3. BRANCH LOGIC: On-site vs Remote
-                        if task.service_type == 'on_site':
-                            # ONSITE: Generate OTP. Do NOT pay worker yet.
-                            task.generate_otp() 
-                            # Logic to notify Employer of their code
-                            print(f"On-site Task Verified. OTP: {task.verification_code}")
-                        else:
-                            # REMOTE: Normal flow. Mark as in_progress/escrowed.
-                            # Payment waits for a 'Submission' approval.
-                            print(f"Remote Task Verified. Awaiting Submission.")
-                        
-                        task.save()
+                if transaction_data['status'] == 'success':
+                    with django_transaction.atomic():
+                        try:
+                            # FIX: Use PaymentTransaction instead of Transaction
+                            txn = PaymentTransaction.objects.select_for_update().get(paystack_reference=reference)
+                            
+                            if txn.status == 'success':
+                                print(f"ℹ️ Webhook: Transaction {reference} already processed")
+                                return Response({'status': 'success', 'message': 'Already processed'})
 
-            return Response({'status': 'success'})
-            
-        except Exception as e:
-            return Response({'status': 'error', 'message': str(e)}, status=400)
+                            # Use shared processing logic
+                            _process_successful_payment(txn, transaction_data)
+                            print(f"✅ Webhook: Successfully processed payment for {reference}")
+                            
+                        except PaymentTransaction.DoesNotExist:
+                            print(f"❌ Webhook: Transaction not found for reference {reference}")
+                            return Response({'status': 'error', 'message': 'Transaction not found'}, status=404)
+        
+        return Response({'status': 'success'})
+        
+    except Exception as e:
+        print(f"❌ Webhook Error: {str(e)}")
+        traceback.print_exc()
+        return Response({'status': 'error', 'message': str(e)}, status=400)
+
+def _process_successful_payment(txn, data):
+    """
+    Shared logic to process a successful payment.
+    Updates Transaction, Order, Task, Proposal, and Contract.
+    """
+    # 1. UPDATE TRANSACTION
+    txn.status = 'success'
+    txn.save()
+    print(f"✅ Payment Logic: Transaction marked as success")
+
+    # 2. UPDATE ORDER
+    order = txn.order
+    order.status = 'paid'
+    order.save()
+    print(f"✅ Payment Logic: Order {order.order_id} marked as paid")
+
+    # 3. GET TASK
+    task = order.task
+    if not task:
+        print(f"❌ Payment Logic: No task associated with order {order.order_id}")
+        return None
+    
+    print(f"✅ Payment Logic: Task found: {task.title}")
+
+    # 4. UPDATE TASK
+    task.is_paid = True
+    task.payment_status = 'escrowed'
+    task.amount_held_in_escrow = order.amount
+    task.status = 'in_progress'
+    task.save()
+    print(f"✅ Payment Logic: Task updated: paid=True, status=in_progress")
+
+    # 5. UPDATE PROPOSAL
+    try:
+        proposal = Proposal.objects.get(task=task, status='accepted')
+        proposal.status = 'paid'
+        proposal.save()
+        print(f"✅ Payment Logic: Proposal {proposal.proposal_id} marked as paid")
+    except Proposal.DoesNotExist:
+        if order.freelancer:
+            try:
+                proposal = Proposal.objects.get(
+                    task=task,
+                    freelancer=order.freelancer.user
+                )
+                proposal.status = 'paid'
+                proposal.save()
+                print(f"✅ Payment Logic: Proposal found via freelancer, marked as paid")
+            except Proposal.DoesNotExist:
+                print(f"⚠️ Payment Logic: No proposal found for task {task.task_id}")
+
+    # 6. UPDATE/CREATE CONTRACT
+    freelancer_user = order.freelancer.user if order.freelancer else None
+    contract = None
+    
+    if freelancer_user and order.employer:
+        contract = Contract.objects.filter(
+            task=task,
+            freelancer=freelancer_user,
+            employer=order.employer
+        ).first()
+        
+        if contract:
+            contract.is_paid = True
+            contract.is_active = True
+            contract.status = 'active'
+            contract.payment_date = timezone.now()
+            contract.save()
+            print(f"✅ Payment Logic: Existing contract updated")
+        else:
+            contract = Contract.objects.create(
+                task=task,
+                freelancer=freelancer_user,
+                employer=order.employer,
+                is_paid=True,
+                is_active=True,
+                status='active',
+                payment_date=timezone.now()
+            )
+            print(f"✅ Payment Logic: New contract created")
+
+    # 7. CHECK IF ONSITE & GENERATE OTP
+    is_onsite = (task.service_type == 'on_site')
+    verification_otp = None
+    
+    if is_onsite:
+        print(f"🔍 Payment Logic: This is an ONSITE task")
+        otp = task.generate_otp()
+        verification_otp = otp
+        
+        # Save OTP to transaction
+        txn.verification_otp = otp
+        txn.otp_generated_at = timezone.now()
+        txn.save()
+        
+        # Save OTP to contract if exists
+        if contract:
+            contract.verification_otp = otp
+            contract.otp_generated_at = timezone.now()
+            contract.save()
+        
+        print(f"✅ Payment Logic: Generated OTP: {otp}")
+
+    return {
+        'order_id': str(order.order_id),
+        'task_id': task.task_id,
+        'is_onsite': is_onsite,
+        'verification_otp': verification_otp,
+        'proposal_status': 'paid',
+        'task_status': task.status,
+        'payment_status': task.payment_status,
+        'contract_updated': contract is not None
+    }
         
 
 
@@ -4659,121 +4766,16 @@ def verify_payment(request, reference):
                 return Response({'status': True, 'message': 'Already processed', 'data': {'order_id': txn.order.order_id}})
 
             if data['status'] == 'success':
-                # ============ 1. UPDATE TRANSACTION ============
-                txn.status = 'success'
-                txn.save()
-                print(f"✅ DEBUG Django: Transaction marked as success")
-
-                # ============ 2. UPDATE ORDER ============
-                order = txn.order
-                order.status = 'paid'
-                order.save()
-                print(f"✅ DEBUG Django: Order {order.order_id} marked as paid")
-
-                # ============ 3. GET TASK ============
-                task = order.task
-                if not task:
-                    print(f"❌ DEBUG Django: No task associated with order {order.order_id}")
-                    return Response({'status': False, 'message': 'No task found for this order'}, status=400)
+                # Use shared processing logic
+                result_data = _process_successful_payment(txn, data)
                 
-                print(f"✅ DEBUG Django: Task found: {task.title}")
-
-                # ============ 4. UPDATE TASK ============
-                task.is_paid = True
-                task.payment_status = 'escrowed'
-                task.amount_held_in_escrow = order.amount
-                task.status = 'in_progress'
-                task.save()
-                print(f"✅ DEBUG Django: Task updated: paid=True, status=in_progress")
-
-                # ============ 5. UPDATE PROPOSAL ============
-                try:
-                    proposal = Proposal.objects.get(task=task, status='accepted')
-                    proposal.status = 'paid'
-                    proposal.save()
-                    print(f"✅ DEBUG Django: Proposal {proposal.proposal_id} marked as paid")
-                except Proposal.DoesNotExist:
-                    # Try alternative: find proposal by freelancer
-                    if order.freelancer:
-                        try:
-                            proposal = Proposal.objects.get(
-                                task=task,
-                                freelancer=order.freelancer.user  # Use freelancer.user
-                            )
-                            proposal.status = 'paid'
-                            proposal.save()
-                            print(f"✅ DEBUG Django: Proposal found via freelancer, marked as paid")
-                        except Proposal.DoesNotExist:
-                            print(f"⚠️ DEBUG Django: No proposal found for task {task.task_id}")
-
-                # ============ 6. UPDATE/CREATE CONTRACT ============
-                # FIX: Use order.freelancer.user instead of order.freelancer
-                freelancer_user = order.freelancer.user if order.freelancer else None
-                
-                if freelancer_user and order.employer:
-                    # Try to get existing contract
-                    contract = Contract.objects.filter(
-                        task=task,
-                        freelancer=freelancer_user,  # ✅ CORRECT: User instance
-                        employer=order.employer
-                    ).first()
-                    
-                    if contract:
-                        # Update existing contract
-                        contract.is_paid = True
-                        contract.is_active = True
-                        contract.status = 'active'
-                        contract.payment_date = timezone.now()
-                        contract.save()
-                        print(f"✅ DEBUG Django: Existing contract updated")
-                    else:
-                        # Create new contract
-                        contract = Contract.objects.create(
-                            task=task,
-                            freelancer=freelancer_user,  # ✅ CORRECT: User instance
-                            employer=order.employer,
-                            is_paid=True,
-                            is_active=True,
-                            status='active',
-                            payment_date=timezone.now()
-                        )
-                        print(f"✅ DEBUG Django: New contract created")
-
-                # ============ 7. CHECK IF ONSITE ============
-                is_onsite = (task.service_type == 'on_site')
-                verification_otp = None
-                
-                if is_onsite:
-                    print(f"🔍 DEBUG Django: This is an ONSITE task")
-                    otp = task.generate_otp()
-                    verification_otp = otp
-                    
-                    # Save OTP to transaction
-                    txn.verification_otp = otp
-                    txn.otp_generated_at = timezone.now()
-                    txn.save()
-                    
-                    # Save OTP to contract if exists
-                    if 'contract' in locals() and contract:
-                        contract.verification_otp = otp
-                        contract.otp_generated_at = timezone.now()
-                        contract.save()
-                    
-                    print(f"✅ DEBUG Django: Generated OTP: {otp}")
+                if not result_data:
+                    return Response({'status': False, 'message': 'Failed to process payment logic'}, status=500)
 
                 return Response({
                     'status': True,
                     'message': 'Payment verified successfully',
-                    'data': {
-                        'order_id': str(order.order_id),
-                        'task_id': task.task_id,
-                        'is_onsite': is_onsite,
-                        'verification_otp': verification_otp,
-                        'proposal_status': 'paid',
-                        'task_status': task.status,
-                        'payment_status': task.payment_status,
-                        'contract_updated': 'contract' in locals()
-                    }
+                    'data': result_data
                 })
             else:
                 # Payment failed

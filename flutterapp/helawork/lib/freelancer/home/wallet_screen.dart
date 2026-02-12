@@ -5,8 +5,8 @@ import 'checkout_page.dart';
 import 'bank_registration_screen.dart';
 
 class WalletScreen extends StatefulWidget {
-  final String token;
-  const WalletScreen({super.key, required this.token});
+  // REMOVED: final String token;
+  const WalletScreen({super.key}); // No token parameter!
 
   @override
   State<WalletScreen> createState() => _WalletScreenState();
@@ -16,29 +16,38 @@ class _WalletScreenState extends State<WalletScreen> {
   @override
   void initState() {
     super.initState();
-    // Fetch data immediately using the token passed from the previous screen
+    // Just refresh - token comes from ProxyProvider
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _refreshData();
     });
   }
 
-  // Centralized refresh logic to sync UI with Backend
+  // REMOVED: _initializeWallet() - not needed with ProxyProvider
+
+  // Centralized refresh logic - NO TOKEN PARAMETER
   Future<void> _refreshData() async {
-    if (widget.token.isEmpty) {
-      debugPrint("⚠️ WalletScreen: Cannot refresh, token is empty.");
+    final walletProvider = Provider.of<WalletProvider>(context, listen: false);
+    
+    // Check if provider is initialized, if not - wait for ProxyProvider
+    if (!walletProvider.initialized) {
+      debugPrint("⏳ WalletScreen: Waiting for WalletProvider to initialize...");
+      // Try again in 500ms
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) _refreshData();
+      });
       return;
     }
-    await Provider.of<WalletProvider>(context, listen: false)
-        .loadWallet(token: widget.token);
+    
+    await walletProvider.refresh();
   }
 
   // --- NAVIGATION METHODS ---
-
+  // NO TOKEN PASSING - ProxyProvider handles it
   void _navigateToBankRegistration(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => BankRegistrationScreen(token: widget.token),
+        builder: (_) => const BankRegistrationScreen(token: '',), // No token!
       ),
     ).then((refresh) {
       if (refresh == true) _refreshData();
@@ -46,7 +55,7 @@ class _WalletScreenState extends State<WalletScreen> {
   }
 
   // --- DIALOG METHODS ---
-
+  // (These remain the same - they don't need token)
   void _showNoBankAlert(BuildContext context) {
     showDialog(
       context: context,
@@ -170,10 +179,12 @@ class _WalletScreenState extends State<WalletScreen> {
   Widget build(BuildContext context) {
     // Listen to changes in WalletProvider
     final wallet = Provider.of<WalletProvider>(context);
+    
+    // NO MANUAL INITIALIZATION - ProxyProvider handles it
 
     return Scaffold(
       appBar: AppBar(
-        automaticallyImplyLeading: false, // This removes the back arrow
+        automaticallyImplyLeading: false,
         title: const Text('My Wallet'),
         centerTitle: true,
         backgroundColor: Colors.black,
@@ -187,7 +198,7 @@ class _WalletScreenState extends State<WalletScreen> {
           ),
         ],
       ),
-      body: wallet.loading && wallet.balance == 0
+      body: wallet.loading && wallet.balance == 0 && !wallet.initialized
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _refreshData,
@@ -236,8 +247,7 @@ class _WalletScreenState extends State<WalletScreen> {
     );
   }
 
-  // --- UI COMPONENTS ---
-
+  // --- UI COMPONENTS --- (These remain exactly the same)
   Widget _buildBalanceCard(WalletProvider wallet) {
     return Card(
       elevation: 4,

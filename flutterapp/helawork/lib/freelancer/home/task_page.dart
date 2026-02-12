@@ -125,7 +125,6 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
           final recommended = data["recommended"] ?? [];
           print("Found ${recommended.length} recommended jobs");
           
-          // Debug first few jobs
           for (int i = 0; i < (recommended.length < 3 ? recommended.length : 3); i++) {
             print("Job $i - Title: ${recommended[i]['title']}");
             print("   Match Score: ${recommended[i]['match_score'] ?? 'N/A'}");
@@ -187,7 +186,7 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
     return Scaffold(
       appBar: AppBar(
         title: const Text('Tasks & Jobs'),
-        backgroundColor: const Color(0xFF1976D2), // Using your primary color
+        backgroundColor: const Color(0xFF1976D2),
         automaticallyImplyLeading: false,
         bottom: TabBar(
           controller: _tabController,
@@ -367,13 +366,20 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
   }
 
   Widget _buildTaskCard(Map<String, dynamic> task, {bool isRecommended = false}) {
+    final taskProvider = Provider.of<TaskProvider>(context, listen: false);
+    
+    // Use TaskProvider helper methods for consistent display
+    final serviceTypeDisplay = taskProvider.getServiceTypeDisplay(task);
+    final isOnSite = serviceTypeDisplay.toLowerCase().contains('site') || 
+                    serviceTypeDisplay.toLowerCase().contains('physical');
+    final serviceTypeColor = taskProvider.getServiceTypeColor(task);
+    final serviceTypeIcon = taskProvider.getServiceTypeIcon(task);
+    
     final employer = task['employer'] ?? {};
     final bool isAssignedToMe = _isTaskAssignedToMe(task);
     final bool isTaken = _isTaskTaken(task);
     final assignedFreelancer = _getAssignedFreelancer(task);
     final freelancerName = _getFreelancerName(assignedFreelancer);
-    final serviceType = task['service_type'] ?? 'remote';
-    final isOnSite = serviceType == 'on_site';
     final locationAddress = task['location_address'];
     
     return Card(
@@ -385,28 +391,26 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Service Type Badge
+            // Service Type Badge - Now using provider's helper methods
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: isOnSite 
-                    ? Colors.orange.withOpacity(0.1) 
-                    : Colors.blue.withOpacity(0.1),
+                color: serviceTypeColor.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(5),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    isOnSite ? Icons.location_on : Icons.laptop,
+                    serviceTypeIcon,
                     size: 12,
-                    color: isOnSite ? Colors.orange[900] : Colors.blue[900],
+                    color: serviceTypeColor,
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    isOnSite ? "📍 ON-SITE" : "💻 REMOTE",
+                    serviceTypeDisplay.toUpperCase(),
                     style: TextStyle(
-                      color: isOnSite ? Colors.orange[900] : Colors.blue[900],
+                      color: serviceTypeColor,
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
                     ),
@@ -416,35 +420,45 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
             ),
             const SizedBox(height: 8),
             
+            // Title and Status Row - Fixed for overflow
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       if (isRecommended)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.amber.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.amber.withOpacity(0.3)),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.star, size: 14, color: Colors.amber[800]),
-                              const SizedBox(width: 4),
-                              Text('Recommended',
-                                style: TextStyle(fontSize: 12, color: Colors.amber[800], fontWeight: FontWeight.bold),
-                              ),
-                            ],
+                        Flexible(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.amber.withOpacity(0.3)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.star, size: 14, color: Colors.amber[800]),
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text('Recommended',
+                                    style: TextStyle(fontSize: 12, color: Colors.amber[800], fontWeight: FontWeight.bold),
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       if (isRecommended) const SizedBox(width: 8),
                       Expanded(
                         child: Text(task['title'] ?? 'Untitled Task',
                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                          maxLines: 2, overflow: TextOverflow.ellipsis,
+                          maxLines: 2, 
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -493,6 +507,8 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
                     Expanded(
                       child: Text('Taken by: $freelancerName',
                         style: TextStyle(fontSize: 12, color: Colors.grey[700], fontStyle: FontStyle.italic),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
                       ),
                     ),
                   ],
@@ -502,16 +518,18 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
             const SizedBox(height: 8),
             
             Text(task['description'] ?? '',
-              maxLines: 3, overflow: TextOverflow.ellipsis,
+              maxLines: 3, 
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(color: Colors.grey[700], fontSize: 14),
             ),
             const SizedBox(height: 12),
             
-            // UPDATED: Clickable client section
+            // Clickable client section - Fixed for overflow
             _buildClientSection(employer),
             
             const SizedBox(height: 12),
             
+            // Action Buttons
             Row(
               children: [
                 Expanded(
@@ -552,7 +570,12 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => SubmitTaskScreen(taskId: taskId, taskTitle: '', budget: '', contractId: null,),
+                            builder: (context) => SubmitTaskScreen(
+                              taskId: taskId, 
+                              taskTitle: '', 
+                              budget: '', 
+                              contractId: null,
+                            ),
                           ),
                         );
                       } else {
@@ -564,7 +587,7 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
                     icon: const Icon(Icons.send, size: 18),
                     label: const Text('Submit'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1976D2), // Using primary color
+                      backgroundColor: const Color(0xFF1976D2),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -618,7 +641,7 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
     IconData statusIcon;
 
     if (isAssignedToMe) {
-      statusColor = const Color(0xFF1976D2); // Blue for assigned
+      statusColor = const Color(0xFF1976D2);
       statusText = 'Assigned to you';
       statusIcon = Icons.assignment_ind;
     } else if (isTaken) {
@@ -633,6 +656,7 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
       children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -646,8 +670,12 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
             children: [
               Icon(statusIcon, size: 14, color: statusColor),
               const SizedBox(width: 4),
-              Text(statusText,
-                style: TextStyle(fontSize: 12, color: statusColor, fontWeight: FontWeight.bold),
+              Flexible(
+                child: Text(statusText,
+                  style: TextStyle(fontSize: 12, color: statusColor, fontWeight: FontWeight.bold),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
               ),
             ],
           ),
@@ -658,6 +686,8 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
             padding: const EdgeInsets.only(top: 4),
             child: Text(freelancerName,
               style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
           ),
       ],
@@ -673,7 +703,6 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
     
     return InkWell(
       onTap: () {
-        // Navigate to employer profile screen
         if (employerId != null) {
           Navigator.push(
             context,
@@ -697,17 +726,27 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: const Color(0xFFF8FAFD), // Using your background color
+          color: const Color(0xFFF8FAFD),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: Colors.grey.withOpacity(0.2)),
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildClientAvatar(profilePic, displayName),
+            // Avatar
+            SizedBox(
+              width: 40,
+              height: 40,
+              child: _buildClientAvatar(profilePic, displayName),
+            ),
             const SizedBox(width: 12),
+            
+            // Middle content - takes remaining space
             Expanded(
+              flex: 2,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text('Posted by:',
                     style: TextStyle(fontSize: 12, color: Colors.grey[600]),
@@ -716,8 +755,10 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
                     style: const TextStyle(
                       fontWeight: FontWeight.bold, 
                       fontSize: 14,
-                      color: Color(0xFF333333), // Using your text color
+                      color: Color(0xFF333333),
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   if (employer['contact_email'] != null) ...[
                     const SizedBox(height: 2),
@@ -725,8 +766,13 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
                       children: [
                         Icon(Icons.email, size: 12, color: Colors.grey[500]),
                         const SizedBox(width: 4),
-                        Text(employer['contact_email']!.toString(),
-                          style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                        Expanded(
+                          child: Text(
+                            employer['contact_email']!.toString(),
+                            style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
                     ),
@@ -737,8 +783,13 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
                       children: [
                         Icon(Icons.phone, size: 12, color: Colors.grey[500]),
                         const SizedBox(width: 4),
-                        Text(employer['phone']!.toString(),
-                          style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                        Expanded(
+                          child: Text(
+                            employer['phone']!.toString(),
+                            style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
                     ),
@@ -746,8 +797,12 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
                 ],
               ),
             ),
+            
+            const SizedBox(width: 8),
+            
+            // Profile button
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: const Color(0xFF1976D2).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
@@ -755,7 +810,7 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.person_outline, size: 16, color: const Color(0xFF1976D2)),
+                  Icon(Icons.person_outline, size: 14, color: const Color(0xFF1976D2)),
                   const SizedBox(width: 4),
                   Text('Profile',
                     style: TextStyle(
@@ -777,14 +832,19 @@ class _TaskPageState extends State<TaskPage> with SingleTickerProviderStateMixin
     if (profilePic != null && profilePic.isNotEmpty) {
       return CircleAvatar(
         backgroundImage: NetworkImage(profilePic),
-        radius: 20,
+        radius: 16,
       );
     } else {
       return CircleAvatar(
         backgroundColor: const Color(0xFF1976D2),
-        radius: 20,
-        child: Text(displayName[0].toUpperCase(),
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+        radius: 16,
+        child: Text(
+          displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
+          style: const TextStyle(
+            color: Colors.white, 
+            fontWeight: FontWeight.bold, 
+            fontSize: 14
+          ),
         ),
       );
     }

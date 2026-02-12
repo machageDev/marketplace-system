@@ -61,8 +61,8 @@ class UserProfileProvider with ChangeNotifier {
         print(' Token found, length: ${token.length}');
         print(' Calling ApiService.getUserProfile()...');
         
-        final response = await ApiService.getUserProfile(token);
-        print(' Response received from ApiService');
+       final response = await ApiService().getUserProfile(token);
+print(' Response received from ApiService'); 
         
         if (response != null) {
           print(' Response analysis:');

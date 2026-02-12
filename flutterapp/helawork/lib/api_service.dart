@@ -317,7 +317,7 @@ static Future<String?> _getUserToken() async {
     return null;
   }
 }
-static Future<Map<String, dynamic>?> getUserProfile([String? externalToken]) async {
+ Future<Map<String, dynamic>?> getUserProfile([String? externalToken]) async {
   try {
     print(' =========== START getUserProfile ===========');
     
